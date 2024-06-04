@@ -6,34 +6,6 @@ use egui::{emath::RectTransform, Pos2, Rect};
 const ROW_HEIGHT: f32 = 24.0;
 
 #[derive(Clone, Debug)]
-struct State {
-    open: bool,
-    closable: bool,
-    close_on_next_frame: bool,
-    start_pos: egui::Pos2,
-    focus: Option<egui::Id>,
-    events: Option<Vec<egui::Event>>,
-}
-
-impl State {
-    fn new() -> Self {
-        Self {
-            open: false,
-            closable: false,
-            close_on_next_frame: false,
-            start_pos: pos2(100.0, 100.0),
-            focus: None,
-            events: None,
-        }
-    }
-}
-
-impl Default for State {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-#[derive(Clone, Debug)]
 pub enum KeyframeType {
     KeyBtn(String),  //0
     MouseBtn(u8),    //1
@@ -54,31 +26,29 @@ pub struct Keyframe {
 }
 
 pub struct Sequencer {
-    id: egui::Id,
     open: bool,
     dragging: bool,
     can_resize: bool,
-    could_resize: bool,
     resize_left: bool, //left: true, right: false
     resizing: bool,
     drag_start: Pos2,
     keyframes: Vec<Keyframe>,
     scale: f32,// egui points to seconds scale
+    time: f32,
 }
 
 impl Sequencer {
     pub fn new() -> Self {
         Self {
-            id: egui::Id::new("sequencer"),
             open: true,
             keyframes: vec![],
             drag_start: pos2(0., 0.),
             dragging: false,
             can_resize: false,
-            could_resize: false,
             resizing: false,
             resize_left: false,
-            scale: 0.5,
+            scale: 0.01,
+            time: 0.0,
         }
     }
     pub fn open(&mut self, open: bool){
@@ -97,9 +67,8 @@ impl Sequencer {
             if kf.id == id {
                 let keyframe = ui.put(
                     time_to_rect(
-                        kf.timestamp,
-                        kf.duration,
-                        self.scale,
+                        scale(ui, kf.timestamp, self.scale),
+                        scale(ui, kf.duration,self.scale),
                         ui.spacing().item_spacing,
                         max_rect,
                     ),
@@ -150,19 +119,18 @@ impl Sequencer {
                 if self.dragging {
                     if let Some(end) = keyframe.interact_pointer_pos() {
                         //println!("dragging");
+                        let x = 1.0/scale(ui, 1.0, self.scale);
                         let drag_delta = end.x - self.drag_start.x;
-                        let t = kf.timestamp + drag_delta;
+                        let t = kf.timestamp + drag_delta*x;
                         //&& t < pos_to_time(max_rect.max, max_rect)-kf.duration
                         //stop from going to far left vv | ^^ to far right
-
                         if t > 0.0 {
-                            kf.timestamp = kf.timestamp + drag_delta;
+                            kf.timestamp = t;
                             self.drag_start.x = end.x;
                         }
                     }
                 }
                 if keyframe.drag_stopped() {
-                    println!("drag stopped");
                     self.drag_start = pos2(0., 0.);
                     self.dragging = false;
                     self.can_resize = false;
@@ -180,13 +148,9 @@ impl Sequencer {
         ui.add(egui::DragValue::new(&mut self.scale).speed(0.1).clamp_range(0.01..=1.0));
     }
     fn render_timeline(&self, ui: &mut Ui){
-        let width = ui.max_rect().size().x;
-        let scale = 30.0 + self.scale*40.0;
-        let num_of_digits = width/scale;
-        let spacing = width/(num_of_digits);
-        let pos = time_to_rect(0.0, 0.0,self.scale, ui.spacing().item_spacing, ui.max_rect()).min;
-        for i in 0..(num_of_digits).ceil() as i32{
-            let point = pos + egui::vec2(i as f32 * spacing, 0.0);
+        let pos = time_to_rect(0.0, 0.0, ui.spacing().item_spacing, ui.max_rect()).min;
+        for i in 0..(ui.max_rect().width()*(1.0/scale(ui,1.0,self.scale))).ceil() as i32{
+            let point = pos + egui::vec2(scale(ui, i as f32, self.scale), 0.0);
             ui.painter().text(point, egui::Align2::CENTER_TOP, format!("{}",i), egui::FontId::monospace(12.0), egui::Color32::GRAY);
             ui.painter().line_segment(
                 [
@@ -196,11 +160,21 @@ impl Sequencer {
                 , egui::Stroke::new(1.0, egui::Color32::GRAY));
         }
     }
+    fn render_playhead(&self, ui: &mut Ui){
+        let point = time_to_rect(self.time, 0.0, ui.spacing().item_spacing, ui.max_rect()).min;
+        
+        let p1 = pos2(point.x,ui.max_rect().min.y-3.0);
+        let p2 = pos2(p1.x,p1.y + 80.0);
+        ui.painter().line_segment(
+            [ p1,p2 ], 
+            egui::Stroke::new(1.0,egui::Color32::LIGHT_RED)
+        );
+    }
     pub fn show(&mut self, ctx: &egui::Context) {
         let mut open = self.open;
 
         let w = egui::Window::new("Sequencer");
-        let resp = w
+        let _= w
             .movable(true)
             .resizable(true)
             .collapsible(false)
@@ -239,6 +213,7 @@ impl Sequencer {
                                 ui.label("Keyboard");
                             });
                             row.col(|ui| {
+                                self.render_playhead(ui);
                                 self.render_keyframes(ui, 0);
                             });
                         });
@@ -248,6 +223,7 @@ impl Sequencer {
                                 ui.label("Mouse");
                             });
                             row.col(|ui| {
+                                self.render_playhead(ui);
                                 self.render_keyframes(ui, 1);
                             });
                         });
@@ -262,13 +238,7 @@ impl Default for Sequencer {
         Self::new()
     }
 }
-
-fn pos_to_time(pos: Pos2, res_rect: Rect) -> f32 {
-    let to_screen =
-        RectTransform::from_to(res_rect, Rect::from_min_size(Pos2::ZERO, res_rect.size()));
-    to_screen.transform_pos(pos).x
-}
-fn time_to_rect(t: f32, d: f32, scale: f32, spacing: Vec2, res_rect: Rect) -> Rect {
+fn time_to_rect(t: f32, d: f32, spacing: Vec2, res_rect: Rect) -> Rect {
     let to_screen =
         RectTransform::from_to(Rect::from_min_size(Pos2::ZERO, res_rect.size()), res_rect);
     let p1 = Pos2 {
@@ -286,4 +256,12 @@ fn time_to_rect(t: f32, d: f32, scale: f32, spacing: Vec2, res_rect: Rect) -> Re
         min: to_screen.transform_pos(p1),
         max: to_screen.transform_pos(p2),
     }
+}
+
+fn scale(ui: &Ui, i: f32, scale: f32)->f32{
+    let width = ui.max_rect().size().x;
+    let s = 30.0 + scale*40.0;
+    let num_of_digits = width/s;
+    let spacing = width/(num_of_digits);
+    i * spacing
 }

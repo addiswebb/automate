@@ -21,19 +21,19 @@ impl Default for App {
             // })
             .add_keyframe(Keyframe{
                 timestamp: 2.0,
-                duration: 50.0,
+                duration: 4.0,
                 keyframe_type: KeyframeType::MouseBtn(0),
                 id: 1,
             })
             .add_keyframe(Keyframe{
-                timestamp: 150.0,
-                duration: 10.0,
+                timestamp: 2.5,
+                duration: 2.0,
                 keyframe_type: KeyframeType::KeyBtn("test".to_owned()),
                 id: 0,
             })
             .add_keyframe(Keyframe{
-                timestamp: 70.0,
-                duration: 30.0,
+                timestamp: 8.0,
+                duration: 10.0,
                 keyframe_type: KeyframeType::MouseBtn(0),
                 id: 1,
             });
