@@ -83,11 +83,33 @@ impl eframe::App for App {
             });
         });
 
-        egui::Window::new("test")
+        egui::Window::new("Selected Keyframe")
         .resizable(true)
         .collapsible(false)
         .show(ctx, |ui|{
-            ui.label("x");
+            if let Some(i) = self.sequencer.selected_keyframe {
+                match &self.sequencer.keyframes[i].keyframe_type {
+                    KeyframeType::KeyBtn(keys) => {
+                        ui.strong("Keyboard Button press");
+                        ui.label("key strokes");
+                        ui.text_edit_singleline(&mut keys.to_string());
+                    }
+                    KeyframeType::MouseBtn(key) =>{
+                        ui.strong("Keyboard Button press");
+                        ui.label(format!("button: {:?}",key));
+                    }
+                    KeyframeType::MouseMove(pos)=>{
+                        ui.strong("Mouse move");
+                        //ui.text_edit_singleline(&mut self.sequencer.keyframes[i].keyframe_type)
+                        ui.label(format!("position: {:?}",pos));
+                    }
+                }
+
+                ui.label("Timestamp");
+                ui.add(egui::DragValue::new(&mut self.sequencer.keyframes[i].timestamp).speed(0.25).clamp_range(0.0..=100.0));
+                ui.label("Duration");
+                ui.add(egui::DragValue::new(&mut self.sequencer.keyframes[i].duration).speed(0.1).clamp_range(0.1..=10.0));
+            }
         });
         
         self.sequencer.show(ctx);

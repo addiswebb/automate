@@ -32,7 +32,8 @@ pub struct Sequencer {
     resize_left: bool, //left: true, right: false
     resizing: bool,
     drag_start: Pos2,
-    keyframes: Vec<Keyframe>,
+    pub keyframes: Vec<Keyframe>,
+    pub selected_keyframe: Option<usize>,
     scale: f32,// egui points to seconds scale
     time: f32,
     play: bool,
@@ -51,6 +52,7 @@ impl Sequencer {
             scale: 0.01,
             time: 0.0,
             play: false,
+            selected_keyframe: None,
         }
     }
     pub fn open(&mut self, open: bool){
@@ -65,12 +67,12 @@ impl Sequencer {
 
     fn render_keyframes(&mut self, ui: &mut Ui, id: u8) {
         let max_rect = ui.max_rect();
-        for kf in self.keyframes.iter_mut() {
-            if kf.id == id {
+        for i in 0..self.keyframes.len() {
+            if self.keyframes[i].id == id {
                 let keyframe = ui.put(
                     time_to_rect(
-                        scale(ui, kf.timestamp, self.scale),
-                        scale(ui, kf.duration,self.scale),
+                        scale(ui, self.keyframes[i].timestamp, self.scale),
+                        scale(ui, self.keyframes[i].duration,self.scale),
                         ui.spacing().item_spacing,
                         max_rect,
                     ),
@@ -79,6 +81,9 @@ impl Sequencer {
                         .fill(egui::Color32::from_rgb(95, 186, 213))
                         .stroke(egui::Stroke::new(0.4, egui::Color32::from_rgb(15, 37, 42))),
                 );
+                if keyframe.clicked(){
+                    self.selected_keyframe = Some(i);
+                }
                 //change icon to resize when at the edges of a keyframe
                 if keyframe.hovered() {
                     let delta = 3.0;
@@ -107,12 +112,12 @@ impl Sequencer {
                 //     if let Some(end) = keyframe.interact_pointer_pos(){
                 //         println!("resizing");
                 //         let drag_delta = end.x - self.drag_start.x;
-                //         let t = kf.timestamp + drag_delta;
+                //         let t = self.keyframes[i].timestamp + drag_delta;
                 //         if t > 0.0{
-                //             kf.duration += drag_delta;
+                //             self.keyframes[i].duration += drag_delta;
                 //             println!("increase duration {}", drag_delta);
                 //             if self.resize_left{
-                //                 //kf.timestamp +=drag_delta;
+                //                 //self.keyframes[i].timestamp +=drag_delta;
                 //                 println!("move timestamp {}", drag_delta);
                 //             }
                 //         }
@@ -123,11 +128,11 @@ impl Sequencer {
                         //println!("dragging");
                         let x = 1.0/scale(ui, 1.0, self.scale);
                         let drag_delta = end.x - self.drag_start.x;
-                        let t = kf.timestamp + drag_delta*x;
-                        //&& t < pos_to_time(max_rect.max, max_rect)-kf.duration
+                        let t = self.keyframes[i].timestamp + drag_delta*x;
+                        //&& t < pos_to_time(max_rect.max, max_rect)-self.keyframes[i].duration
                         //stop from going to far left vv | ^^ to far right
                         if t > 0.0 {
-                            kf.timestamp = t;
+                            self.keyframes[i].timestamp = t;
                             self.drag_start.x = end.x;
                         }
                     }
@@ -143,10 +148,10 @@ impl Sequencer {
     }
 
     fn render_control_bar(&mut self, ui: &mut Ui) {
-        if ui.button("⏪").clicked() { println!("go back"); }
+        if ui.button("⏪").clicked() { println!("go back"); self.time = 0.0; }
         if ui.button("⏴").clicked() { println!("reverse");}
         if ui.button("⏵").clicked() { println!("play"); self.play = !self.play;}
-        if ui.button("⏩").clicked() { println!("go forward");}
+        if ui.button("⏩").clicked() { println!("go forward"); }
         ui.add(egui::DragValue::new(&mut self.scale).speed(0.1).clamp_range(0.01..=1.0));
     }
     fn render_timeline(&self, ui: &mut Ui){
