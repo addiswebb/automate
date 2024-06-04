@@ -74,10 +74,19 @@ impl eframe::App for App {
                     if ui.button("Quit").clicked() {
                         ctx.send_viewport_cmd(egui::ViewportCommand::Close);
                     }
+                    if ui.button("Open Sequencer").clicked(){
+                        self.sequencer.open(true);
+                    }
                 });
             });
         });
 
+        egui::Window::new("test")
+        .resizable(true)
+        .collapsible(false)
+        .show(ctx, |ui|{
+            ui.label("x");
+        });
         
         self.sequencer.show(ctx);
         
