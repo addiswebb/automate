@@ -1,6 +1,4 @@
-use egui::Key;
-
-use crate::sequencer::Sequencer;
+use crate::sequencer::{Keyframe, KeyframeType, Sequencer};
 
 /// We derive Deserialize/Serialize so we can persist app state on shutdown.
 #[derive(serde::Deserialize, serde::Serialize)]
@@ -15,9 +13,33 @@ pub struct App {
 
 impl Default for App {
     fn default() -> Self {
+        let sequencer = Sequencer::new()
+            // .add_keyframe(Keyframe{
+            //     timestamp: 0.0,
+            //     duration: 1.0,
+            //     keyframe_type: KeyframeType::KeyBtn("Hello World".to_owned()),
+            // })
+            .add_keyframe(Keyframe{
+                timestamp: 2.0,
+                duration: 50.0,
+                keyframe_type: KeyframeType::MouseBtn(0),
+                id: 1,
+            })
+            .add_keyframe(Keyframe{
+                timestamp: 150.0,
+                duration: 10.0,
+                keyframe_type: KeyframeType::KeyBtn("test".to_owned()),
+                id: 0,
+            })
+            .add_keyframe(Keyframe{
+                timestamp: 70.0,
+                duration: 30.0,
+                keyframe_type: KeyframeType::MouseBtn(0),
+                id: 1,
+            });
         Self {
             label: "Automate".to_owned(),
-            sequencer: Sequencer::new(),
+            sequencer,
         }
     }
 }

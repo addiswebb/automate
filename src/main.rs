@@ -16,7 +16,7 @@ fn main() -> eframe::Result<()> {
         ..Default::default()
     };
     eframe::run_native(
-        "eframe template",
+        "Automate",
         native_options,
         Box::new(|cc| Box::new(automate::App::new(cc))),
     )
