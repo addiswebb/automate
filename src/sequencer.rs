@@ -1,7 +1,7 @@
 use std::{num, time::Instant};
 
 use eframe::egui::{self, pos2, Ui, Vec2};
-use egui::{emath::RectTransform, Pos2, Rect};
+use egui::{emath::RectTransform, text::TextWrapping, Pos2, Rect};
 
 const ROW_HEIGHT: f32 = 24.0;
 
@@ -34,7 +34,7 @@ pub struct Sequencer {
     drag_start: Pos2,
     pub keyframes: Vec<Keyframe>,
     pub selected_keyframe: Option<usize>,
-    scale: f32,// egui points to seconds scale
+    scale: f32, // egui points to seconds scale
     time: f32,
     play: bool,
 }
@@ -55,7 +55,7 @@ impl Sequencer {
             selected_keyframe: None,
         }
     }
-    pub fn open(&mut self, open: bool){
+    pub fn open(&mut self, open: bool) {
         self.open = open;
     }
     pub fn add_keyframe(mut self, keyframe: Keyframe) -> Sequencer {
@@ -69,19 +69,30 @@ impl Sequencer {
         let max_rect = ui.max_rect();
         for i in 0..self.keyframes.len() {
             if self.keyframes[i].id == id {
-                let keyframe = ui.put(
-                    time_to_rect(
-                        scale(ui, self.keyframes[i].timestamp, self.scale),
-                        scale(ui, self.keyframes[i].duration,self.scale),
-                        ui.spacing().item_spacing,
-                        max_rect,
-                    ),
-                    egui::Button::new("")
-                        .sense(egui::Sense::click_and_drag())
-                        .fill(egui::Color32::from_rgb(95, 186, 213))
-                        .stroke(egui::Stroke::new(0.4, egui::Color32::from_rgb(15, 37, 42))),
+                let rect = time_to_rect(
+                    scale(ui, self.keyframes[i].timestamp, self.scale),
+                    scale(ui, self.keyframes[i].duration, self.scale),
+                    ui.spacing().item_spacing,
+                    max_rect,
                 );
-                if keyframe.clicked(){
+                let width = rect.width();
+                let mut label = format!("{:?}",self.keyframes[i].keyframe_type);
+                
+                if width/10.0 < label.len() as f32{
+                    label.truncate((width/10.0) as usize);
+                }
+                if width < 20.0{
+                    label = "".to_string();
+                }
+                let keyframe = ui.put(
+                    rect,
+                    egui::Button::new(egui::RichText::new(format!("{}",label)).color(egui::Color32::BLACK))
+                    .sense(egui::Sense::click_and_drag())
+                    .wrap(false)
+                    .fill(egui::Color32::from_rgb(95, 186, 213))
+                    .stroke(egui::Stroke::new(0.4, egui::Color32::from_rgb(15, 37, 42))),
+                );
+                if keyframe.clicked() {
                     self.selected_keyframe = Some(i);
                 }
                 //change icon to resize when at the edges of a keyframe
@@ -126,9 +137,9 @@ impl Sequencer {
                 if self.dragging {
                     if let Some(end) = keyframe.interact_pointer_pos() {
                         //println!("dragging");
-                        let x = 1.0/scale(ui, 1.0, self.scale);
+                        let x = 1.0 / scale(ui, 1.0, self.scale);
                         let drag_delta = end.x - self.drag_start.x;
-                        let t = self.keyframes[i].timestamp + drag_delta*x;
+                        let t = self.keyframes[i].timestamp + drag_delta * x;
                         //&& t < pos_to_time(max_rect.max, max_rect)-self.keyframes[i].duration
                         //stop from going to far left vv | ^^ to far right
                         if t > 0.0 {
@@ -148,41 +159,63 @@ impl Sequencer {
     }
 
     fn render_control_bar(&mut self, ui: &mut Ui) {
-        if ui.button("⏪").clicked() { println!("go back"); self.time = 0.0; }
-        if ui.button("⏴").clicked() { println!("reverse");}
-        if ui.button("⏵").clicked() { println!("play"); self.play = !self.play;}
-        if ui.button("⏩").clicked() { println!("go forward"); }
-        ui.add(egui::DragValue::new(&mut self.scale).speed(0.1).clamp_range(0.01..=1.0));
+        if ui.button("⏪").clicked() {
+            self.time = 0.0;
+        }
+        if ui.button("⏴").clicked() {
+            println!("reverse");
+        }
+        if ui.button("⏵").clicked() {
+            self.play = !self.play;
+        }
+        if ui.button("⏩").clicked() {
+        }
+        ui.add(
+            egui::DragValue::new(&mut self.scale)
+                .speed(0.1)
+                .clamp_range(0.01..=1.0),
+        );
     }
-    fn render_timeline(&self, ui: &mut Ui){
+    fn render_timeline(&self, ui: &mut Ui) {
         let pos = time_to_rect(0.0, 0.0, ui.spacing().item_spacing, ui.max_rect()).min;
-        for i in 0..(ui.max_rect().width()*(1.0/scale(ui,1.0,self.scale))).ceil() as i32{
+        for i in 0..(ui.max_rect().width() * (1.0 / scale(ui, 1.0, self.scale))).ceil() as i32 {
             let point = pos + egui::vec2(scale(ui, i as f32, self.scale), 0.0);
-            ui.painter().text(point, egui::Align2::CENTER_TOP, format!("{}",i), egui::FontId::monospace(12.0), egui::Color32::GRAY);
+            ui.painter().text(
+                point,
+                egui::Align2::CENTER_TOP,
+                format!("{}", i),
+                egui::FontId::monospace(12.0),
+                egui::Color32::GRAY,
+            );
             ui.painter().line_segment(
                 [
-                    pos2( point.x,ui.max_rect().max.y ),
-                    pos2( point.x,ui.max_rect().max.y ) +egui::vec2(0.0,-6.0),
-                ]
-                , egui::Stroke::new(1.0, egui::Color32::GRAY));
+                    pos2(point.x, ui.max_rect().max.y),
+                    pos2(point.x, ui.max_rect().max.y) + egui::vec2(0.0, -6.0),
+                ],
+                egui::Stroke::new(1.0, egui::Color32::GRAY),
+            );
         }
     }
-    fn render_playhead(&self, ui: &mut Ui){
+    fn render_playhead(&self, ui: &mut Ui) {
         let point = time_to_rect(self.time, 0.0, ui.spacing().item_spacing, ui.max_rect()).min;
-        
-        let p1 = pos2(point.x,ui.max_rect().min.y-ROW_HEIGHT-6.0);
-        let p2 = pos2(p1.x,p1.y + ROW_HEIGHT*2.0+6.0);
-        ui.painter().text(p1-egui::vec2(0.0,2.0), egui::Align2::CENTER_TOP, "⏷", egui::FontId::monospace(10.0), egui::Color32::LIGHT_RED);
-        ui.painter().line_segment(
-            [ p1,p2 ], 
-            egui::Stroke::new(1.0,egui::Color32::LIGHT_RED)
+
+        let p1 = pos2(point.x, ui.max_rect().min.y - ROW_HEIGHT - 6.0);
+        let p2 = pos2(p1.x, p1.y + ROW_HEIGHT * 2.0 + 6.0);
+        ui.painter().text(
+            p1 - egui::vec2(0.0, 2.0),
+            egui::Align2::CENTER_TOP,
+            "⏷",
+            egui::FontId::monospace(10.0),
+            egui::Color32::LIGHT_RED,
         );
+        ui.painter()
+            .line_segment([p1, p2], egui::Stroke::new(1.0, egui::Color32::LIGHT_RED));
     }
     pub fn show(&mut self, ctx: &egui::Context) {
         let mut open = self.open;
 
         let w = egui::Window::new("Sequencer");
-        let _= w
+        let _ = w
             .movable(true)
             .resizable(true)
             .collapsible(false)
@@ -210,8 +243,7 @@ impl Sequencer {
                     })
                     .body(|mut body| {
                         body.row(ROW_HEIGHT, |mut row| {
-                            row.col(|_| {
-                            });
+                            row.col(|_| {});
                             row.col(|ui| {
                                 self.render_timeline(ui);
                             });
@@ -238,13 +270,13 @@ impl Sequencer {
             });
         self.open = open;
     }
-    pub fn update(&mut self, last_instant: &mut Instant){
+    pub fn update(&mut self, last_instant: &mut Instant) {
         let now = Instant::now();
-        let dt = now-*last_instant;
-        if self.play{
-            self.time+=dt.as_secs_f32()*10000000.0;
-            println!("deltatime: {:?}",dt.as_secs_f32());
-        } 
+        let dt = now - *last_instant;
+        if self.play {
+            self.time += dt.as_secs_f32() * 10000000.0;
+            println!("deltatime: {:?}", dt.as_secs_f32());
+        }
         *last_instant = now;
     }
 }
@@ -274,10 +306,10 @@ fn time_to_rect(t: f32, d: f32, spacing: Vec2, res_rect: Rect) -> Rect {
     }
 }
 
-fn scale(ui: &Ui, i: f32, scale: f32)->f32{
+fn scale(ui: &Ui, i: f32, scale: f32) -> f32 {
     let width = ui.max_rect().size().x;
-    let s = 30.0 + scale*40.0;
-    let num_of_digits = width/s;
-    let spacing = width/(num_of_digits);
+    let s = 30.0 + scale * 40.0;
+    let num_of_digits = width / s;
+    let spacing = width / (num_of_digits);
     i * spacing
 }
