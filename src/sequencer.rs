@@ -1,4 +1,4 @@
-use std::num;
+use std::{num, time::Instant};
 
 use eframe::egui::{self, pos2, Ui, Vec2};
 use egui::{emath::RectTransform, Pos2, Rect};
@@ -35,6 +35,7 @@ pub struct Sequencer {
     keyframes: Vec<Keyframe>,
     scale: f32,// egui points to seconds scale
     time: f32,
+    play: bool,
 }
 
 impl Sequencer {
@@ -49,6 +50,7 @@ impl Sequencer {
             resize_left: false,
             scale: 0.01,
             time: 0.0,
+            play: false,
         }
     }
     pub fn open(&mut self, open: bool){
@@ -143,7 +145,7 @@ impl Sequencer {
     fn render_control_bar(&mut self, ui: &mut Ui) {
         if ui.button("⏪").clicked() { println!("go back"); }
         if ui.button("⏴").clicked() { println!("reverse");}
-        if ui.button("⏵").clicked() { println!("play");}
+        if ui.button("⏵").clicked() { println!("play"); self.play = !self.play;}
         if ui.button("⏩").clicked() { println!("go forward");}
         ui.add(egui::DragValue::new(&mut self.scale).speed(0.1).clamp_range(0.01..=1.0));
     }
@@ -163,8 +165,9 @@ impl Sequencer {
     fn render_playhead(&self, ui: &mut Ui){
         let point = time_to_rect(self.time, 0.0, ui.spacing().item_spacing, ui.max_rect()).min;
         
-        let p1 = pos2(point.x,ui.max_rect().min.y-3.0);
-        let p2 = pos2(p1.x,p1.y + 80.0);
+        let p1 = pos2(point.x,ui.max_rect().min.y-ROW_HEIGHT-6.0);
+        let p2 = pos2(p1.x,p1.y + ROW_HEIGHT*2.0+6.0);
+        ui.painter().text(p1-egui::vec2(0.0,2.0), egui::Align2::CENTER_TOP, "⏷", egui::FontId::monospace(10.0), egui::Color32::LIGHT_RED);
         ui.painter().line_segment(
             [ p1,p2 ], 
             egui::Stroke::new(1.0,egui::Color32::LIGHT_RED)
@@ -213,7 +216,6 @@ impl Sequencer {
                                 ui.label("Keyboard");
                             });
                             row.col(|ui| {
-                                self.render_playhead(ui);
                                 self.render_keyframes(ui, 0);
                             });
                         });
@@ -223,13 +225,22 @@ impl Sequencer {
                                 ui.label("Mouse");
                             });
                             row.col(|ui| {
-                                self.render_playhead(ui);
                                 self.render_keyframes(ui, 1);
+                                self.render_playhead(ui);
                             });
                         });
                     })
             });
         self.open = open;
+    }
+    pub fn update(&mut self, last_instant: &mut Instant){
+        let now = Instant::now();
+        let dt = now-*last_instant;
+        if self.play{
+            self.time+=dt.as_secs_f32()*10000000.0;
+            println!("deltatime: {:?}",dt.as_secs_f32());
+        } 
+        *last_instant = now;
     }
 }
 

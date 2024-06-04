@@ -1,3 +1,5 @@
+use std::time::Instant;
+
 use crate::sequencer::{Keyframe, KeyframeType, Sequencer};
 
 /// We derive Deserialize/Serialize so we can persist app state on shutdown.
@@ -89,6 +91,10 @@ impl eframe::App for App {
         });
         
         self.sequencer.show(ctx);
+        let mut last_instant = Instant::now();
+        self.sequencer.update(&mut last_instant);
+        let now = Instant::now();
+
         
     }
 }
