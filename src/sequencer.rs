@@ -177,14 +177,14 @@ impl Sequencer {
             self.play = !self.play;
         }
         if ui.button("⏩").on_hover_text("Skip").clicked() {}
-
         ui.add(
             egui::DragValue::new(&mut self.time)
                 .clamp_range(0.0..=(60.0*60.0*10.0))
                 .custom_formatter(|n, _| {
                     let mins = ((n / 60.0) % 60.0).floor() as i32;
                     let secs = (n % 60.0) as i32;
-                    format!("{mins:02}:{secs:02}")
+                    let milis = ((n*1000.0) % 1000.0).floor() as i32;
+                    format!("{mins:02}:{secs:02}:{milis:03}")
                 })
                 .custom_parser(|s| {
                     if s.contains(':'){
@@ -205,13 +205,7 @@ impl Sequencer {
                         s.parse::<f64>().ok()
                     }
                 }),
-        );
-        ui.add(
-            egui::DragValue::new(&mut self.time)
-                .speed(0.5)
-                .clamp_range(0.0..=200.0),
-        )
-        .on_hover_text("Time");
+        ).on_hover_text("Time");
         ui.add(
             egui::DragValue::new(&mut self.scale)
                 .speed(0.1)
@@ -246,6 +240,7 @@ impl Sequencer {
         })
         .response
         .on_hover_text("Add keyframe");
+
         if self.recording {
             if ui.button("⏹").on_hover_text("Stop Recording: F8").clicked() {
                 self.recording = false;
