@@ -1,7 +1,7 @@
-use std::{num, time::Instant};
+use std::time::Instant;
 
 use eframe::egui::{self, pos2, Ui, Vec2};
-use egui::{emath::RectTransform, text::TextWrapping, Pos2, Rect};
+use egui::{emath::RectTransform, Pos2, Rect};
 
 const ROW_HEIGHT: f32 = 24.0;
 
@@ -37,6 +37,7 @@ pub struct Sequencer {
     scale: f32, // egui points to seconds scale
     time: f32,
     play: bool,
+    recording: bool,
 }
 
 impl Sequencer {
@@ -53,13 +54,14 @@ impl Sequencer {
             time: 0.0,
             play: false,
             selected_keyframe: None,
+            recording: false,
         }
     }
     pub fn open(&mut self, open: bool) {
         self.open = open;
     }
     pub fn add_keyframe(mut self, keyframe: Keyframe) -> Sequencer {
-        println!("add keyframe: {:?}", keyframe);
+        log::info!("add keyframe: {:?}", keyframe);
         let mut tmp = vec![keyframe];
         self.keyframes.append(&mut tmp);
         self
@@ -91,7 +93,7 @@ impl Sequencer {
                     .wrap(false)
                     .fill(egui::Color32::from_rgb(95, 186, 213))
                     .stroke(egui::Stroke::new(0.4, egui::Color32::from_rgb(15, 37, 42))),
-                );
+                ).on_hover_text(format!("{:?}",self.keyframes[i].keyframe_type));
                 if keyframe.clicked() {
                     self.selected_keyframe = Some(i);
                 }
@@ -159,22 +161,31 @@ impl Sequencer {
     }
 
     fn render_control_bar(&mut self, ui: &mut Ui) {
-        if ui.button("⏪").clicked() {
+        if ui.button("⏪").on_hover_text("Restart").clicked() {
             self.time = 0.0;
         }
-        if ui.button("⏴").clicked() {
+        if ui.button("⏴").on_hover_text("Reverse").clicked() {
             println!("reverse");
         }
-        if ui.button("⏵").clicked() {
+        if ui.button("⏵").on_hover_text("Play").clicked() {
             self.play = !self.play;
         }
-        if ui.button("⏩").clicked() {
+        if ui.button("⏩").on_hover_text("Skip").clicked() {
         }
         ui.add(
             egui::DragValue::new(&mut self.scale)
                 .speed(0.1)
                 .clamp_range(0.01..=1.0),
-        );
+        ).on_hover_text("Zoom");
+        if self.recording {
+            if ui.button("⏹").on_hover_text("Stop Recording: F8").clicked(){
+                self.recording = false;
+            }
+        }else{
+            if ui.button(egui::RichText::new("⏺").color(egui::Color32::LIGHT_RED)).on_hover_text("Start Recording: F8").clicked(){
+                self.recording = true;
+            }
+        }
     }
     fn render_timeline(&self, ui: &mut Ui) {
         let pos = time_to_rect(0.0, 0.0, ui.spacing().item_spacing, ui.max_rect()).min;
@@ -243,6 +254,7 @@ impl Sequencer {
                     })
                     .body(|mut body| {
                         body.row(ROW_HEIGHT, |mut row| {
+                            row.set_hovered(true);
                             row.col(|_| {});
                             row.col(|ui| {
                                 self.render_timeline(ui);
@@ -263,6 +275,7 @@ impl Sequencer {
                             });
                             row.col(|ui| {
                                 self.render_keyframes(ui, 1);
+                                self.render_keyframes(ui, 2);
                                 self.render_playhead(ui);
                             });
                         });

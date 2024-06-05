@@ -34,8 +34,14 @@ impl Default for App {
                 id: 0,
             })
             .add_keyframe(Keyframe{
+                timestamp: 13.0,
+                duration: 2.0,
+                keyframe_type: KeyframeType::MouseMove(egui::Vec2{x: 0.0,y:0.0}),
+                id: 2,
+            })
+            .add_keyframe(Keyframe{
                 timestamp: 8.0,
-                duration: 10.0,
+                duration: 3.0,
                 keyframe_type: KeyframeType::MouseBtn(0),
                 id: 1,
             });
@@ -95,7 +101,7 @@ impl eframe::App for App {
                         ui.text_edit_singleline(&mut keys.to_string());
                     }
                     KeyframeType::MouseBtn(key) =>{
-                        ui.strong("Keyboard Button press");
+                        ui.strong("Mouse Button press");
                         ui.label(format!("button: {:?}",key));
                     }
                     KeyframeType::MouseMove(pos)=>{
@@ -115,8 +121,6 @@ impl eframe::App for App {
         self.sequencer.show(ctx);
         let mut last_instant = Instant::now();
         self.sequencer.update(&mut last_instant);
-        let now = Instant::now();
-
-        
+        ctx.request_repaint();
     }
 }
