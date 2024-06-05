@@ -35,6 +35,8 @@ pub struct Sequencer {
     pub keyframes: Vec<Keyframe>,
     pub selected_keyframe: Option<usize>,
     scale: f32, // egui points to seconds scale
+    repeats: i32,
+    speed: f32,
     time: f32,
     play: bool,
     recording: bool,
@@ -51,6 +53,8 @@ impl Sequencer {
             resizing: false,
             resize_left: false,
             scale: 0.01,
+            repeats: 1,
+            speed: 1.0,
             time: 0.0,
             play: false,
             selected_keyframe: None,
@@ -68,6 +72,7 @@ impl Sequencer {
     }
 
     fn render_keyframes(&mut self, ui: &mut Ui, id: u8) {
+        let mut keyframe_to_delete: Option<usize> = None;
         let max_rect = ui.max_rect();
         for i in 0..self.keyframes.len() {
             if self.keyframes[i].id == id {
@@ -78,64 +83,50 @@ impl Sequencer {
                     max_rect,
                 );
                 let width = rect.width();
-                let mut label = format!("{:?}",self.keyframes[i].keyframe_type);
-                
-                if width/10.0 < label.len() as f32{
-                    label.truncate((width/10.0) as usize);
+                let mut label = format!("{:?}", self.keyframes[i].keyframe_type);
+
+                if width / 10.0 < label.len() as f32 {
+                    label.truncate((width / 10.0) as usize);
                 }
-                if width < 20.0{
+                if width < 20.0 {
                     label = "".to_string();
                 }
-                let keyframe = ui.put(
-                    rect,
-                    egui::Button::new(egui::RichText::new(format!("{}",label)).color(egui::Color32::BLACK))
-                    .sense(egui::Sense::click_and_drag())
-                    .wrap(false)
-                    .fill(egui::Color32::from_rgb(95, 186, 213))
-                    .stroke(egui::Stroke::new(0.4, egui::Color32::from_rgb(15, 37, 42))),
-                ).on_hover_text(format!("{:?}",self.keyframes[i].keyframe_type));
+                let stroke = if self.selected_keyframe != Some(i) {
+                    egui::Stroke::new(0.4, egui::Color32::from_rgb(15, 37, 42))
+                } else {
+                    egui::Stroke::new(1.5, egui::Color32::from_rgb(233, 181, 125))
+                };
+
+                let keyframe = ui
+                    .put(
+                        rect,
+                        egui::Button::new(
+                            egui::RichText::new(format!("{}", label)).color(egui::Color32::BLACK),
+                        )
+                        .sense(egui::Sense::click_and_drag())
+                        .wrap(false)
+                        .fill(egui::Color32::from_rgb(95, 186, 213))
+                        .stroke(stroke),
+                    )
+                    .on_hover_text(format!("{:?}", self.keyframes[i].keyframe_type));
+
                 if keyframe.clicked() {
-                    self.selected_keyframe = Some(i);
-                }
-                //change icon to resize when at the edges of a keyframe
-                if keyframe.hovered() {
-                    let delta = 3.0;
-                    let t = keyframe.hover_pos().unwrap().x;
-                    let inner_left = keyframe.interact_rect.min.x + delta;
-                    let inner_right = keyframe.interact_rect.max.x - delta;
-                    if t < inner_left && t > keyframe.interact_rect.min.x {
-                        ui.output_mut(|o| o.cursor_icon = egui::CursorIcon::ResizeEast);
-                        self.resize_left = true; //resize left
-                    } else if t < keyframe.interact_rect.max.x && t > inner_right {
-                        ui.output_mut(|o| o.cursor_icon = egui::CursorIcon::ResizeEast);
-                        self.resize_left = false; //resize right
+                    self.selected_keyframe = if self.selected_keyframe == Some(i) {
+                        None
                     } else {
-                        ui.output_mut(|o| o.cursor_icon = egui::CursorIcon::PointingHand);
+                        Some(i)
                     }
-                    //self.drag_start = pos2(0., 0.);
                 }
+
                 if keyframe.drag_started() {
                     if let Some(start) = keyframe.interact_pointer_pos() {
                         self.drag_start = start;
                         self.dragging = true;
                     }
                 }
-
-                // if self.resizing{
-                //     if let Some(end) = keyframe.interact_pointer_pos(){
-                //         println!("resizing");
-                //         let drag_delta = end.x - self.drag_start.x;
-                //         let t = self.keyframes[i].timestamp + drag_delta;
-                //         if t > 0.0{
-                //             self.keyframes[i].duration += drag_delta;
-                //             println!("increase duration {}", drag_delta);
-                //             if self.resize_left{
-                //                 //self.keyframes[i].timestamp +=drag_delta;
-                //                 println!("move timestamp {}", drag_delta);
-                //             }
-                //         }
-                //     }
-                // }
+                if keyframe.hovered() {
+                    ui.output_mut(|o| o.cursor_icon = egui::CursorIcon::PointingHand);
+                }
                 if self.dragging {
                     if let Some(end) = keyframe.interact_pointer_pos() {
                         //println!("dragging");
@@ -156,7 +147,22 @@ impl Sequencer {
                     self.can_resize = false;
                     self.resizing = false;
                 }
+
+                ui.input(|input| {
+                    if input.key_released(egui::Key::Delete) && self.selected_keyframe == Some(i) {
+                        keyframe_to_delete = Some(i);
+                    }
+                });
+                keyframe.context_menu(|ui| {
+                    if ui.button("Delete").clicked() {
+                        keyframe_to_delete = Some(i);
+                        ui.close_menu();
+                    }
+                });
             }
+        }
+        if let Some(i) = keyframe_to_delete {
+            self.keyframes.remove(i);
         }
     }
 
@@ -170,19 +176,86 @@ impl Sequencer {
         if ui.button("⏵").on_hover_text("Play").clicked() {
             self.play = !self.play;
         }
-        if ui.button("⏩").on_hover_text("Skip").clicked() {
-        }
+        if ui.button("⏩").on_hover_text("Skip").clicked() {}
+
+        ui.add(
+            egui::DragValue::new(&mut self.time)
+                .clamp_range(0.0..=(60.0*60.0*10.0))
+                .custom_formatter(|n, _| {
+                    let mins = ((n / 60.0) % 60.0).floor() as i32;
+                    let secs = (n % 60.0) as i32;
+                    format!("{mins:02}:{secs:02}")
+                })
+                .custom_parser(|s| {
+                    if s.contains(':'){
+                        let parts: Vec<&str> = s.split(':').collect();
+                        if parts.len() == 2 {
+                            parts[0]
+                                .parse::<f32>()
+                                .and_then(|m| {
+                                    parts[1]
+                                        .parse::<f32>()
+                                        .map(|s| ((m * 60.0) + s) as f64)
+                                })
+                                .ok()
+                        } else {
+                            None
+                        }
+                    }else {
+                        s.parse::<f64>().ok()
+                    }
+                }),
+        );
+        ui.add(
+            egui::DragValue::new(&mut self.time)
+                .speed(0.5)
+                .clamp_range(0.0..=200.0),
+        )
+        .on_hover_text("Time");
         ui.add(
             egui::DragValue::new(&mut self.scale)
                 .speed(0.1)
                 .clamp_range(0.01..=1.0),
-        ).on_hover_text("Zoom");
+        )
+        .on_hover_text("Zoom");
+
+        ui.add(
+            egui::DragValue::new(&mut self.repeats)
+                .speed(1)
+                .clamp_range(1..=10000),
+        )
+        .on_hover_text("Number of repeats");
+        ui.add(
+            egui::DragValue::new(&mut self.speed)
+                .speed(1)
+                .suffix("x")
+                .clamp_range(1.0..=20.0),
+        )
+        .on_hover_text("Speed");
+
+        ui.menu_button("➕", |ui| {
+            if ui.button("Key Strokes").clicked() {
+                ui.close_menu();
+            }
+            if ui.button("Mouse Button").clicked() {
+                ui.close_menu();
+            }
+            if ui.button("Mouse Moves").clicked() {
+                ui.close_menu();
+            }
+        })
+        .response
+        .on_hover_text("Add keyframe");
         if self.recording {
-            if ui.button("⏹").on_hover_text("Stop Recording: F8").clicked(){
+            if ui.button("⏹").on_hover_text("Stop Recording: F8").clicked() {
                 self.recording = false;
             }
-        }else{
-            if ui.button(egui::RichText::new("⏺").color(egui::Color32::LIGHT_RED)).on_hover_text("Start Recording: F8").clicked(){
+        } else {
+            if ui
+                .button(egui::RichText::new("⏺").color(egui::Color32::LIGHT_RED))
+                .on_hover_text("Start Recording: F8")
+                .clicked()
+            {
                 self.recording = true;
             }
         }
@@ -208,7 +281,7 @@ impl Sequencer {
         }
     }
     fn render_playhead(&self, ui: &mut Ui) {
-        let point = time_to_rect(self.time, 0.0, ui.spacing().item_spacing, ui.max_rect()).min;
+        let point = time_to_rect(scale(ui, self.time, self.scale), 0.0, ui.spacing().item_spacing, ui.max_rect()).min;
 
         let p1 = pos2(point.x, ui.max_rect().min.y - ROW_HEIGHT - 6.0);
         let p2 = pos2(p1.x, p1.y + ROW_HEIGHT * 2.0 + 6.0);
@@ -287,8 +360,8 @@ impl Sequencer {
         let now = Instant::now();
         let dt = now - *last_instant;
         if self.play {
-            self.time += dt.as_secs_f32() * 10000000.0;
-            println!("deltatime: {:?}", dt.as_secs_f32());
+            self.time += dt.as_secs_f32() * 100000.0;
+            //println!("deltatime: {:?}", dt.as_secs_f32());
         }
         *last_instant = now;
     }
