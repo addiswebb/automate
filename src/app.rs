@@ -107,16 +107,16 @@ impl eframe::App for App {
                     if ui.button("Save").clicked() {
                         println!("Save");
                     }
-                    if ui.button("Open Sequencer").clicked() {
-                        self.sequencer.open(true);
-                    }
                 });
             });
         });
 
-        egui::Window::new("Selected Keyframe")
-            .resizable(true)
-            .collapsible(false)
+
+        self.sequencer.show(ctx);
+
+        egui::SidePanel::left("Selected Keyframe")
+            .min_width(115.0)
+            .resizable(false)
             .show(ctx, |ui| {
                 if let Some(i) = self.sequencer.selected_keyframe {
                     if i < self.sequencer.keyframes.len() {

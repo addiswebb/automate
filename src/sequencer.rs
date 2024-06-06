@@ -27,7 +27,6 @@ pub struct Keyframe {
 }
 
 pub struct Sequencer {
-    open: bool,
     dragging: bool,
     //can_resize: bool,
     //resize_left: bool, //left: true, right: false
@@ -48,7 +47,6 @@ pub struct Sequencer {
 impl Sequencer {
     pub fn new() -> Self {
         Self {
-            open: true,
             keyframes: vec![],
             drag_start: pos2(0., 0.),
             dragging: false,
@@ -65,9 +63,6 @@ impl Sequencer {
             playing_keyframes: vec![],
             recording: false,
         }
-    }
-    pub fn open(&mut self, open: bool) {
-        self.open = open;
     }
     pub fn add_keyframe(mut self, keyframe: Keyframe) -> Sequencer {
         log::info!("add keyframe: {:?}", keyframe);
@@ -339,65 +334,56 @@ impl Sequencer {
             .line_segment([p1, p2], egui::Stroke::new(1.0, egui::Color32::LIGHT_RED));
     }
     pub fn show(&mut self, ctx: &egui::Context) {
-        let mut open = self.open;
+        egui::TopBottomPanel::bottom("Sequencer").show(ctx, |ui| {
+            use egui_extras::{Column, TableBuilder};
+            let mut table = TableBuilder::new(ui)
+                .striped(false)
+                .resizable(false)
+                .cell_layout(egui::Layout::left_to_right(egui::Align::Center))
+                .column(Column::initial(60.0).range(60.0..=60.0))
+                .column(Column::remainder())
+                .sense(egui::Sense::hover());
+            //allow rows to be clicked
+            table = table.sense(egui::Sense::click()).resizable(true);
 
-        let w = egui::Window::new("Sequencer");
-        let _ = w
-            .movable(true)
-            .resizable(true)
-            .collapsible(false)
-            .open(&mut open)
-            .show(ctx, |ui| {
-                use egui_extras::{Column, TableBuilder};
-                let mut table = TableBuilder::new(ui)
-                    .striped(false)
-                    .resizable(false)
-                    .cell_layout(egui::Layout::left_to_right(egui::Align::Center))
-                    .column(Column::initial(60.0).range(60.0..=60.0))
-                    .column(Column::remainder())
-                    .sense(egui::Sense::hover());
-                //allow rows to be clicked
-                table = table.sense(egui::Sense::click()).resizable(true);
+            table
+                .header(ROW_HEIGHT, |mut header| {
+                    header.col(|ui| {
+                        ui.strong("Inputs");
+                    });
+                    header.col(|ui| {
+                        self.render_control_bar(ui);
+                    });
+                })
+                .body(|mut body| {
+                    body.row(ROW_HEIGHT, |mut row| {
+                        row.set_hovered(true);
+                        row.col(|_| {});
+                        row.col(|ui| {
+                            self.render_timeline(ui);
+                        });
+                    });
+                    body.row(ROW_HEIGHT, |mut row| {
+                        row.col(|ui| {
+                            ui.label("Keyboard");
+                        });
+                        row.col(|ui| {
+                            self.render_keyframes(ui, 0);
+                        });
+                    });
 
-                table
-                    .header(ROW_HEIGHT, |mut header| {
-                        header.col(|ui| {
-                            ui.strong("Inputs");
+                    body.row(ROW_HEIGHT, |mut row| {
+                        row.col(|ui| {
+                            ui.label("Mouse");
                         });
-                        header.col(|ui| {
-                            self.render_control_bar(ui);
+                        row.col(|ui| {
+                            self.render_keyframes(ui, 1);
+                            self.render_keyframes(ui, 2);
+                            self.render_playhead(ui);
                         });
-                    })
-                    .body(|mut body| {
-                        body.row(ROW_HEIGHT, |mut row| {
-                            row.set_hovered(true);
-                            row.col(|_| {});
-                            row.col(|ui| {
-                                self.render_timeline(ui);
-                            });
-                        });
-                        body.row(ROW_HEIGHT, |mut row| {
-                            row.col(|ui| {
-                                ui.label("Keyboard");
-                            });
-                            row.col(|ui| {
-                                self.render_keyframes(ui, 0);
-                            });
-                        });
-
-                        body.row(ROW_HEIGHT, |mut row| {
-                            row.col(|ui| {
-                                ui.label("Mouse");
-                            });
-                            row.col(|ui| {
-                                self.render_keyframes(ui, 1);
-                                self.render_keyframes(ui, 2);
-                                self.render_playhead(ui);
-                            });
-                        });
-                    })
-            });
-        self.open = open;
+                    });
+                });
+        });
     }
     
     pub fn update(&mut self, last_instant: &mut Instant) {
