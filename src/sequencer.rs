@@ -1,7 +1,8 @@
-use std::time::Instant;
+use core::time;
+use std::{thread, time::Instant};
 
 use eframe::egui::{self, pos2, Ui, Vec2};
-use egui::{emath::RectTransform, Pos2, Rect};
+use egui::{emath::RectTransform, Key, Pos2, Rect};
 
 const ROW_HEIGHT: f32 = 24.0;
 
@@ -28,16 +29,18 @@ pub struct Keyframe {
 pub struct Sequencer {
     open: bool,
     dragging: bool,
-    can_resize: bool,
-    resize_left: bool, //left: true, right: false
+    //can_resize: bool,
+    //resize_left: bool, //left: true, right: false
     resizing: bool,
     drag_start: Pos2,
     pub keyframes: Vec<Keyframe>,
     pub selected_keyframe: Option<usize>,
+    playing_keyframes: Vec<usize>,
     scale: f32, // egui points to seconds scale
     repeats: i32,
     speed: f32,
     time: f32,
+    prev_time: f32,
     play: bool,
     recording: bool,
 }
@@ -49,15 +52,17 @@ impl Sequencer {
             keyframes: vec![],
             drag_start: pos2(0., 0.),
             dragging: false,
-            can_resize: false,
+            //can_resize: false,
             resizing: false,
-            resize_left: false,
+            //resize_left: false,
             scale: 0.01,
             repeats: 1,
             speed: 1.0,
             time: 0.0,
+            prev_time: 0.0,
             play: false,
             selected_keyframe: None,
+            playing_keyframes: vec![],
             recording: false,
         }
     }
@@ -66,8 +71,16 @@ impl Sequencer {
     }
     pub fn add_keyframe(mut self, keyframe: Keyframe) -> Sequencer {
         log::info!("add keyframe: {:?}", keyframe);
-        let mut tmp = vec![keyframe];
-        self.keyframes.append(&mut tmp);
+        self.keyframes.push(keyframe);
+        self.playing_keyframes.push(0);
+        self.keyframes.sort_unstable_by(|a, b| {
+            if a.id == b.id || (a.id + b.id) == 3 {
+                a.duration.partial_cmp(&b.duration).unwrap()
+            } else {
+                a.id.partial_cmp(&b.id).unwrap()
+            }
+        });
+        self.keyframes.reverse();
         self
     }
 
@@ -91,12 +104,17 @@ impl Sequencer {
                 if width < 20.0 {
                     label = "".to_string();
                 }
-                let stroke = if self.selected_keyframe != Some(i) {
-                    egui::Stroke::new(0.4, egui::Color32::from_rgb(15, 37, 42))
-                } else {
+
+                let mut stroke = if self.selected_keyframe == Some(i) {
                     egui::Stroke::new(1.5, egui::Color32::from_rgb(233, 181, 125))
+                //Selected
+                } else {
+                    egui::Stroke::new(0.4, egui::Color32::from_rgb(15, 37, 42)) //Not selected
                 };
 
+                if self.playing_keyframes[i] == 1 {
+                    stroke = egui::Stroke::new(1.5, egui::Color32::LIGHT_RED); //Playing
+                }
                 let keyframe = ui
                     .put(
                         rect,
@@ -144,7 +162,7 @@ impl Sequencer {
                 if keyframe.drag_stopped() {
                     self.drag_start = pos2(0., 0.);
                     self.dragging = false;
-                    self.can_resize = false;
+                    //self.can_resize = false;
                     self.resizing = false;
                 }
 
@@ -176,36 +194,37 @@ impl Sequencer {
         if ui.button("⏵").on_hover_text("Play").clicked() {
             self.play = !self.play;
         }
-        if ui.button("⏩").on_hover_text("Skip").clicked() {}
+        if ui.button("⏩").on_hover_text("Step").clicked() {
+            self.time += 0.01;
+        }
         ui.add(
             egui::DragValue::new(&mut self.time)
-                .clamp_range(0.0..=(60.0*60.0*10.0))
+                .clamp_range(0.0..=(60.0 * 60.0 * 10.0))
                 .custom_formatter(|n, _| {
                     let mins = ((n / 60.0) % 60.0).floor() as i32;
                     let secs = (n % 60.0) as i32;
-                    let milis = ((n*1000.0) % 1000.0).floor() as i32;
+                    let milis = ((n * 1000.0) % 1000.0).floor() as i32;
                     format!("{mins:02}:{secs:02}:{milis:03}")
                 })
                 .custom_parser(|s| {
-                    if s.contains(':'){
+                    if s.contains(':') {
                         let parts: Vec<&str> = s.split(':').collect();
                         if parts.len() == 2 {
                             parts[0]
                                 .parse::<f32>()
                                 .and_then(|m| {
-                                    parts[1]
-                                        .parse::<f32>()
-                                        .map(|s| ((m * 60.0) + s) as f64)
+                                    parts[1].parse::<f32>().map(|s| ((m * 60.0) + s) as f64)
                                 })
                                 .ok()
                         } else {
                             None
                         }
-                    }else {
+                    } else {
                         s.parse::<f64>().ok()
                     }
                 }),
-        ).on_hover_text("Time");
+        )
+        .on_hover_text("Time");
         ui.add(
             egui::DragValue::new(&mut self.scale)
                 .speed(0.1)
@@ -226,9 +245,15 @@ impl Sequencer {
                 .clamp_range(1.0..=20.0),
         )
         .on_hover_text("Speed");
-
+        let mut keyframe_to_add: Option<Keyframe> = None;
         ui.menu_button("➕", |ui| {
             if ui.button("Key Strokes").clicked() {
+                keyframe_to_add = Some(Keyframe {
+                    timestamp: 5.0,
+                    duration: 3.0,
+                    keyframe_type: KeyframeType::KeyBtn("helo world".to_owned()),
+                    id: 0,
+                });
                 ui.close_menu();
             }
             if ui.button("Mouse Button").clicked() {
@@ -241,6 +266,18 @@ impl Sequencer {
         .response
         .on_hover_text("Add keyframe");
 
+        if let Some(keyframe) = keyframe_to_add {
+            self.keyframes.push(keyframe);
+            self.playing_keyframes.push(0);
+            self.keyframes.sort_unstable_by(|a, b| {
+                if a.id == b.id || (a.id + b.id) == 3 {
+                    a.duration.partial_cmp(&b.duration).unwrap()
+                } else {
+                    a.id.partial_cmp(&b.id).unwrap()
+                }
+            });
+            self.keyframes.reverse();
+        }
         if self.recording {
             if ui.button("⏹").on_hover_text("Stop Recording: F8").clicked() {
                 self.recording = false;
@@ -253,6 +290,11 @@ impl Sequencer {
             {
                 self.recording = true;
             }
+        }
+        if ui.button("debug").clicked() {
+            println!("{:?}", self.keyframes);
+            println!("{:?}", self.playing_keyframes);
+            println!("{:?}", self.keyframes.len());
         }
     }
     fn render_timeline(&self, ui: &mut Ui) {
@@ -275,8 +317,14 @@ impl Sequencer {
             );
         }
     }
-    fn render_playhead(&self, ui: &mut Ui) {
-        let point = time_to_rect(scale(ui, self.time, self.scale), 0.0, ui.spacing().item_spacing, ui.max_rect()).min;
+    fn render_playhead(&mut self, ui: &mut Ui) {
+        let point = time_to_rect(
+            scale(ui, self.time, self.scale),
+            0.0,
+            ui.spacing().item_spacing,
+            ui.max_rect(),
+        )
+        .min;
 
         let p1 = pos2(point.x, ui.max_rect().min.y - ROW_HEIGHT - 6.0);
         let p2 = pos2(p1.x, p1.y + ROW_HEIGHT * 2.0 + 6.0);
@@ -351,14 +399,80 @@ impl Sequencer {
             });
         self.open = open;
     }
+    
     pub fn update(&mut self, last_instant: &mut Instant) {
+        self.prev_time = self.time;
         let now = Instant::now();
         let dt = now - *last_instant;
         if self.play {
-            self.time += dt.as_secs_f32() * 100000.0;
-            //println!("deltatime: {:?}", dt.as_secs_f32());
+            self.time += dt.as_secs_f32();
+            //println!("fps: {:?}", 1.0/dt.as_secs_f32());
+        }
+
+        if self.prev_time != self.time {
+            //The playhead has moved if the current time is not equal to the previous time
+            for i in 0..self.keyframes.len() {
+                let keyframe = &self.keyframes[i];
+                let current_keyframe_state = self.playing_keyframes[i]; //1 if playing, 0 if not
+                if self.time >= keyframe.timestamp
+                    && self.time <= keyframe.timestamp + keyframe.duration
+                {
+                    self.playing_keyframes[i] = 1; //change keyframe state to playing, highlight
+                    if current_keyframe_state != self.playing_keyframes[i] {
+                        if self.play {
+                            handle_playing_keyframe(&keyframe, true);
+                        }
+                    }
+                } else {
+                    self.playing_keyframes[i] = 0; //change keyframe state to not playing, no highlight
+                    if current_keyframe_state != self.playing_keyframes[i] {
+                        if self.play {
+                            handle_playing_keyframe(&keyframe, false);
+                        }
+                    }
+                }
+            }
         }
         *last_instant = now;
+    }
+}
+fn handle_playing_keyframe(keyframe: &Keyframe, start: bool) {
+    match &keyframe.keyframe_type {
+        KeyframeType::KeyBtn(keys) => {
+            if start {
+                //println!("type: {}",keys);
+                let keys = string_to_keys(keys);
+                for key in keys {
+                    rdev::simulate(&rdev::EventType::KeyPress(key)).ok();
+                    //thread::sleep(time::Duration::from_millis(20));
+                    rdev::simulate(&rdev::EventType::KeyRelease(key)).ok();
+                }
+            }
+        }
+        KeyframeType::MouseBtn(key) => {
+            let button = match key {
+                0 => rdev::Button::Left,
+                1 => rdev::Button::Left,
+                _ => rdev::Button::Left,
+            };
+            if start {
+                //println!("press: MouseButton({})",key);
+                rdev::simulate(&rdev::EventType::ButtonPress(button)).ok();
+            } else {
+                //println!("release: MouseButton({})",key);
+                rdev::simulate(&rdev::EventType::ButtonRelease(button)).ok();
+            }
+        }
+        KeyframeType::MouseMove(pos) => {
+            if start {
+                rdev::simulate(&rdev::EventType::MouseMove {
+                    x: pos.x as f64,
+                    y: pos.y as f64,
+                })
+                .ok();
+            }
+            //println!("move: ({:?})",pos);
+        }
     }
 }
 
@@ -384,6 +498,46 @@ fn time_to_rect(t: f32, d: f32, spacing: Vec2, res_rect: Rect) -> Rect {
     Rect {
         min: to_screen.transform_pos(p1),
         max: to_screen.transform_pos(p2),
+    }
+}
+
+fn string_to_keys(string: &String) -> Vec<rdev::Key> {
+    let mut keys = vec![];
+    for c in string.chars().into_iter() {
+        keys.push(char_to_key(c));
+    }
+    return keys;
+}
+
+fn char_to_key(c: char) -> rdev::Key {
+    match c {
+        'a' => rdev::Key::KeyA,
+        'b' => rdev::Key::KeyB,
+        'c' => rdev::Key::KeyC,
+        'd' => rdev::Key::KeyD,
+        'e' => rdev::Key::KeyE,
+        'f' => rdev::Key::KeyF,
+        'g' => rdev::Key::KeyG,
+        'h' => rdev::Key::KeyH,
+        'i' => rdev::Key::KeyI,
+        'j' => rdev::Key::KeyJ,
+        'k' => rdev::Key::KeyK,
+        'l' => rdev::Key::KeyL,
+        'm' => rdev::Key::KeyM,
+        'n' => rdev::Key::KeyN,
+        'o' => rdev::Key::KeyO,
+        'p' => rdev::Key::KeyP,
+        'q' => rdev::Key::KeyQ,
+        'r' => rdev::Key::KeyR,
+        's' => rdev::Key::KeyS,
+        't' => rdev::Key::KeyT,
+        'u' => rdev::Key::KeyU,
+        'v' => rdev::Key::KeyV,
+        'w' => rdev::Key::KeyW,
+        'x' => rdev::Key::KeyX,
+        'y' => rdev::Key::KeyY,
+        'z' => rdev::Key::KeyZ,
+        _ => rdev::Key::Delete,
     }
 }
 

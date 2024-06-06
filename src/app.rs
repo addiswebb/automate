@@ -11,43 +11,65 @@ pub struct App {
     #[serde(skip)] // This how you opt-out of serialization of a field
     // value: f32,
     sequencer: Sequencer,
+    #[serde(skip)]
+    last_instant: Instant,
 }
 
 impl Default for App {
     fn default() -> Self {
         let sequencer = Sequencer::new()
-            // .add_keyframe(Keyframe{
-            //     timestamp: 0.0,
-            //     duration: 1.0,
-            //     keyframe_type: KeyframeType::KeyBtn("Hello World".to_owned()),
-            // })
-            .add_keyframe(Keyframe {
-                timestamp: 2.0,
-                duration: 4.0,
-                keyframe_type: KeyframeType::MouseBtn(0),
-                id: 1,
-            })
-            .add_keyframe(Keyframe {
-                timestamp: 2.5,
-                duration: 2.0,
-                keyframe_type: KeyframeType::KeyBtn("test".to_owned()),
-                id: 0,
-            })
-            .add_keyframe(Keyframe {
-                timestamp: 13.0,
-                duration: 2.0,
-                keyframe_type: KeyframeType::MouseMove(egui::Vec2 { x: 0.0, y: 0.0 }),
-                id: 2,
-            })
-            .add_keyframe(Keyframe {
-                timestamp: 8.0,
-                duration: 3.0,
-                keyframe_type: KeyframeType::MouseBtn(0),
-                id: 1,
-            });
+        .add_keyframe(Keyframe {
+            timestamp: 0.1,
+            duration: 0.5,
+            keyframe_type: KeyframeType::MouseMove(egui::Vec2::new(0.0,0.0)),
+            id:0,
+        })
+        .add_keyframe(Keyframe {
+            timestamp: 0.7,
+            duration: 0.1,
+            keyframe_type: KeyframeType::MouseBtn(0),
+            id:1,
+        });
+        
+        // .add_keyframe(Keyframe{
+        //     timestamp: 0.0,
+        //     duration: 1.0,
+        //     keyframe_type: KeyframeType::KeyBtn("Hello World".to_owned()),
+        // })
+        // .add_keyframe(Keyframe {
+        //     timestamp: 0.1,
+        //     duration: 0.1,
+        //     keyframe_type: KeyframeType::MouseMove(egui::Vec2::new(-570.0,560.0)),
+        //     id: 1,
+        // })
+        // .add_keyframe(Keyframe {
+        //     timestamp: 1.0,
+        //     duration: 1.0,
+        //     keyframe_type: KeyframeType::MouseBtn(0),
+        //     id: 1,
+        // })
+        // .add_keyframe(Keyframe {
+        //     timestamp: 2.5,
+        //     duration: 2.0,
+        //     keyframe_type: KeyframeType::KeyBtn("test".to_owned()),
+        //     id: 0,
+        // });
+        // .add_keyframe(Keyframe {
+        //     timestamp: 13.0,
+        //     duration: 2.0,
+        //     keyframe_type: KeyframeType::MouseMove(egui::Vec2 { x: 0.0, y: 0.0 }),
+        //     id: 1,
+        // })
+        // .add_keyframe(Keyframe {
+        //     timestamp: 8.0,
+        //     duration: 3.0,
+        //     keyframe_type: KeyframeType::MouseBtn(0),
+        //     id: 1,
+        // });
         Self {
             label: "Automate".to_owned(),
             sequencer,
+            last_instant: Instant::now(),
         }
     }
 }
@@ -82,7 +104,7 @@ impl eframe::App for App {
                     if ui.button("Quit").clicked() {
                         ctx.send_viewport_cmd(egui::ViewportCommand::Close);
                     }
-                    if ui.button("Save").clicked(){
+                    if ui.button("Save").clicked() {
                         println!("Save");
                     }
                     if ui.button("Open Sequencer").clicked() {
@@ -132,10 +154,7 @@ impl eframe::App for App {
                     }
                 }
             });
-
-        self.sequencer.show(ctx);
-        let mut last_instant = Instant::now();
-        self.sequencer.update(&mut last_instant);
+        self.sequencer.update(&mut self.last_instant);
         ctx.request_repaint();
     }
 }
