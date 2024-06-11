@@ -2,7 +2,9 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")] // hide console window on Windows in release
 
 fn main() -> eframe::Result<()> {
-    env_logger::init();
+    env_logger::builder()
+        .filter_module("automate", log::LevelFilter::Info)
+        .init();
 
     let native_options = eframe::NativeOptions {
         viewport: egui::ViewportBuilder::default()

@@ -79,13 +79,11 @@ impl Sequencer {
         let mut key_pressed_at = vec![];
         // this needs to get reset every time recording starts
         thread::spawn(move || {
-            println!("Created Recording Thread");
+            log::info!("Created Recording Thread");
             if let Err(error) = rdev::listen(move |event: rdev::Event| {
                 // if dt == t, then ignore the event
                 if shared_rec.load(Ordering::Relaxed) {
-                    let start = *shared_instant.lock().unwrap();
-                    let t = Instant::now();
-                    let dt: Duration = t - start;
+                    let dt: Duration = Instant::now() - *shared_instant.lock().unwrap();
                     let keyframe = match &event.event_type {
                         rdev::EventType::ButtonPress(btn) => {
                             mouse_presses.push(btn.clone());
@@ -95,7 +93,6 @@ impl Sequencer {
                         rdev::EventType::KeyPress(key) => {
                             key_presses.push(key.clone());
                             key_pressed_at.push(dt);
-                            println!("pressed");
                             None
                         }
                         rdev::EventType::ButtonRelease(btn) => {
@@ -142,7 +139,6 @@ impl Sequencer {
                                     if key_presses[i] == *key{
                                         if !found_press {
                                             pressed_at = key_pressed_at[i];
-                                            println!("found");
                                             found_press = true;
                                         }
                                         indices_to_remove.push(i);
@@ -169,7 +165,6 @@ impl Sequencer {
                     };
 
                     if keyframe.is_some() {
-                        println!("send: {:?}", keyframe);
                         let mut keyframes = shared_kfs.lock().unwrap();
                         let mut playing_keyframes = shared_pkfs.lock().unwrap();
                         keyframes.push(keyframe.unwrap());
@@ -177,7 +172,7 @@ impl Sequencer {
                     }
                 }
             }) {
-                println!("Error: {:?}", error)
+                log::error!("Error: {:?}", error)
             }
         });
         Self {
@@ -282,7 +277,6 @@ impl Sequencer {
                 }
                 if self.dragging {
                     if let Some(end) = keyframe.interact_pointer_pos() {
-                        //println!("dragging");
                         let x = 1.0 / scale(ui, 1.0, self.scale);
                         let drag_delta = end.x - self.drag_start.x;
                         let t = keyframes[i].timestamp + drag_delta * x;
@@ -421,6 +415,7 @@ impl Sequencer {
                 self.time = 0.;
                 keyframes.pop();
                 self.playing_keyframes.lock().unwrap().pop();
+                log::info!("Stop Recording");
             }
         } else {
             if ui
@@ -435,7 +430,7 @@ impl Sequencer {
                 std::mem::drop(keyframes);
                 std::mem::drop(rec_instant);
                 self.recording.swap(true, Ordering::Relaxed);
-                println!("Start Recording");
+                log::info!("Start Recording");
             }
         }
     }
@@ -600,7 +595,6 @@ impl Sequencer {
         let dt = now - *last_instant;
         if self.play || self.recording.load(Ordering::Relaxed) {
             self.time += dt.as_secs_f32();
-            //println!("fps: {:?}", 1.0/dt.as_secs_f32());
         }
         if self.prev_time != self.time {
             //The playhead has moved if the current time is not equal to the previous time
@@ -635,12 +629,13 @@ fn handle_playing_keyframe(keyframe: &Keyframe, start: bool) {
     match &keyframe.keyframe_type {
         KeyframeType::KeyBtn(keys) => {
             if start {
-                //println!("type: {}",keys);
                 let keys = string_to_keys(keys);
                 for key in keys {
-                    rdev::simulate(&rdev::EventType::KeyPress(key)).ok();
-                    //thread::sleep(time::Duration::from_millis(20));
-                    rdev::simulate(&rdev::EventType::KeyRelease(key)).ok();
+                    if start{
+                        rdev::simulate(&rdev::EventType::KeyPress(key)).ok();
+                    }else{
+                        rdev::simulate(&rdev::EventType::KeyRelease(key)).ok();
+                    }
                 }
             }
         }
@@ -651,10 +646,8 @@ fn handle_playing_keyframe(keyframe: &Keyframe, start: bool) {
                 _ => rdev::Button::Left,
             };
             if start {
-                //println!("press: MouseButton({})",key);
                 rdev::simulate(&rdev::EventType::ButtonPress(button)).ok();
             } else {
-                //println!("release: MouseButton({})",key);
                 rdev::simulate(&rdev::EventType::ButtonRelease(button)).ok();
             }
         }
@@ -666,7 +659,6 @@ fn handle_playing_keyframe(keyframe: &Keyframe, start: bool) {
                 })
                 .ok();
             }
-            //println!("move: ({:?})",pos);
         }
     }
 }
