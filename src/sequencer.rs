@@ -1,7 +1,6 @@
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::mpsc::{self, Receiver, Sender};
-use std::sync::Arc;
-use std::thread::JoinHandle;
+use std::sync::{Arc, Mutex};
+use std::time::Duration;
 use std::{thread, time::Instant};
 
 use eframe::egui::{self, pos2, Ui, Vec2};
@@ -30,6 +29,17 @@ pub struct Keyframe {
     pub id: u8,
 }
 
+impl Default for Keyframe {
+    fn default() -> Self {
+        Self {
+            timestamp: 0.0,
+            duration: 0.0,
+            keyframe_type: KeyframeType::KeyBtn("".to_string()),
+            id: 0,
+        }
+    }
+}
+
 #[derive(Debug)]
 pub struct Sequencer {
     dragging: bool,
@@ -37,9 +47,9 @@ pub struct Sequencer {
     //resize_left: bool, //left: true, right: false
     resizing: bool,
     drag_start: Pos2,
-    pub keyframes: Vec<Keyframe>,
+    pub keyframes: Arc<Mutex<Vec<Keyframe>>>,
     pub selected_keyframe: Option<usize>,
-    playing_keyframes: Vec<usize>,
+    pub playing_keyframes: Arc<Mutex<Vec<usize>>>,
     scale: f32, // egui points to seconds scale
     repeats: i32,
     speed: f32,
@@ -47,58 +57,131 @@ pub struct Sequencer {
     prev_time: f32,
     play: bool,
     recording: Arc<AtomicBool>,
-    reciever: Receiver<Option<Keyframe>>,
-    handle: Option<JoinHandle<()>>,
+    recording_instant: Arc<Mutex<Instant>>,
 }
 
 impl Sequencer {
     pub fn new() -> Self {
-        let (tx, rx) = mpsc::channel();
+        let keyframes: Arc<Mutex<Vec<Keyframe>>> = Arc::new(Mutex::new(vec![]));
+        let playing_keyframes = Arc::new(Mutex::new(vec![]));
         let recording = Arc::new(AtomicBool::new(false));
-        let shared = Arc::clone(&recording);
+        let recording_instant = Arc::new(Mutex::new(Instant::now()));
+
+        let shared_kfs = Arc::clone(&keyframes);
+        let shared_pkfs = Arc::clone(&playing_keyframes);
+        let shared_rec = Arc::clone(&recording);
+        let shared_instant = Arc::clone(&recording_instant);
+
+        let mut mouse_presses = vec![];
+        let mut mouse_pressed_at = vec![];
+
+        let mut key_presses = vec![];
+        let mut key_pressed_at = vec![];
         // this needs to get reset every time recording starts
-        let now = Instant::now();
-        let handle = Some(thread::spawn(move || {
+        thread::spawn(move || {
             println!("Created Recording Thread");
             if let Err(error) = rdev::listen(move |event: rdev::Event| {
                 // if dt == t, then ignore the event
-                if shared.load(Ordering::Relaxed) {
+                if shared_rec.load(Ordering::Relaxed) {
+                    let start = *shared_instant.lock().unwrap();
                     let t = Instant::now();
-                    let dt = t - now;
+                    let dt: Duration = t - start;
                     let keyframe = match &event.event_type {
-                        rdev::EventType::ButtonRelease(btn) => Some(Keyframe {
-                            timestamp: dt.as_secs_f32(),
-                            duration: 1.0,
-                            keyframe_type: KeyframeType::MouseBtn(match btn {
-                                Button::Left => 0,
-                                Button::Right => 1,
-                                _ => 2,
-                            }),
-                            id: 0,
-                        }),
-                        rdev::EventType::KeyRelease(key) => Some(Keyframe {
-                            timestamp: dt.as_secs_f32(),
-                            duration: 1.0,
-                            keyframe_type: KeyframeType::KeyBtn(key_to_char(key).to_string()),
-                            id: 0,
-                        }),
+                        rdev::EventType::ButtonPress(btn) => {
+                            mouse_presses.push(btn.clone());
+                            mouse_pressed_at.push(dt);
+                            None
+                        }
+                        rdev::EventType::KeyPress(key) => {
+                            key_presses.push(key.clone());
+                            key_pressed_at.push(dt);
+                            println!("pressed");
+                            None
+                        }
+                        rdev::EventType::ButtonRelease(btn) => {
+                            let mut found_press = false;
+                            let mut indices_to_remove = vec![];
+                            let mut pressed_at = Duration::from_secs(0);
+                            if mouse_presses.contains(btn) {
+                                for i in 0..mouse_presses.len() {
+                                    if mouse_presses[i] == *btn {
+                                        if !found_press {
+                                            pressed_at = mouse_pressed_at[i];
+                                            found_press = true;
+                                        }
+                                        indices_to_remove.push(i);
+                                    }
+                                }
+                            }
+                            for i in 0..indices_to_remove.len() {
+                                let index = indices_to_remove[i] - (i * 1);
+                                mouse_presses.remove(index);
+                                mouse_pressed_at.remove(index);
+                            }
+
+                            match found_press {
+                                true => Some(Keyframe {
+                                    timestamp: pressed_at.as_secs_f32(),
+                                    duration: (dt - pressed_at).as_secs_f32(),
+                                    keyframe_type: KeyframeType::MouseBtn(match btn {
+                                        Button::Left => 0,
+                                        Button::Right => 1,
+                                        _ => 2,
+                                    }),
+                                    id: 1,
+                                }),
+                                false => None,
+                            }
+                        }
+                        rdev::EventType::KeyRelease(key) => {
+                            let mut found_press = false;
+                            let mut indices_to_remove = vec![];
+                            let mut pressed_at = Duration::from_secs(0);
+                            if key_presses.contains(key) {
+                                for i in 0..key_presses.len() {
+                                    if key_presses[i] == *key{
+                                        if !found_press {
+                                            pressed_at = key_pressed_at[i];
+                                            println!("found");
+                                            found_press = true;
+                                        }
+                                        indices_to_remove.push(i);
+                                    }
+                                }
+                            }
+                            for i in 0..indices_to_remove.len() {
+                                let index = indices_to_remove[i] - (i * 1);
+                                key_presses.remove(index);
+                                key_pressed_at.remove(index);
+                            }
+
+                            match found_press {
+                                true => Some(Keyframe {
+                                    timestamp: pressed_at.as_secs_f32(),
+                                    duration: (dt - pressed_at).as_secs_f32(),
+                                    keyframe_type: KeyframeType::KeyBtn(key_to_char(key).to_string()),
+                                    id: 0,
+                                }),
+                                false => None,
+                            }
+                        }
                         _ => None,
                     };
 
-                    if keyframe.is_some(){
-                        println!("send: {:?}",keyframe);
+                    if keyframe.is_some() {
+                        println!("send: {:?}", keyframe);
+                        let mut keyframes = shared_kfs.lock().unwrap();
+                        let mut playing_keyframes = shared_pkfs.lock().unwrap();
+                        keyframes.push(keyframe.unwrap());
+                        playing_keyframes.push(0);
                     }
-                    tx.send(keyframe).unwrap();
-                    //println!("{:?}", event);
-                } else {
-                    //println!("done");
                 }
             }) {
                 println!("Error: {:?}", error)
             }
-        }));
+        });
         Self {
-            keyframes: vec![],
+            keyframes,
             drag_start: pos2(0., 0.),
             dragging: false,
             //can_resize: false,
@@ -111,48 +194,49 @@ impl Sequencer {
             prev_time: 0.0,
             play: false,
             selected_keyframe: None,
-            playing_keyframes: vec![],
+            playing_keyframes,
             recording,
-            reciever: rx,
-            handle,
+            recording_instant,
         }
     }
-    pub fn add_keyframe(mut self, keyframe: Keyframe) -> Sequencer {
-        log::info!("add keyframe: {:?}", keyframe);
-        self.keyframes.push(keyframe);
-        self.playing_keyframes.push(0);
-        self.keyframes.sort_unstable_by(|a, b| {
-            if a.id == b.id || (a.id + b.id) == 3 {
-                a.duration.partial_cmp(&b.duration).unwrap()
-            } else {
-                a.id.partial_cmp(&b.id).unwrap()
-            }
-        });
-        self.keyframes.reverse();
-        self
-    }
+    // pub fn add_keyframe(&mut self, keyframe: Keyframe) -> &Sequencer {
+    //     log::info!("add keyframe: {:?}", keyframe);
+    //     let mut keyframes = self.keyframes.lock().unwrap();
+    //     keyframes.push(keyframe);
+    //     self.playing_keyframes.push(0);
+    //     keyframes.sort_unstable_by(|a, b| {
+    //         if a.id == b.id || (a.id + b.id) == 3 {
+    //             a.duration.partial_cmp(&b.duration).unwrap()
+    //         } else {
+    //             a.id.partial_cmp(&b.id).unwrap()
+    //         }
+    //     });
+    //     keyframes.reverse();
+    //     self
+    // }
 
     fn render_keyframes(&mut self, ui: &mut Ui, id: u8) {
         let mut keyframe_to_delete: Option<usize> = None;
         let max_rect = ui.max_rect();
-        for i in 0..self.keyframes.len() {
-            if self.keyframes[i].id == id {
+        let mut keyframes = self.keyframes.lock().unwrap();
+        for i in 0..keyframes.len() {
+            if keyframes[i].id == id {
                 let rect = time_to_rect(
-                    scale(ui, self.keyframes[i].timestamp, self.scale),
-                    scale(ui, self.keyframes[i].duration, self.scale),
+                    scale(ui, keyframes[i].timestamp, self.scale),
+                    scale(ui, keyframes[i].duration, self.scale),
                     ui.spacing().item_spacing,
                     max_rect,
                 );
                 let width = rect.width();
-                let mut label = format!("{:?}", self.keyframes[i].keyframe_type);
+                let mut label = format!("{:?}", keyframes[i].keyframe_type);
 
                 if width / 10.0 < label.len() as f32 {
                     label.truncate((width / 10.0) as usize);
                 }
                 if width < 20.0 {
-                    label = match &self.keyframes[i].keyframe_type{
-                        KeyframeType::KeyBtn(key)=>{key.to_owned()}   
-                        _ =>{"".to_string()}
+                    label = match &keyframes[i].keyframe_type {
+                        KeyframeType::KeyBtn(key) => key.to_owned(),
+                        _ => "".to_string(),
                     };
                 }
 
@@ -163,7 +247,7 @@ impl Sequencer {
                     egui::Stroke::new(0.4, egui::Color32::from_rgb(15, 37, 42)) //Not selected
                 };
 
-                if self.playing_keyframes[i] == 1 {
+                if self.playing_keyframes.lock().unwrap()[i] == 1 {
                     stroke = egui::Stroke::new(1.5, egui::Color32::LIGHT_RED); //Playing
                 }
                 let keyframe = ui
@@ -177,7 +261,7 @@ impl Sequencer {
                         .fill(egui::Color32::from_rgb(95, 186, 213))
                         .stroke(stroke),
                     )
-                    .on_hover_text(format!("{:?}", self.keyframes[i].keyframe_type));
+                    .on_hover_text(format!("{:?}", keyframes[i].keyframe_type));
 
                 if keyframe.clicked() {
                     self.selected_keyframe = if self.selected_keyframe == Some(i) {
@@ -201,11 +285,11 @@ impl Sequencer {
                         //println!("dragging");
                         let x = 1.0 / scale(ui, 1.0, self.scale);
                         let drag_delta = end.x - self.drag_start.x;
-                        let t = self.keyframes[i].timestamp + drag_delta * x;
+                        let t = keyframes[i].timestamp + drag_delta * x;
                         //&& t < pos_to_time(max_rect.max, max_rect)-self.keyframes[i].duration
                         //stop from going to far left vv | ^^ to far right
                         if t > 0.0 {
-                            self.keyframes[i].timestamp = t;
+                            keyframes[i].timestamp = t;
                             self.drag_start.x = end.x;
                         }
                     }
@@ -231,7 +315,7 @@ impl Sequencer {
             }
         }
         if let Some(i) = keyframe_to_delete {
-            self.keyframes.remove(i);
+            keyframes.remove(i);
         }
     }
 
@@ -251,6 +335,7 @@ impl Sequencer {
         ui.add(
             egui::DragValue::new(&mut self.time)
                 .clamp_range(0.0..=(60.0 * 60.0 * 10.0))
+                .speed(0.100)
                 .custom_formatter(|n, _| {
                     let mins = ((n / 60.0) % 60.0).floor() as i32;
                     let secs = (n % 60.0) as i32;
@@ -316,36 +401,26 @@ impl Sequencer {
         })
         .response
         .on_hover_text("Add keyframe");
-
+        let mut keyframes = self.keyframes.lock().unwrap();
         if let Some(keyframe) = keyframe_to_add {
-            self.keyframes.push(keyframe);
-            self.playing_keyframes.push(0);
-            self.keyframes.sort_unstable_by(|a, b| {
+            keyframes.push(keyframe);
+            self.playing_keyframes.lock().unwrap().push(0);
+            keyframes.sort_unstable_by(|a, b| {
                 if a.id == b.id || (a.id + b.id) == 3 {
                     a.duration.partial_cmp(&b.duration).unwrap()
                 } else {
                     a.id.partial_cmp(&b.id).unwrap()
                 }
             });
-            self.keyframes.reverse();
+            keyframes.reverse();
         }
+
         if self.recording.load(Ordering::Relaxed) {
             if ui.button("⏹").on_hover_text("Stop Recording: F8").clicked() {
-                println!("Removing end: {:?}",self.keyframes.last().unwrap());
-                self.keyframes.pop();
-                self.playing_keyframes.pop();
-                self.keyframes.reverse();
-                self.playing_keyframes.reverse();
-                self.keyframes.sort_unstable_by(|a, b| {
-                    if a.id == b.id || (a.id + b.id) == 3 {
-                        a.duration.partial_cmp(&b.duration).unwrap()
-                    } else {
-                        a.id.partial_cmp(&b.id).unwrap()
-                    }
-                });
-                self.keyframes.reverse();
                 self.recording.swap(false, Ordering::Relaxed);
-                self.time = 0.0;
+                self.time = 0.;
+                keyframes.pop();
+                self.playing_keyframes.lock().unwrap().pop();
             }
         } else {
             if ui
@@ -353,18 +428,16 @@ impl Sequencer {
                 .on_hover_text("Start Recording: F8")
                 .clicked()
             {
-                self.keyframes = vec![];
+                keyframes.clear();
+                self.playing_keyframes.lock().unwrap().clear();
+                let mut rec_instant = self.recording_instant.lock().unwrap();
+                let _ = std::mem::replace(&mut *rec_instant, Instant::now());
+                std::mem::drop(keyframes);
+                std::mem::drop(rec_instant);
                 self.recording.swap(true, Ordering::Relaxed);
                 println!("Start Recording");
             }
         }
-        if ui.button("debug").clicked() {
-            println!("{:?}", self.keyframes);
-            println!("{:?}", self.playing_keyframes);
-            println!("{:?}", self.keyframes.len());
-        }
-        let mut x = self.recording.load(Ordering::Relaxed);
-        ui.toggle_value(&mut x, "x");
     }
     fn render_timeline(&self, ui: &mut Ui) {
         let pos = time_to_rect(0.0, 0.0, ui.spacing().item_spacing, ui.max_rect()).min;
@@ -460,32 +533,92 @@ impl Sequencer {
         });
     }
 
+    pub fn debug_panel(&mut self, ctx: &egui::Context) {
+        egui::SidePanel::right("Debug")
+            .min_width(200.0)
+            .resizable(true)
+            .show(ctx, |ui| {
+                ui.heading("Debug");
+                ui.label(format!("Keyframe state: {:?}", self.playing_keyframes));
+                ui.label(format!("Time: {}s", self.time));
+                ui.label(format!("Previous Time: {}s", self.prev_time));
+                ui.label(format!("Scale: {}", self.scale));
+            });
+    }
+    pub fn selected_panel(&mut self, ctx: &egui::Context) {
+        egui::SidePanel::left("Selected Keyframe")
+            .min_width(115.0)
+            .resizable(false)
+            .show(ctx, |ui| {
+                if let Some(i) = self.selected_keyframe {
+                    let mut keyframes = self.keyframes.lock().unwrap();
+                    if i < keyframes.len() {
+                        let keyframe = &mut keyframes[i];
+
+                        match &keyframe.keyframe_type {
+                            KeyframeType::KeyBtn(keys) => {
+                                ui.strong("Keyboard Button press");
+                                ui.label("key strokes");
+                                ui.text_edit_singleline(&mut keys.to_string());
+                            }
+                            KeyframeType::MouseBtn(key) => {
+                                ui.strong("Mouse Button press");
+                                ui.label(format!("button: {:?}", key));
+                            }
+                            KeyframeType::MouseMove(pos) => {
+                                ui.strong("Mouse move");
+                                //ui.text_edit_singleline(&mut self.sequencer.keyframes[i].keyframe_type)
+                                ui.label(format!("position: {:?}", pos));
+                            }
+                        }
+
+                        ui.label("Timestamp");
+                        ui.add(
+                            egui::DragValue::new(&mut keyframe.timestamp)
+                                .speed(0.25)
+                                .clamp_range(0.0..=100.0),
+                        );
+                        ui.label("Duration");
+                        ui.add(
+                            egui::DragValue::new(&mut keyframe.duration)
+                                .speed(0.1)
+                                .clamp_range(0.1..=10.0),
+                        );
+                    }
+                }
+            });
+    }
     pub fn update(&mut self, last_instant: &mut Instant) {
-        self.prev_time = self.time;
+        let keyframes = self.keyframes.lock().unwrap();
+        let mut playing_keyframes = self.playing_keyframes.lock().unwrap();
+        if self.recording.load(Ordering::Relaxed) {
+            if keyframes.len() != playing_keyframes.len() {
+                panic!("playing vec is out of sync")
+            }
+        }
         let now = Instant::now();
         let dt = now - *last_instant;
         if self.play || self.recording.load(Ordering::Relaxed) {
             self.time += dt.as_secs_f32();
             //println!("fps: {:?}", 1.0/dt.as_secs_f32());
         }
-
         if self.prev_time != self.time {
             //The playhead has moved if the current time is not equal to the previous time
-            for i in 0..self.keyframes.len() {
-                let keyframe = &self.keyframes[i];
-                let current_keyframe_state = self.playing_keyframes[i]; //1 if playing, 0 if not
+            for i in 0..keyframes.len() {
+                let keyframe = &keyframes[i];
+                let current_keyframe_state = playing_keyframes[i]; //1 if playing, 0 if not
                 if self.time >= keyframe.timestamp
                     && self.time <= keyframe.timestamp + keyframe.duration
                 {
-                    self.playing_keyframes[i] = 1; //change keyframe state to playing, highlight
-                    if current_keyframe_state != self.playing_keyframes[i] {
+                    playing_keyframes[i] = 1; //change keyframe state to playing, highlight
+                    if current_keyframe_state != playing_keyframes[i] {
                         if self.play {
                             handle_playing_keyframe(&keyframe, true);
                         }
                     }
                 } else {
-                    self.playing_keyframes[i] = 0; //change keyframe state to not playing, no highlight
-                    if current_keyframe_state != self.playing_keyframes[i] {
+                    playing_keyframes[i] = 0; //change keyframe state to not playing, no highlight
+                    if current_keyframe_state != playing_keyframes[i] {
                         if self.play {
                             handle_playing_keyframe(&keyframe, false);
                         }
@@ -493,17 +626,8 @@ impl Sequencer {
                 }
             }
         }
-        if self.recording.load(Ordering::Relaxed) {
-            let data = self.reciever.try_recv();
-            if data.is_ok(){
-                let keyframe = data.unwrap();
-                if keyframe.is_some(){
-                    println!("recieved: {:?}", keyframe);
-                    self.keyframes.push(keyframe.unwrap());
-                    self.playing_keyframes.push(0);
-                }
-            }
-        }
+
+        self.prev_time = self.time;
         *last_instant = now;
     }
 }
@@ -645,7 +769,7 @@ fn key_to_char(k: &rdev::Key) -> char {
 
 fn scale(ui: &Ui, i: f32, scale: f32) -> f32 {
     let width = ui.max_rect().size().x;
-    let s = 30.0 + scale * 40.0;
+    let s = 20.0 + scale * 40.0;
     let num_of_digits = width / s;
     let spacing = width / (num_of_digits);
     i * spacing

@@ -17,58 +17,9 @@ pub struct App {
 
 impl Default for App {
     fn default() -> Self {
-        let sequencer = Sequencer::new()
-        .add_keyframe(Keyframe {
-            timestamp: 0.1,
-            duration: 0.5,
-            keyframe_type: KeyframeType::MouseMove(egui::Vec2::new(0.0,0.0)),
-            id:0,
-        })
-        .add_keyframe(Keyframe {
-            timestamp: 0.7,
-            duration: 0.1,
-            keyframe_type: KeyframeType::MouseBtn(0),
-            id:1,
-        });
-        
-        // .add_keyframe(Keyframe{
-        //     timestamp: 0.0,
-        //     duration: 1.0,
-        //     keyframe_type: KeyframeType::KeyBtn("Hello World".to_owned()),
-        // })
-        // .add_keyframe(Keyframe {
-        //     timestamp: 0.1,
-        //     duration: 0.1,
-        //     keyframe_type: KeyframeType::MouseMove(egui::Vec2::new(-570.0,560.0)),
-        //     id: 1,
-        // })
-        // .add_keyframe(Keyframe {
-        //     timestamp: 1.0,
-        //     duration: 1.0,
-        //     keyframe_type: KeyframeType::MouseBtn(0),
-        //     id: 1,
-        // })
-        // .add_keyframe(Keyframe {
-        //     timestamp: 2.5,
-        //     duration: 2.0,
-        //     keyframe_type: KeyframeType::KeyBtn("test".to_owned()),
-        //     id: 0,
-        // });
-        // .add_keyframe(Keyframe {
-        //     timestamp: 13.0,
-        //     duration: 2.0,
-        //     keyframe_type: KeyframeType::MouseMove(egui::Vec2 { x: 0.0, y: 0.0 }),
-        //     id: 1,
-        // })
-        // .add_keyframe(Keyframe {
-        //     timestamp: 8.0,
-        //     duration: 3.0,
-        //     keyframe_type: KeyframeType::MouseBtn(0),
-        //     id: 1,
-        // });
         Self {
             label: "Automate".to_owned(),
-            sequencer,
+            sequencer: Sequencer::new(),
             last_instant: Instant::now(),
         }
     }
@@ -104,57 +55,24 @@ impl eframe::App for App {
                     if ui.button("Quit").clicked() {
                         ctx.send_viewport_cmd(egui::ViewportCommand::Close);
                     }
+                    if ui.button("New").clicked() {
+                        self.sequencer.keyframes.lock().unwrap().clear();
+                        ui.close_menu();
+                    }
                     if ui.button("Save").clicked() {
                         println!("Save");
+                        ui.close_menu();
                     }
                 });
             });
         });
 
 
-        self.sequencer.show(ctx);
-
-        egui::SidePanel::left("Selected Keyframe")
-            .min_width(115.0)
-            .resizable(false)
-            .show(ctx, |ui| {
-                if let Some(i) = self.sequencer.selected_keyframe {
-                    if i < self.sequencer.keyframes.len() {
-                        let keyframe = &mut self.sequencer.keyframes[i];
-
-                        match &keyframe.keyframe_type {
-                            KeyframeType::KeyBtn(keys) => {
-                                ui.strong("Keyboard Button press");
-                                ui.label("key strokes");
-                                ui.text_edit_singleline(&mut keys.to_string());
-                            }
-                            KeyframeType::MouseBtn(key) => {
-                                ui.strong("Mouse Button press");
-                                ui.label(format!("button: {:?}", key));
-                            }
-                            KeyframeType::MouseMove(pos) => {
-                                ui.strong("Mouse move");
-                                //ui.text_edit_singleline(&mut self.sequencer.keyframes[i].keyframe_type)
-                                ui.label(format!("position: {:?}", pos));
-                            }
-                        }
-
-                        ui.label("Timestamp");
-                        ui.add(
-                            egui::DragValue::new(&mut keyframe.timestamp)
-                                .speed(0.25)
-                                .clamp_range(0.0..=100.0),
-                        );
-                        ui.label("Duration");
-                        ui.add(
-                            egui::DragValue::new(&mut keyframe.duration)
-                                .speed(0.1)
-                                .clamp_range(0.1..=10.0),
-                        );
-                    }
-                }
-            });
         self.sequencer.update(&mut self.last_instant);
+        self.sequencer.show(ctx);
+        self.sequencer.debug_panel(ctx);
+        self.sequencer.selected_panel(ctx);
+        
         ctx.request_repaint();
     }
 }
