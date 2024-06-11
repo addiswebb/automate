@@ -1,8 +1,12 @@
-use core::time;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::mpsc::{self, Receiver, Sender};
+use std::sync::Arc;
+use std::thread::JoinHandle;
 use std::{thread, time::Instant};
 
 use eframe::egui::{self, pos2, Ui, Vec2};
-use egui::{emath::RectTransform, Key, Pos2, Rect};
+use egui::{emath::RectTransform, Pos2, Rect};
+use rdev::Button;
 
 const ROW_HEIGHT: f32 = 24.0;
 
@@ -26,6 +30,7 @@ pub struct Keyframe {
     pub id: u8,
 }
 
+#[derive(Debug)]
 pub struct Sequencer {
     dragging: bool,
     //can_resize: bool,
@@ -41,11 +46,57 @@ pub struct Sequencer {
     time: f32,
     prev_time: f32,
     play: bool,
-    recording: bool,
+    recording: Arc<AtomicBool>,
+    reciever: Receiver<Option<Keyframe>>,
+    handle: Option<JoinHandle<()>>,
 }
 
 impl Sequencer {
     pub fn new() -> Self {
+        let (tx, rx) = mpsc::channel();
+        let recording = Arc::new(AtomicBool::new(false));
+        let shared = Arc::clone(&recording);
+        // this needs to get reset every time recording starts
+        let now = Instant::now();
+        let handle = Some(thread::spawn(move || {
+            println!("Created Recording Thread");
+            if let Err(error) = rdev::listen(move |event: rdev::Event| {
+                // if dt == t, then ignore the event
+                if shared.load(Ordering::Relaxed) {
+                    let t = Instant::now();
+                    let dt = t - now;
+                    let keyframe = match &event.event_type {
+                        rdev::EventType::ButtonRelease(btn) => Some(Keyframe {
+                            timestamp: dt.as_secs_f32(),
+                            duration: 1.0,
+                            keyframe_type: KeyframeType::MouseBtn(match btn {
+                                Button::Left => 0,
+                                Button::Right => 1,
+                                _ => 2,
+                            }),
+                            id: 0,
+                        }),
+                        rdev::EventType::KeyRelease(key) => Some(Keyframe {
+                            timestamp: dt.as_secs_f32(),
+                            duration: 1.0,
+                            keyframe_type: KeyframeType::KeyBtn(key_to_char(key).to_string()),
+                            id: 0,
+                        }),
+                        _ => None,
+                    };
+
+                    if keyframe.is_some(){
+                        println!("send: {:?}",keyframe);
+                    }
+                    tx.send(keyframe).unwrap();
+                    //println!("{:?}", event);
+                } else {
+                    //println!("done");
+                }
+            }) {
+                println!("Error: {:?}", error)
+            }
+        }));
         Self {
             keyframes: vec![],
             drag_start: pos2(0., 0.),
@@ -61,7 +112,9 @@ impl Sequencer {
             play: false,
             selected_keyframe: None,
             playing_keyframes: vec![],
-            recording: false,
+            recording,
+            reciever: rx,
+            handle,
         }
     }
     pub fn add_keyframe(mut self, keyframe: Keyframe) -> Sequencer {
@@ -97,7 +150,10 @@ impl Sequencer {
                     label.truncate((width / 10.0) as usize);
                 }
                 if width < 20.0 {
-                    label = "".to_string();
+                    label = match &self.keyframes[i].keyframe_type{
+                        KeyframeType::KeyBtn(key)=>{key.to_owned()}   
+                        _ =>{"".to_string()}
+                    };
                 }
 
                 let mut stroke = if self.selected_keyframe == Some(i) {
@@ -223,7 +279,7 @@ impl Sequencer {
         ui.add(
             egui::DragValue::new(&mut self.scale)
                 .speed(0.1)
-                .clamp_range(0.01..=1.0),
+                .clamp_range(0.01..=2.0),
         )
         .on_hover_text("Zoom");
 
@@ -273,9 +329,23 @@ impl Sequencer {
             });
             self.keyframes.reverse();
         }
-        if self.recording {
+        if self.recording.load(Ordering::Relaxed) {
             if ui.button("⏹").on_hover_text("Stop Recording: F8").clicked() {
-                self.recording = false;
+                println!("Removing end: {:?}",self.keyframes.last().unwrap());
+                self.keyframes.pop();
+                self.playing_keyframes.pop();
+                self.keyframes.reverse();
+                self.playing_keyframes.reverse();
+                self.keyframes.sort_unstable_by(|a, b| {
+                    if a.id == b.id || (a.id + b.id) == 3 {
+                        a.duration.partial_cmp(&b.duration).unwrap()
+                    } else {
+                        a.id.partial_cmp(&b.id).unwrap()
+                    }
+                });
+                self.keyframes.reverse();
+                self.recording.swap(false, Ordering::Relaxed);
+                self.time = 0.0;
             }
         } else {
             if ui
@@ -283,7 +353,9 @@ impl Sequencer {
                 .on_hover_text("Start Recording: F8")
                 .clicked()
             {
-                self.recording = true;
+                self.keyframes = vec![];
+                self.recording.swap(true, Ordering::Relaxed);
+                println!("Start Recording");
             }
         }
         if ui.button("debug").clicked() {
@@ -291,6 +363,8 @@ impl Sequencer {
             println!("{:?}", self.playing_keyframes);
             println!("{:?}", self.keyframes.len());
         }
+        let mut x = self.recording.load(Ordering::Relaxed);
+        ui.toggle_value(&mut x, "x");
     }
     fn render_timeline(&self, ui: &mut Ui) {
         let pos = time_to_rect(0.0, 0.0, ui.spacing().item_spacing, ui.max_rect()).min;
@@ -385,12 +459,12 @@ impl Sequencer {
                 });
         });
     }
-    
+
     pub fn update(&mut self, last_instant: &mut Instant) {
         self.prev_time = self.time;
         let now = Instant::now();
         let dt = now - *last_instant;
-        if self.play {
+        if self.play || self.recording.load(Ordering::Relaxed) {
             self.time += dt.as_secs_f32();
             //println!("fps: {:?}", 1.0/dt.as_secs_f32());
         }
@@ -416,6 +490,17 @@ impl Sequencer {
                             handle_playing_keyframe(&keyframe, false);
                         }
                     }
+                }
+            }
+        }
+        if self.recording.load(Ordering::Relaxed) {
+            let data = self.reciever.try_recv();
+            if data.is_ok(){
+                let keyframe = data.unwrap();
+                if keyframe.is_some(){
+                    println!("recieved: {:?}", keyframe);
+                    self.keyframes.push(keyframe.unwrap());
+                    self.playing_keyframes.push(0);
                 }
             }
         }
@@ -524,6 +609,37 @@ fn char_to_key(c: char) -> rdev::Key {
         'y' => rdev::Key::KeyY,
         'z' => rdev::Key::KeyZ,
         _ => rdev::Key::Delete,
+    }
+}
+fn key_to_char(k: &rdev::Key) -> char {
+    match k {
+        rdev::Key::KeyA => 'a',
+        rdev::Key::KeyB => 'b',
+        rdev::Key::KeyC => 'c',
+        rdev::Key::KeyD => 'd',
+        rdev::Key::KeyE => 'e',
+        rdev::Key::KeyF => 'f',
+        rdev::Key::KeyG => 'g',
+        rdev::Key::KeyH => 'h',
+        rdev::Key::KeyI => 'i',
+        rdev::Key::KeyJ => 'j',
+        rdev::Key::KeyK => 'k',
+        rdev::Key::KeyL => 'l',
+        rdev::Key::KeyM => 'm',
+        rdev::Key::KeyN => 'n',
+        rdev::Key::KeyO => 'o',
+        rdev::Key::KeyP => 'p',
+        rdev::Key::KeyQ => 'q',
+        rdev::Key::KeyR => 'r',
+        rdev::Key::KeyS => 's',
+        rdev::Key::KeyT => 't',
+        rdev::Key::KeyU => 'u',
+        rdev::Key::KeyV => 'v',
+        rdev::Key::KeyW => 'w',
+        rdev::Key::KeyX => 'x',
+        rdev::Key::KeyY => 'y',
+        rdev::Key::KeyZ => 'z',
+        _ => ' ',
     }
 }
 
