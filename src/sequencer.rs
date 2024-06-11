@@ -8,6 +8,7 @@ use egui::{emath::RectTransform, Pos2, Rect};
 use rdev::Button;
 
 const ROW_HEIGHT: f32 = 24.0;
+const MOUSE_MOVE_RESOLUTION: i32 = 20; 
 
 #[derive(Clone, Debug)]
 pub enum KeyframeType {
@@ -77,6 +78,9 @@ impl Sequencer {
 
         let mut key_presses = vec![];
         let mut key_pressed_at = vec![];
+        
+        let mut previous_mouse_position = Vec2::new(0.0,0.0);
+        let mut mouse_position_count = MOUSE_MOVE_RESOLUTION;
         // this needs to get reset every time recording starts
         thread::spawn(move || {
             log::info!("Created Recording Thread");
@@ -136,7 +140,7 @@ impl Sequencer {
                             let mut pressed_at = Duration::from_secs(0);
                             if key_presses.contains(key) {
                                 for i in 0..key_presses.len() {
-                                    if key_presses[i] == *key{
+                                    if key_presses[i] == *key {
                                         if !found_press {
                                             pressed_at = key_pressed_at[i];
                                             found_press = true;
@@ -155,12 +159,37 @@ impl Sequencer {
                                 true => Some(Keyframe {
                                     timestamp: pressed_at.as_secs_f32(),
                                     duration: (dt - pressed_at).as_secs_f32(),
-                                    keyframe_type: KeyframeType::KeyBtn(key_to_char(key).to_string()),
+                                    keyframe_type: KeyframeType::KeyBtn(
+                                        key_to_char(key).to_string(),
+                                    ),
                                     id: 0,
                                 }),
                                 false => None,
                             }
                         }
+                        rdev::EventType::MouseMove { x, y } => {
+                            let pos = Vec2::new(*x as f32, *y as f32);
+                            mouse_position_count -=1;
+                            println!("{mouse_position_count}");
+                            match previous_mouse_position == pos {
+                                false => {
+                                    match mouse_position_count == 0{
+                                        true =>{
+                                            previous_mouse_position = pos;
+                                            mouse_position_count = MOUSE_MOVE_RESOLUTION;
+                                            Some(Keyframe {
+                                                timestamp: dt.as_secs_f32(),
+                                                duration: 0.1,
+                                                keyframe_type: KeyframeType::MouseMove(pos),
+                                                id: 1,
+                                            })
+                                        }
+                                        false => None,
+                                    }
+                                },
+                                true => None,
+                            }
+                        },
                         _ => None,
                     };
 
@@ -607,14 +636,14 @@ impl Sequencer {
                     playing_keyframes[i] = 1; //change keyframe state to playing, highlight
                     if current_keyframe_state != playing_keyframes[i] {
                         if self.play {
-                            handle_playing_keyframe(&keyframe, true);
+                            handle_playing_keyframe(keyframe, true);
                         }
                     }
                 } else {
                     playing_keyframes[i] = 0; //change keyframe state to not playing, no highlight
                     if current_keyframe_state != playing_keyframes[i] {
                         if self.play {
-                            handle_playing_keyframe(&keyframe, false);
+                            handle_playing_keyframe(keyframe, false);
                         }
                     }
                 }
@@ -631,9 +660,9 @@ fn handle_playing_keyframe(keyframe: &Keyframe, start: bool) {
             if start {
                 let keys = string_to_keys(keys);
                 for key in keys {
-                    if start{
+                    if start {
                         rdev::simulate(&rdev::EventType::KeyPress(key)).ok();
-                    }else{
+                    } else {
                         rdev::simulate(&rdev::EventType::KeyRelease(key)).ok();
                     }
                 }
