@@ -1,5 +1,4 @@
-use std::time::Instant;
-
+use std::{fs::File, io::{Read, Write}, time::Instant};
 use crate::sequencer::{Keyframe, KeyframeType, Sequencer};
 
 /// We derive Deserialize/Serialize so we can persist app state on shutdown.
@@ -59,9 +58,32 @@ impl eframe::App for App {
                         self.sequencer.keyframes.lock().unwrap().clear();
                         ui.close_menu();
                     }
+                    
                     if ui.button("Save").clicked() {
-                        println!("Save");
+                        let json = serde_json::to_string(self.sequencer.keyframes.as_ref());
+                        if json.is_ok(){
+                            let mut file = File::create("file.auto").unwrap();
+                            let json = json.unwrap(); 
+                            file.write_all(json.as_bytes()).unwrap();
+                            log::info!("Save file: 'file.auto'");
+                        }else{
+                            log::error!("Failed to save 'file.auto'");
+                        }
                         ui.close_menu();
+                    }
+                    if ui.button("Load").clicked(){
+                        log::info!("Load file: 'file.auto'");
+                        let mut file = File::open("file.auto").unwrap();
+                        let mut contents = String::new();
+                        file.read_to_string(&mut contents).unwrap();
+                        let data: Vec<Keyframe> = serde_json::from_str(&contents.as_str()).unwrap();
+                        let mut shared_kfs = self.sequencer.keyframes.lock().unwrap();
+                        let mut shared_pkfs = self.sequencer.playing_keyframes.lock().unwrap();
+                        shared_kfs.clear();
+                        shared_kfs.extend(data.into_iter());
+                        shared_pkfs.clear();
+                        shared_pkfs.extend(vec![0;shared_kfs.len()].into_iter());
+                        ui.close_menu();     
                     }
                 });
             });

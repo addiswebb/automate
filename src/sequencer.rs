@@ -6,17 +6,18 @@ use std::{thread, time::Instant};
 use eframe::egui::{self, pos2, Ui, Vec2};
 use egui::{emath::RectTransform, Pos2, Rect};
 use rdev::Button;
+use serde::{Deserialize, Serialize};
 
 const ROW_HEIGHT: f32 = 24.0;
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum KeyframeType {
     KeyBtn(String),  //0
     MouseBtn(u8),    //1
     MouseMove(Vec2), //2
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Keyframe {
     pub timestamp: f32,
     /*
@@ -407,39 +408,31 @@ impl Sequencer {
                 .clamp_range(1.0..=20.0),
         )
         .on_hover_text("Speed");
-        let mut keyframe_to_add: Option<Keyframe> = None;
-        ui.menu_button("➕", |ui| {
-            if ui.button("Key Strokes").clicked() {
-                keyframe_to_add = Some(Keyframe {
-                    timestamp: 5.0,
-                    duration: 3.0,
-                    keyframe_type: KeyframeType::KeyBtn("helo world".to_owned()),
-                    id: 0,
-                });
-                ui.close_menu();
-            }
-            if ui.button("Mouse Button").clicked() {
-                ui.close_menu();
-            }
-            if ui.button("Mouse Moves").clicked() {
-                ui.close_menu();
-            }
-        })
-        .response
-        .on_hover_text("Add keyframe");
+        // let mut keyframe_to_add: Option<Keyframe> = None;
+        // ui.menu_button("➕", |ui| {
+        //     if ui.button("Key Strokes").clicked() {
+        //         keyframe_to_add = Some(Keyframe {
+        //             timestamp: 5.0,
+        //             duration: 3.0,
+        //             keyframe_type: KeyframeType::KeyBtn("helo world".to_owned()),
+        //             id: 0,
+        //         });
+        //         ui.close_menu();
+        //     }
+        //     if ui.button("Mouse Button").clicked() {
+        //         ui.close_menu();
+        //     }
+        //     if ui.button("Mouse Moves").clicked() {
+        //         ui.close_menu();
+        //     }
+        // })
+        // .response
+        // .on_hover_text("Add keyframe");
         let mut keyframes = self.keyframes.lock().unwrap();
-        if let Some(keyframe) = keyframe_to_add {
-            keyframes.push(keyframe);
-            self.playing_keyframes.lock().unwrap().push(0);
-            keyframes.sort_unstable_by(|a, b| {
-                if a.id == b.id || (a.id + b.id) == 3 {
-                    a.duration.partial_cmp(&b.duration).unwrap()
-                } else {
-                    a.id.partial_cmp(&b.id).unwrap()
-                }
-            });
-            keyframes.reverse();
-        }
+        // if let Some(keyframe) = keyframe_to_add {
+        //     keyframes.push(keyframe);
+        //     self.playing_keyframes.lock().unwrap().push(0);
+        // }
 
         let mut resolution = self.mouse_movement_record_resolution.load(Ordering::Relaxed);
         ui.add(
@@ -635,7 +628,18 @@ impl Sequencer {
         let now = Instant::now();
         let dt = now - *last_instant;
         if self.play || self.recording.load(Ordering::Relaxed) {
-            self.time += dt.as_secs_f32();
+            self.time += dt.as_secs_f32() * self.speed;
+        }
+        if self.play{
+            let last = keyframes.last().unwrap();
+            if self.time >= last.timestamp+last.duration{
+                if self.repeats > 1{
+                    self.time = 0.0;
+                    self.repeats -= 1;
+                }else{
+                    self.play=false;
+                }
+            }
         }
         if self.prev_time != self.time {
             //The playhead has moved if the current time is not equal to the previous time
