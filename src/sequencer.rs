@@ -1,4 +1,4 @@
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicI32, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use std::{thread, time::Instant};
@@ -8,7 +8,6 @@ use egui::{emath::RectTransform, Pos2, Rect};
 use rdev::Button;
 
 const ROW_HEIGHT: f32 = 24.0;
-const MOUSE_MOVE_RESOLUTION: i32 = 20; 
 
 #[derive(Clone, Debug)]
 pub enum KeyframeType {
@@ -57,6 +56,7 @@ pub struct Sequencer {
     time: f32,
     prev_time: f32,
     play: bool,
+    mouse_movement_record_resolution: Arc<AtomicI32>,
     recording: Arc<AtomicBool>,
     recording_instant: Arc<Mutex<Instant>>,
 }
@@ -66,11 +66,13 @@ impl Sequencer {
         let keyframes: Arc<Mutex<Vec<Keyframe>>> = Arc::new(Mutex::new(vec![]));
         let playing_keyframes = Arc::new(Mutex::new(vec![]));
         let recording = Arc::new(AtomicBool::new(false));
+        let mouse_movement_record_resolution = Arc::new(AtomicI32::new(20));
         let recording_instant = Arc::new(Mutex::new(Instant::now()));
 
         let shared_kfs = Arc::clone(&keyframes);
         let shared_pkfs = Arc::clone(&playing_keyframes);
         let shared_rec = Arc::clone(&recording);
+        let shared_count = Arc::clone(&mouse_movement_record_resolution);
         let shared_instant = Arc::clone(&recording_instant);
 
         let mut mouse_presses = vec![];
@@ -80,7 +82,7 @@ impl Sequencer {
         let mut key_pressed_at = vec![];
         
         let mut previous_mouse_position = Vec2::new(0.0,0.0);
-        let mut mouse_position_count = MOUSE_MOVE_RESOLUTION;
+        let mut mouse_move_count = 20;
         // this needs to get reset every time recording starts
         thread::spawn(move || {
             log::info!("Created Recording Thread");
@@ -169,14 +171,14 @@ impl Sequencer {
                         }
                         rdev::EventType::MouseMove { x, y } => {
                             let pos = Vec2::new(*x as f32, *y as f32);
-                            mouse_position_count -=1;
-                            println!("{mouse_position_count}");
+                            mouse_move_count -=1;
+                            println!("{mouse_move_count}");
                             match previous_mouse_position == pos {
                                 false => {
-                                    match mouse_position_count == 0{
+                                    match mouse_move_count <= 0{
                                         true =>{
                                             previous_mouse_position = pos;
-                                            mouse_position_count = MOUSE_MOVE_RESOLUTION;
+                                            mouse_move_count = shared_count.load(Ordering::Relaxed);
                                             Some(Keyframe {
                                                 timestamp: dt.as_secs_f32(),
                                                 duration: 0.1,
@@ -217,6 +219,7 @@ impl Sequencer {
             time: 0.0,
             prev_time: 0.0,
             play: false,
+            mouse_movement_record_resolution,
             selected_keyframe: None,
             playing_keyframes,
             recording,
@@ -437,6 +440,15 @@ impl Sequencer {
             });
             keyframes.reverse();
         }
+
+        let mut resolution = self.mouse_movement_record_resolution.load(Ordering::Relaxed);
+        ui.add(
+            egui::DragValue::new(&mut resolution)
+                .speed(1)
+                .clamp_range(0.0..=100.0),
+        )
+        .on_hover_text("Recording Resolution");
+        self.mouse_movement_record_resolution.store(resolution, Ordering::Relaxed);
 
         if self.recording.load(Ordering::Relaxed) {
             if ui.button("⏹").on_hover_text("Stop Recording: F8").clicked() {
