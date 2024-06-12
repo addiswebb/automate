@@ -47,6 +47,26 @@ impl eframe::App for App {
 
     /// Called each time the UI needs repainting, which may be many times per second.
     fn update(&mut self, ctx: &egui::Context, _frame: &mut eframe::Frame) {
+
+        //Keybinds within app
+        ctx.input(|i| {
+            if i.key_pressed(egui::Key::F8){
+                self.sequencer.toggle_recording();
+            }
+            if i.key_pressed(egui::Key::Space){
+                self.sequencer.toggle_play();
+            }
+
+            if i.key_pressed(egui::Key::ArrowLeft){
+                self.sequencer.reset_time();
+            }
+
+            if i.key_pressed(egui::Key::ArrowRight){
+                self.sequencer.step_time();
+            }
+            
+        });
+
         egui::TopBottomPanel::top("top_panel").show(ctx, |ui| {
             egui::menu::bar(ui, |ui| {
                 ui.menu_button("File", |ui| {
