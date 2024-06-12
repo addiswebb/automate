@@ -109,7 +109,10 @@ impl Sequencer {
                                     shared_rec.swap(true, Ordering::Relaxed);
                                     log::info!("Start Recording");
                                 }
-                            }
+                            },
+                            rdev::Key::Escape=>{
+                                panic!("Stopped execution due to ESCAPE keybind");
+                            },
                             rdev::Key::F9 =>{
                                 keyframe = Some(Keyframe{
                                     timestamp: dt.as_secs_f32(),
