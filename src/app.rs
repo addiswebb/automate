@@ -1,12 +1,12 @@
 use std::{fs::File, io::{Read, Write}, time::Instant};
-use crate::sequencer::{Keyframe, KeyframeType, Sequencer};
+use rfd::FileDialog;
+
+use crate::sequencer::{Keyframe, Sequencer};
 
 /// We derive Deserialize/Serialize so we can persist app state on shutdown.
 #[derive(serde::Deserialize, serde::Serialize)]
 #[serde(default)] // if we add new fields, give them default values when deserializing old state
 pub struct App {
-    // Example stuff:
-    label: String,
     #[serde(skip)] // This how you opt-out of serialization of a field
     // value: f32,
     sequencer: Sequencer,
@@ -17,7 +17,6 @@ pub struct App {
 impl Default for App {
     fn default() -> Self {
         Self {
-            label: "Automate".to_owned(),
             sequencer: Sequencer::new(),
             last_instant: Instant::now(),
         }
@@ -60,18 +59,25 @@ impl eframe::App for App {
                     if ui.button("Save").clicked() {
                         let json = serde_json::to_string(self.sequencer.keyframes.as_ref());
                         if json.is_ok(){
-                            let mut file = File::create("file.auto").unwrap();
+                            let path = FileDialog::new()
+                                .add_filter("automate", &["auto"])
+                                .set_directory("/")
+                                .save_file().unwrap();
+                            let mut file = File::create(path.clone()).unwrap();
                             let json = json.unwrap(); 
                             file.write_all(json.as_bytes()).unwrap();
-                            log::info!("Save file: 'file.auto'");
+                            log::info!("Save file: {:?}",path);
                         }else{
                             log::error!("Failed to save 'file.auto'");
                         }
                         ui.close_menu();
                     }
                     if ui.button("Load").clicked(){
-                        log::info!("Load file: 'file.auto'");
-                        let mut file = File::open("file.auto").unwrap();
+                        let path = FileDialog::new()
+                            .add_filter("automate", &["auto"])
+                            .set_directory("/")
+                            .pick_file().unwrap();
+                        let mut file = File::open(path.clone()).unwrap();
                         let mut contents = String::new();
                         file.read_to_string(&mut contents).unwrap();
                         let data: Vec<Keyframe> = serde_json::from_str(&contents.as_str()).unwrap();
@@ -81,6 +87,7 @@ impl eframe::App for App {
                         shared_kfs.extend(data.into_iter());
                         shared_pkfs.clear();
                         shared_pkfs.extend(vec![0;shared_kfs.len()].into_iter());
+                        log::info!("Load file: {:?}",path);
                         ui.close_menu();     
                     }
                     if ui.button("Quit").clicked() {
