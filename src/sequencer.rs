@@ -96,7 +96,19 @@ impl Sequencer {
                     rdev::EventType::KeyPress(key)=>{
                         match key{
                             rdev::Key::F8 =>{
-                                shared_rec.swap(!is_recording, Ordering::Relaxed);
+                                if is_recording{
+                                    shared_rec.swap(false, Ordering::Relaxed);
+                                    shared_kfs.lock().unwrap().pop();
+                                    shared_pkfs.lock().unwrap().pop();
+                                    log::info!("Stop Recording (without resetting time)");
+                                }else{
+                                    shared_kfs.lock().unwrap().clear();
+                                    shared_pkfs.lock().unwrap().clear();
+                                    let mut rec_instant = shared_instant.lock().unwrap();
+                                    let _ = std::mem::replace(&mut *rec_instant, Instant::now());
+                                    shared_rec.swap(true, Ordering::Relaxed);
+                                    log::info!("Start Recording");
+                                }
                             }
                             rdev::Key::F9 =>{
                                 keyframe = Some(Keyframe{
