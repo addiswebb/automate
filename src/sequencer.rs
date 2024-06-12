@@ -5,7 +5,6 @@ use std::{thread, time::Instant};
 
 use eframe::egui::{self, pos2, Ui, Vec2};
 use egui::{emath::RectTransform, Pos2, Rect};
-use rdev::Button;
 use serde::{Deserialize, Serialize};
 
 const ROW_HEIGHT: f32 = 24.0;
@@ -218,7 +217,7 @@ impl Sequencer {
             playing_keyframes,
             recording,
             recording_instant,
-            offset: Vec2::new(0., 0.),
+            offset: Vec2::new(1920., 5.),
         }
     }
 
