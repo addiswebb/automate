@@ -51,11 +51,9 @@ impl eframe::App for App {
         egui::TopBottomPanel::top("top_panel").show(ctx, |ui| {
             egui::menu::bar(ui, |ui| {
                 ui.menu_button("File", |ui| {
-                    if ui.button("Quit").clicked() {
-                        ctx.send_viewport_cmd(egui::ViewportCommand::Close);
-                    }
                     if ui.button("New").clicked() {
                         self.sequencer.keyframes.lock().unwrap().clear();
+                        self.sequencer.playing_keyframes.lock().unwrap().clear();
                         ui.close_menu();
                     }
                     
@@ -84,6 +82,9 @@ impl eframe::App for App {
                         shared_pkfs.clear();
                         shared_pkfs.extend(vec![0;shared_kfs.len()].into_iter());
                         ui.close_menu();     
+                    }
+                    if ui.button("Quit").clicked() {
+                        ctx.send_viewport_cmd(egui::ViewportCommand::Close);
                     }
                 });
             });
