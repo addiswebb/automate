@@ -41,30 +41,44 @@ impl Default for Keyframe {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-pub struct SequencerState{
+pub struct SequencerState {
     pub keyframes: Vec<Keyframe>,
     pub repeats: i32,
     pub speed: f32,
     pub offset: Vec2,
 }
-#[derive(Debug)]
+/// We derive Deserialize/Serialize so we can persist app state on shutdown.
+#[derive(Debug, serde::Deserialize, serde::Serialize)]
+#[serde(default)] // if we add new fields, give them default values when deserializing old state
 pub struct Sequencer {
+    #[serde(skip)]
     dragging: bool,
     //can_resize: bool,
     //resize_left: bool, //left: true, right: false
+    #[serde(skip)]
     resizing: bool,
+    #[serde(skip)]
     drag_start: Pos2,
+    #[serde(skip)]
     pub keyframes: Arc<Mutex<Vec<Keyframe>>>,
+    #[serde(skip)]
     pub selected_keyframe: Option<usize>,
+    #[serde(skip)]
     pub playing_keyframes: Arc<Mutex<Vec<usize>>>,
     scale: f32, // egui points to seconds scale
     repeats: i32,
     speed: f32,
+    #[serde(skip)]
     time: f32,
+    #[serde(skip)]
     prev_time: f32,
+    #[serde(skip)]
     play: Arc<AtomicBool>,
+    #[serde(skip)]
     mouse_movement_record_resolution: Arc<AtomicI32>,
+    #[serde(skip)]
     pub recording: Arc<AtomicBool>,
+    #[serde(skip)]
     recording_instant: Arc<Mutex<Instant>>,
     offset: Vec2,
 }
@@ -101,16 +115,16 @@ impl Sequencer {
                 let mut keyframe = None;
                 let dt: Duration = Instant::now() - *shared_instant.lock().unwrap();
                 // Keybinds
-                match &event.event_type{
-                    rdev::EventType::KeyPress(key)=>{
-                        match key{
-                            rdev::Key::F8 =>{
-                                if is_recording{
+                match &event.event_type {
+                    rdev::EventType::KeyPress(key) => {
+                        match key {
+                            rdev::Key::F8 => {
+                                if is_recording {
                                     shared_rec.swap(false, Ordering::Relaxed);
                                     shared_kfs.lock().unwrap().pop();
                                     shared_pkfs.lock().unwrap().pop();
                                     log::info!("Stop Recording (without resetting time)");
-                                }else{
+                                } else {
                                     shared_kfs.lock().unwrap().clear();
                                     shared_pkfs.lock().unwrap().clear();
                                     let mut rec_instant = shared_instant.lock().unwrap();
@@ -118,26 +132,27 @@ impl Sequencer {
                                     shared_rec.swap(true, Ordering::Relaxed);
                                     log::info!("Start Recording");
                                 }
-                            },
-                            rdev::Key::Escape=>{
+                            }
+                            rdev::Key::Escape => {
                                 shared_play.swap(false, Ordering::Relaxed);
+                                println!("stOP!");
                                 //panic!("Stopped execution due to ESCAPE keybind");
-                            },
-                            rdev::Key::F9 =>{
-                                keyframe = Some(Keyframe{
+                            }
+                            rdev::Key::F9 => {
+                                keyframe = Some(Keyframe {
                                     timestamp: dt.as_secs_f32(),
                                     duration: 0.1,
                                     keyframe_type: KeyframeType::MouseMove(previous_mouse_position),
                                     id: 1,
                                 });
                             }
-                            _=>{}
+                            _ => {}
                         }
                     }
-                    _=>{}
+                    _ => {}
                 }
                 // if dt == t, then ignore the event
-                if is_recording && keyframe.is_none(){
+                if is_recording && keyframe.is_none() {
                     keyframe = match &event.event_type {
                         rdev::EventType::ButtonPress(btn) => {
                             mouse_presses.push(btn.clone());
@@ -262,41 +277,54 @@ impl Sequencer {
             playing_keyframes,
             recording,
             recording_instant,
-            offset: Vec2::new(0.,0.),
+            offset: Vec2::new(0., 0.),
         }
     }
 
-    pub fn save_to_state(&self) -> SequencerState{
-        SequencerState{
+    pub fn save_to_state(&self) -> SequencerState {
+        SequencerState {
             keyframes: self.keyframes.lock().unwrap().clone(),
             repeats: self.repeats,
             speed: self.speed,
             offset: self.offset,
         }
     }
-    pub fn load_from_state(&mut self, state: SequencerState){
+    pub fn load_from_state(&mut self, state: SequencerState) {
         let mut shared_kfs = self.keyframes.lock().unwrap();
         let mut shared_pkfs = self.playing_keyframes.lock().unwrap();
         shared_kfs.clear();
         shared_kfs.extend(state.keyframes.into_iter());
         shared_pkfs.clear();
-        shared_pkfs.extend(vec![0;shared_kfs.len()].into_iter());
+        shared_pkfs.extend(vec![0; shared_kfs.len()].into_iter());
         self.speed = state.speed;
         self.offset = state.offset;
         self.repeats = state.repeats;
     }
 
-    pub fn toggle_play(&mut self){
-        self.play.swap(!self.play.load(Ordering::Relaxed), Ordering::Relaxed);
+    pub fn toggle_play(&mut self) {
+        self.play
+            .swap(!self.play.load(Ordering::Relaxed), Ordering::Relaxed);
     }
-    pub fn reset_time(&mut self){
-        self.time=0.;
+    pub fn reset_time(&mut self) {
+        self.time = 0.;
     }
-    pub fn step_time(&mut self){
-        self.time+=0.1;
+    pub fn step_time(&mut self) {
+        self.time += 0.1;
     }
-    pub fn toggle_recording(&mut self){
-        self.recording.swap(!self.recording.load(Ordering::Relaxed), Ordering::Relaxed);
+    pub fn toggle_recording(&mut self) {
+        if self.recording.load(Ordering::Relaxed) {
+            self.recording.swap(false, Ordering::Relaxed);
+            self.keyframes.lock().unwrap().pop();
+            self.playing_keyframes.lock().unwrap().pop();
+            log::info!("Stop Recording (without resetting time)");
+        } else {
+            self.keyframes.lock().unwrap().clear();
+            self.playing_keyframes.lock().unwrap().clear();
+            let mut rec_instant = self.recording_instant.lock().unwrap();
+            let _ = std::mem::replace(&mut *rec_instant, Instant::now());
+            self.recording.swap(true, Ordering::Relaxed);
+            log::info!("Start Recording");
+        }
     }
     fn render_keyframes(&mut self, ui: &mut Ui, id: u8) {
         let mut keyframe_to_delete: Option<usize> = None;
@@ -405,7 +433,7 @@ impl Sequencer {
         if ui.button("⏪").on_hover_text("Restart").clicked() {
             self.reset_time();
         }
-        if ui.button("⏴").on_hover_text("Reverse").clicked() { }
+        if ui.button("⏴").on_hover_text("Reverse").clicked() {}
         if ui.button("⏵").on_hover_text("Play").clicked() {
             self.toggle_play();
         }
@@ -461,7 +489,7 @@ impl Sequencer {
                 .clamp_range(1.0..=20.0),
         )
         .on_hover_text("Speed");
-        
+
         let mut keyframes = self.keyframes.lock().unwrap();
 
         let mut resolution = self
@@ -673,7 +701,7 @@ impl Sequencer {
         if play || self.recording.load(Ordering::Relaxed) {
             self.time += dt.as_secs_f32() * self.speed;
         }
-        if play && keyframes.last().is_some(){
+        if play && keyframes.last().is_some() {
             let last = keyframes.last().unwrap();
             if self.time >= last.timestamp + last.duration {
                 if self.repeats > 1 {
@@ -717,26 +745,31 @@ fn handle_playing_keyframe(keyframe: &Keyframe, start: bool, offset: Vec2) {
     match &keyframe.keyframe_type {
         KeyframeType::KeyBtn(key) => {
             if start {
-                rdev::simulate(&rdev::EventType::KeyPress(*key)).expect("Failed to simulate keypress");
+                rdev::simulate(&rdev::EventType::KeyPress(*key))
+                    .expect("Failed to simulate keypress");
             } else {
-                rdev::simulate(&rdev::EventType::KeyRelease(*key)).expect("Failed to simulate keyrelease");
+                rdev::simulate(&rdev::EventType::KeyRelease(*key))
+                    .expect("Failed to simulate keyrelease");
             }
         }
         KeyframeType::MouseBtn(btn) => {
             if start {
-                rdev::simulate(&rdev::EventType::ButtonPress(*btn)).expect("Failed to simulate Button Release");
+                rdev::simulate(&rdev::EventType::ButtonPress(*btn))
+                    .expect("Failed to simulate Button Release");
             } else {
-                rdev::simulate(&rdev::EventType::ButtonRelease(*btn)).expect("Failed to simulate Button Release");
+                rdev::simulate(&rdev::EventType::ButtonRelease(*btn))
+                    .expect("Failed to simulate Button Release");
             }
         }
         KeyframeType::MouseMove(pos) => {
             if start {
-                println!("test");
                 rdev::simulate(&rdev::EventType::MouseMove {
                     x: (pos.x + offset.x) as f64,
                     y: (pos.y + offset.y) as f64,
                 })
-                .expect("Failed to simulate Mouse Movement (Probably due to an anticheat installed)");
+                .expect(
+                    "Failed to simulate Mouse Movement (Probably due to an anticheat installed)",
+                );
             }
         }
     }

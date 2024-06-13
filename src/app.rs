@@ -8,8 +8,7 @@ use crate::sequencer::{Keyframe, Sequencer, SequencerState};
 #[derive(serde::Deserialize, serde::Serialize)]
 #[serde(default)] // if we add new fields, give them default values when deserializing old state
 pub struct App {
-    #[serde(skip)] // This how you opt-out of serialization of a field
-    // value: f32,
+    #[serde(skip)]//Serializing creates two threads somehow
     sequencer: Sequencer,
     #[serde(skip)]
     last_instant: Instant,
@@ -35,7 +34,6 @@ impl App {
         if let Some(storage) = cc.storage {
             return eframe::get_value(storage, eframe::APP_KEY).unwrap_or_default();
         }
-
         Default::default()
     }
 }
@@ -74,6 +72,7 @@ impl eframe::App for App {
                     if ui.button("New").clicked() {
                         self.sequencer.keyframes.lock().unwrap().clear();
                         self.sequencer.playing_keyframes.lock().unwrap().clear();
+                        self.sequencer.reset_time();
                         ui.close_menu();
                     }
                     
