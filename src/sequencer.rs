@@ -40,6 +40,13 @@ impl Default for Keyframe {
     }
 }
 
+#[derive(Debug, Serialize, Deserialize)]
+pub struct SequencerState{
+    pub keyframes: Vec<Keyframe>,
+    pub repeats: i32,
+    pub speed: f32,
+    pub offset: Vec2,
+}
 #[derive(Debug)]
 pub struct Sequencer {
     dragging: bool,
@@ -255,8 +262,28 @@ impl Sequencer {
             playing_keyframes,
             recording,
             recording_instant,
-            offset: Vec2::new(1920., 5.),
+            offset: Vec2::new(0.,0.),
         }
+    }
+
+    pub fn save_to_state(&self) -> SequencerState{
+        SequencerState{
+            keyframes: self.keyframes.lock().unwrap().clone(),
+            repeats: self.repeats,
+            speed: self.speed,
+            offset: self.offset,
+        }
+    }
+    pub fn load_from_state(&mut self, state: SequencerState){
+        let mut shared_kfs = self.keyframes.lock().unwrap();
+        let mut shared_pkfs = self.playing_keyframes.lock().unwrap();
+        shared_kfs.clear();
+        shared_kfs.extend(state.keyframes.into_iter());
+        shared_pkfs.clear();
+        shared_pkfs.extend(vec![0;shared_kfs.len()].into_iter());
+        self.speed = state.speed;
+        self.offset = state.offset;
+        self.repeats = state.repeats;
     }
 
     pub fn toggle_play(&mut self){

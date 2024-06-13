@@ -1,7 +1,8 @@
 use std::{fs::File, io::{Read, Write}, time::Instant};
 use rfd::FileDialog;
 
-use crate::sequencer::{Keyframe, Sequencer};
+use crate::sequencer::{Keyframe, Sequencer, SequencerState};
+
 
 /// We derive Deserialize/Serialize so we can persist app state on shutdown.
 #[derive(serde::Deserialize, serde::Serialize)]
@@ -77,7 +78,8 @@ impl eframe::App for App {
                     }
                     
                     if ui.button("Save").clicked() {
-                        let json = serde_json::to_string(self.sequencer.keyframes.as_ref());
+                        let state = self.sequencer.save_to_state();
+                        let json = serde_json::to_string(&state);
                         if json.is_ok(){
                             let path = FileDialog::new()
                                 .add_filter("automate", &["auto"])
@@ -92,7 +94,7 @@ impl eframe::App for App {
                         }
                         ui.close_menu();
                     }
-                    if ui.button("Load").clicked(){
+                    if ui.button("Open").clicked(){
                         let path = FileDialog::new()
                             .add_filter("automate", &["auto"])
                             .set_directory("/")
@@ -100,13 +102,8 @@ impl eframe::App for App {
                         let mut file = File::open(path.clone()).unwrap();
                         let mut contents = String::new();
                         file.read_to_string(&mut contents).unwrap();
-                        let data: Vec<Keyframe> = serde_json::from_str(&contents.as_str()).unwrap();
-                        let mut shared_kfs = self.sequencer.keyframes.lock().unwrap();
-                        let mut shared_pkfs = self.sequencer.playing_keyframes.lock().unwrap();
-                        shared_kfs.clear();
-                        shared_kfs.extend(data.into_iter());
-                        shared_pkfs.clear();
-                        shared_pkfs.extend(vec![0;shared_kfs.len()].into_iter());
+                        let data: SequencerState = serde_json::from_str(&contents.as_str()).unwrap();
+                        self.sequencer.load_from_state(data);
                         log::info!("Load file: {:?}",path);
                         ui.close_menu();     
                     }

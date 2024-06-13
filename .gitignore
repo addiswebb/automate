@@ -11,3 +11,6 @@ Cargo.lock
 
 # MSVC Windows builds of rustc generate these, which store debugging information
 *.pdb
+
+# Ignore all auto files created within the directory
+*.auto
