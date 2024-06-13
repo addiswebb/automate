@@ -50,6 +50,7 @@ pub struct Sequencer {
     pub recording: Arc<AtomicBool>,
     #[serde(skip)]
     was_recording: bool,
+    clear_before_recording: bool,
     #[serde(skip)]
     recording_instant: Arc<Mutex<Instant>>,
     #[serde(skip)]
@@ -90,7 +91,7 @@ impl Sequencer {
                     let mut keyframe = None;
                     let dt = Instant::now().duration_since(*shared_instant.lock().unwrap());
                     match &event.event_type {
-                        rdev::EventType::KeyPress(key) => {
+                        rdev::EventType::KeyRelease(key) => {
                             match key {
                                 rdev::Key::F8 => {
                                     if is_recording {
@@ -217,14 +218,15 @@ impl Sequencer {
                                     true => None,
                                 }
                             }
-                            rdev::EventType::Wheel { delta_x, delta_y } => {
-                                Some(Keyframe {
-                                    timestamp: dt.as_secs_f32(),
-                                    duration: 0.1,
-                                    keyframe_type: KeyframeType::Scroll(Vec2::new(*delta_x as f32, *delta_y as f32)),
-                                    id: 3,
-                                })
-                            }
+                            rdev::EventType::Wheel { delta_x, delta_y } => Some(Keyframe {
+                                timestamp: dt.as_secs_f32(),
+                                duration: 0.1,
+                                keyframe_type: KeyframeType::Scroll(Vec2::new(
+                                    *delta_x as f32,
+                                    *delta_y as f32,
+                                )),
+                                id: 3,
+                            }),
                             //Todo: add scroll
                             _ => None,
                         };
@@ -256,6 +258,7 @@ impl Sequencer {
             selected_keyframe: None,
             playing_keyframes,
             recording,
+            clear_before_recording: true,
             was_recording: false,
             recording_instant,
             loaded_file: "".to_string(),
@@ -294,24 +297,39 @@ impl Sequencer {
         if !self.recording.load(Ordering::Relaxed) {
             let mut keyframes = self.keyframes.lock().unwrap();
             let mut playing_keyframes = self.playing_keyframes.lock().unwrap();
-            keyframes.pop();
-            playing_keyframes.pop();
+            let last = keyframes.last().unwrap();
+            if (last.timestamp + last.duration - self.time).abs() <= 0.04 {
+                let is_record_stop_keyframe = match last.keyframe_type {
+                    KeyframeType::KeyBtn(rdev::Key::F8) => true,
+                    KeyframeType::MouseBtn(rdev::Button::Left) => true,
+                    _ => false,
+                };
+                if is_record_stop_keyframe {
+                    keyframes.pop();
+                    playing_keyframes.pop();
+                }
+            }
             std::mem::drop(keyframes);
             std::mem::drop(playing_keyframes);
-            self.time = 0.;
-            //ctx.send_viewport_cmd(egui::ViewportCommand::WindowLevel(egui::WindowLevel::AlwaysOnTop));
+            if self.clear_before_recording {
+                self.time = 0.;
+            }
             log::info!("Stop Recording");
         } else {
             let mut keyframes = self.keyframes.lock().unwrap();
             let mut playing_keyframes = self.playing_keyframes.lock().unwrap();
-            keyframes.clear();
-            playing_keyframes.clear();
             let mut rec_instant = self.recording_instant.lock().unwrap();
-            let _ = std::mem::replace(&mut *rec_instant, Instant::now());
-            std::mem::drop(keyframes);
-            std::mem::drop(playing_keyframes);
-            std::mem::drop(rec_instant);
-            //ctx.send_viewport_cmd(egui::ViewportCommand::WindowLevel(egui::WindowLevel::Normal));
+            if self.clear_before_recording {
+                self.time = 0.;
+                keyframes.clear();
+                playing_keyframes.clear();
+                let _ = std::mem::replace(&mut *rec_instant, Instant::now());
+            } else {
+                let _ = std::mem::replace(
+                    &mut *rec_instant,
+                    Instant::now() - Duration::from_secs_f32(self.time),
+                );
+            }
             log::info!("Start Recording");
         }
     }
@@ -418,7 +436,7 @@ impl Sequencer {
         }
     }
 
-    fn render_control_bar(&mut self, ctx: &egui::Context, ui: &mut Ui) {
+    fn render_control_bar(&mut self, ui: &mut Ui) {
         if ui.button("⏪").on_hover_text("Restart").clicked() {
             self.reset_time();
         }
@@ -565,7 +583,7 @@ impl Sequencer {
                         ui.strong("Inputs");
                     });
                     header.col(|ui| {
-                        self.render_control_bar(ctx, ui);
+                        self.render_control_bar(ui);
                     });
                 })
                 .body(|mut body| {
@@ -619,6 +637,7 @@ impl Sequencer {
                     "Rec: {}",
                     self.was_recording == self.recording.load(Ordering::Relaxed)
                 ));
+                ui.checkbox(&mut self.clear_before_recording, "Clear Before Recording");
                 ui.label(format!("Time: {}s", self.time));
                 ui.label(format!("Previous Time: {}s", self.prev_time));
                 ui.label(format!("Scale: {}", self.scale));
@@ -672,16 +691,12 @@ impl Sequencer {
                 }
             });
     }
-    pub fn update(&mut self, last_instant: &mut Instant, offset: Vec2) {
+    pub fn update(&mut self, last_instant: &mut Instant, ctx: &egui::Context, offset: Vec2) {
         if self.was_recording != self.recording.load(Ordering::Relaxed) {
             self.was_recording = self.recording.load(Ordering::Relaxed);
             self.toggle_recording();
-            if self.was_recording {
-                //means it started now
-                //ctx.send_viewport_cmd(egui::ViewportCommand::WindowLevel(egui::WindowLevel::AlwaysOnBottom));
-                println!("Start recording");
-            } else {
-                println!("Stop recording");
+            if !self.was_recording {
+                ctx.send_viewport_cmd(egui::ViewportCommand::Focus);
             }
         }
         let keyframes = self.keyframes.lock().unwrap();
@@ -701,10 +716,12 @@ impl Sequencer {
             let last = keyframes.last().unwrap();
             if self.time >= last.timestamp + last.duration {
                 if self.repeats > 1 {
+                    // Repeat the automation
                     self.time = 0.0;
                     self.repeats -= 1;
                 } else {
                     self.play.swap(false, Ordering::Relaxed);
+                    ctx.send_viewport_cmd(egui::ViewportCommand::Focus);
                 }
             }
         }

@@ -114,7 +114,7 @@ impl eframe::App for App {
         }
         ctx.input(|i| {
             //Keybinds within app
-            if i.key_pressed(egui::Key::F8) {
+            if i.key_released(egui::Key::F8) {
                 self.sequencer.recording.swap(!self.sequencer.recording.load(Ordering::Relaxed), Ordering::Relaxed);
             }
             if i.key_pressed(egui::Key::Space) {
@@ -203,7 +203,7 @@ impl eframe::App for App {
             });
         });
 
-        self.sequencer.update(&mut self.last_instant, self.offset);
+        self.sequencer.update(&mut self.last_instant, ctx, self.offset);
         self.sequencer.show(ctx);
         self.sequencer.debug_panel(ctx, &mut self.offset);
         self.sequencer.selected_panel(ctx);
