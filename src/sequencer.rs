@@ -16,7 +16,6 @@ pub struct SequencerState {
     pub keyframes: Vec<Keyframe>,
     pub repeats: i32,
     pub speed: f32,
-    pub offset: Vec2,
 }
 /// We derive Deserialize/Serialize so we can persist app state on shutdown.
 #[derive(Debug, serde::Deserialize, serde::Serialize)]
@@ -50,8 +49,11 @@ pub struct Sequencer {
     #[serde(skip)]
     pub recording: Arc<AtomicBool>,
     #[serde(skip)]
+    was_recording: bool,
+    #[serde(skip)]
     recording_instant: Arc<Mutex<Instant>>,
-    offset: Vec2,
+    #[serde(skip)]
+    pub loaded_file: String,
 }
 
 impl Sequencer {
@@ -76,160 +78,167 @@ impl Sequencer {
         let mut key_presses = vec![];
         let mut key_pressed_at = vec![];
 
-        let mut previous_mouse_position = Vec2::new(0.0, 0.0);
+        let mut previous_mouse_position = Vec2::ZERO;
         let mut mouse_move_count = 20;
         // this needs to get reset every time recording starts
-        thread::spawn(move || {
-            log::info!("Created Recording Thread");
-            if let Err(error) = rdev::listen(move |event: rdev::Event| {
-                let is_recording = shared_rec.load(Ordering::Relaxed);
-                let mut keyframe = None;
-                let dt: Duration = Instant::now() - *shared_instant.lock().unwrap();
-                // Keybinds
-                match &event.event_type {
-                    rdev::EventType::KeyPress(key) => {
-                        match key {
-                            rdev::Key::F8 => {
-                                if is_recording {
-                                    shared_rec.swap(false, Ordering::Relaxed);
-                                    shared_kfs.lock().unwrap().pop();
-                                    shared_pkfs.lock().unwrap().pop();
-                                    log::info!("Stop Recording (without resetting time)");
-                                } else {
-                                    shared_kfs.lock().unwrap().clear();
-                                    shared_pkfs.lock().unwrap().clear();
-                                    let mut rec_instant = shared_instant.lock().unwrap();
-                                    let _ = std::mem::replace(&mut *rec_instant, Instant::now());
-                                    shared_rec.swap(true, Ordering::Relaxed);
-                                    log::info!("Start Recording");
+        let _ = thread::Builder::new()
+            .name("Record Thread".to_owned())
+            .spawn(move || {
+                log::info!("Created Recording Thread");
+                if let Err(error) = rdev::listen(move |event: rdev::Event| {
+                    let is_recording = shared_rec.load(Ordering::Relaxed);
+                    let mut keyframe = None;
+                    let dt = Instant::now().duration_since(*shared_instant.lock().unwrap());
+                    match &event.event_type {
+                        rdev::EventType::KeyPress(key) => {
+                            match key {
+                                rdev::Key::F8 => {
+                                    if is_recording {
+                                        shared_rec.swap(false, Ordering::Relaxed);
+                                    } else {
+                                        shared_rec.swap(true, Ordering::Relaxed);
+                                        key_presses = vec![];
+                                        key_pressed_at = vec![];
+                                        mouse_move_count = 20;
+                                        previous_mouse_position = Vec2::ZERO;
+                                    }
+                                }
+                                rdev::Key::Escape => {
+                                    shared_play.swap(false, Ordering::Relaxed);
+                                    //panic!("Stopped execution due to ESCAPE keybind");
+                                }
+                                rdev::Key::F9 => {
+                                    keyframe = Some(Keyframe {
+                                        timestamp: dt.as_secs_f32(),
+                                        duration: 0.1,
+                                        keyframe_type: KeyframeType::MouseMove(
+                                            previous_mouse_position,
+                                        ),
+                                        id: 1,
+                                    });
+                                }
+                                _ => {}
+                            }
+                        }
+                        _ => {}
+                    }
+                    // if dt == t, then ignore the event
+                    if is_recording && keyframe.is_none() {
+                        keyframe = match &event.event_type {
+                            rdev::EventType::ButtonPress(btn) => {
+                                mouse_presses.push(btn.clone());
+                                mouse_pressed_at.push(dt);
+                                None
+                            }
+                            rdev::EventType::KeyPress(key) => {
+                                key_presses.push(key.clone());
+                                key_pressed_at.push(dt);
+                                None
+                            }
+                            rdev::EventType::ButtonRelease(btn) => {
+                                let mut found_press = false;
+                                let mut indices_to_remove = vec![];
+                                let mut pressed_at = Duration::from_secs(0);
+                                if mouse_presses.contains(btn) {
+                                    for i in 0..mouse_presses.len() {
+                                        if mouse_presses[i] == *btn {
+                                            if !found_press {
+                                                pressed_at = mouse_pressed_at[i];
+                                                found_press = true;
+                                            }
+                                            indices_to_remove.push(i);
+                                        }
+                                    }
+                                }
+                                for i in 0..indices_to_remove.len() {
+                                    let index = indices_to_remove[i] - (i * 1);
+                                    mouse_presses.remove(index);
+                                    mouse_pressed_at.remove(index);
+                                }
+
+                                match found_press {
+                                    true => Some(Keyframe {
+                                        timestamp: pressed_at.as_secs_f32(),
+                                        duration: (dt - pressed_at).as_secs_f32(),
+                                        keyframe_type: KeyframeType::MouseBtn(*btn),
+                                        id: 1,
+                                    }),
+                                    false => None,
                                 }
                             }
-                            rdev::Key::Escape => {
-                                shared_play.swap(false, Ordering::Relaxed);
-                                println!("stOP!");
-                                //panic!("Stopped execution due to ESCAPE keybind");
+                            rdev::EventType::KeyRelease(key) => {
+                                let mut found_press = false;
+                                let mut indices_to_remove = vec![];
+                                let mut pressed_at = Duration::from_secs(0);
+                                if key_presses.contains(key) {
+                                    for i in 0..key_presses.len() {
+                                        if key_presses[i] == *key {
+                                            if !found_press {
+                                                pressed_at = key_pressed_at[i];
+                                                found_press = true;
+                                            }
+                                            indices_to_remove.push(i);
+                                        }
+                                    }
+                                }
+                                for i in 0..indices_to_remove.len() {
+                                    let index = indices_to_remove[i] - (i * 1);
+                                    key_presses.remove(index);
+                                    key_pressed_at.remove(index);
+                                }
+
+                                match found_press {
+                                    true => Some(Keyframe {
+                                        timestamp: pressed_at.as_secs_f32(),
+                                        duration: (dt - pressed_at).as_secs_f32(),
+                                        keyframe_type: KeyframeType::KeyBtn(*key),
+                                        id: 0,
+                                    }),
+                                    false => None,
+                                }
                             }
-                            rdev::Key::F9 => {
-                                keyframe = Some(Keyframe {
+                            rdev::EventType::MouseMove { x, y } => {
+                                let pos = Vec2::new(*x as f32, *y as f32);
+                                mouse_move_count -= 1;
+                                match previous_mouse_position == pos {
+                                    false => match mouse_move_count <= 0 {
+                                        true => {
+                                            previous_mouse_position = pos;
+                                            mouse_move_count = shared_count.load(Ordering::Relaxed);
+                                            Some(Keyframe {
+                                                timestamp: dt.as_secs_f32(),
+                                                duration: 0.1,
+                                                keyframe_type: KeyframeType::MouseMove(pos),
+                                                id: 1,
+                                            })
+                                        }
+                                        false => None,
+                                    },
+                                    true => None,
+                                }
+                            }
+                            rdev::EventType::Wheel { delta_x, delta_y } => {
+                                Some(Keyframe {
                                     timestamp: dt.as_secs_f32(),
                                     duration: 0.1,
-                                    keyframe_type: KeyframeType::MouseMove(previous_mouse_position),
-                                    id: 1,
-                                });
+                                    keyframe_type: KeyframeType::Scroll(Vec2::new(*delta_x as f32, *delta_y as f32)),
+                                    id: 3,
+                                })
                             }
-                            _ => {}
+                            //Todo: add scroll
+                            _ => None,
+                        };
+                        if keyframe.is_some() {
+                            let mut keyframes = shared_kfs.lock().unwrap();
+                            let mut playing_keyframes = shared_pkfs.lock().unwrap();
+                            keyframes.push(keyframe.unwrap());
+                            playing_keyframes.push(0);
                         }
                     }
-                    _ => {}
+                }) {
+                    log::error!("Error: {:?}", error)
                 }
-                // if dt == t, then ignore the event
-                if is_recording && keyframe.is_none() {
-                    keyframe = match &event.event_type {
-                        rdev::EventType::ButtonPress(btn) => {
-                            mouse_presses.push(btn.clone());
-                            mouse_pressed_at.push(dt);
-                            None
-                        }
-                        rdev::EventType::KeyPress(key) => {
-                            key_presses.push(key.clone());
-                            key_pressed_at.push(dt);
-                            None
-                        }
-                        rdev::EventType::ButtonRelease(btn) => {
-                            let mut found_press = false;
-                            let mut indices_to_remove = vec![];
-                            let mut pressed_at = Duration::from_secs(0);
-                            if mouse_presses.contains(btn) {
-                                for i in 0..mouse_presses.len() {
-                                    if mouse_presses[i] == *btn {
-                                        if !found_press {
-                                            pressed_at = mouse_pressed_at[i];
-                                            found_press = true;
-                                        }
-                                        indices_to_remove.push(i);
-                                    }
-                                }
-                            }
-                            for i in 0..indices_to_remove.len() {
-                                let index = indices_to_remove[i] - (i * 1);
-                                mouse_presses.remove(index);
-                                mouse_pressed_at.remove(index);
-                            }
-
-                            match found_press {
-                                true => Some(Keyframe {
-                                    timestamp: pressed_at.as_secs_f32(),
-                                    duration: (dt - pressed_at).as_secs_f32(),
-                                    keyframe_type: KeyframeType::MouseBtn(*btn),
-                                    id: 1,
-                                }),
-                                false => None,
-                            }
-                        }
-                        rdev::EventType::KeyRelease(key) => {
-                            let mut found_press = false;
-                            let mut indices_to_remove = vec![];
-                            let mut pressed_at = Duration::from_secs(0);
-                            if key_presses.contains(key) {
-                                for i in 0..key_presses.len() {
-                                    if key_presses[i] == *key {
-                                        if !found_press {
-                                            pressed_at = key_pressed_at[i];
-                                            found_press = true;
-                                        }
-                                        indices_to_remove.push(i);
-                                    }
-                                }
-                            }
-                            for i in 0..indices_to_remove.len() {
-                                let index = indices_to_remove[i] - (i * 1);
-                                key_presses.remove(index);
-                                key_pressed_at.remove(index);
-                            }
-
-                            match found_press {
-                                true => Some(Keyframe {
-                                    timestamp: pressed_at.as_secs_f32(),
-                                    duration: (dt - pressed_at).as_secs_f32(),
-                                    keyframe_type: KeyframeType::KeyBtn(*key),
-                                    id: 0,
-                                }),
-                                false => None,
-                            }
-                        }
-                        rdev::EventType::MouseMove { x, y } => {
-                            let pos = Vec2::new(*x as f32, *y as f32);
-                            mouse_move_count -= 1;
-                            match previous_mouse_position == pos {
-                                false => match mouse_move_count <= 0 {
-                                    true => {
-                                        previous_mouse_position = pos;
-                                        mouse_move_count = shared_count.load(Ordering::Relaxed);
-                                        Some(Keyframe {
-                                            timestamp: dt.as_secs_f32(),
-                                            duration: 0.1,
-                                            keyframe_type: KeyframeType::MouseMove(pos),
-                                            id: 1,
-                                        })
-                                    }
-                                    false => None,
-                                },
-                                true => None,
-                            }
-                        }
-                        _ => None,
-                    };
-                    if keyframe.is_some() {
-                        let mut keyframes = shared_kfs.lock().unwrap();
-                        let mut playing_keyframes = shared_pkfs.lock().unwrap();
-                        keyframes.push(keyframe.unwrap());
-                        playing_keyframes.push(0);
-                    }
-                }
-            }) {
-                log::error!("Error: {:?}", error)
-            }
-        });
+            });
         Self {
             keyframes,
             drag_start: pos2(0., 0.),
@@ -247,8 +256,9 @@ impl Sequencer {
             selected_keyframe: None,
             playing_keyframes,
             recording,
+            was_recording: false,
             recording_instant,
-            offset: Vec2::new(0., 0.),
+            loaded_file: "".to_string(),
         }
     }
 
@@ -257,7 +267,6 @@ impl Sequencer {
             keyframes: self.keyframes.lock().unwrap().clone(),
             repeats: self.repeats,
             speed: self.speed,
-            offset: self.offset,
         }
     }
     pub fn load_from_state(&mut self, state: SequencerState) {
@@ -268,7 +277,6 @@ impl Sequencer {
         shared_pkfs.clear();
         shared_pkfs.extend(vec![0; shared_kfs.len()].into_iter());
         self.speed = state.speed;
-        self.offset = state.offset;
         self.repeats = state.repeats;
     }
 
@@ -283,17 +291,27 @@ impl Sequencer {
         self.time += 0.1;
     }
     pub fn toggle_recording(&mut self) {
-        if self.recording.load(Ordering::Relaxed) {
-            self.recording.swap(false, Ordering::Relaxed);
-            self.keyframes.lock().unwrap().pop();
-            self.playing_keyframes.lock().unwrap().pop();
-            log::info!("Stop Recording (without resetting time)");
+        if !self.recording.load(Ordering::Relaxed) {
+            let mut keyframes = self.keyframes.lock().unwrap();
+            let mut playing_keyframes = self.playing_keyframes.lock().unwrap();
+            keyframes.pop();
+            playing_keyframes.pop();
+            std::mem::drop(keyframes);
+            std::mem::drop(playing_keyframes);
+            self.time = 0.;
+            //ctx.send_viewport_cmd(egui::ViewportCommand::WindowLevel(egui::WindowLevel::AlwaysOnTop));
+            log::info!("Stop Recording");
         } else {
-            self.keyframes.lock().unwrap().clear();
-            self.playing_keyframes.lock().unwrap().clear();
+            let mut keyframes = self.keyframes.lock().unwrap();
+            let mut playing_keyframes = self.playing_keyframes.lock().unwrap();
+            keyframes.clear();
+            playing_keyframes.clear();
             let mut rec_instant = self.recording_instant.lock().unwrap();
             let _ = std::mem::replace(&mut *rec_instant, Instant::now());
-            self.recording.swap(true, Ordering::Relaxed);
+            std::mem::drop(keyframes);
+            std::mem::drop(playing_keyframes);
+            std::mem::drop(rec_instant);
+            //ctx.send_viewport_cmd(egui::ViewportCommand::WindowLevel(egui::WindowLevel::Normal));
             log::info!("Start Recording");
         }
     }
@@ -400,7 +418,7 @@ impl Sequencer {
         }
     }
 
-    fn render_control_bar(&mut self, ui: &mut Ui) {
+    fn render_control_bar(&mut self, ctx: &egui::Context, ui: &mut Ui) {
         if ui.button("⏪").on_hover_text("Restart").clicked() {
             self.reset_time();
         }
@@ -461,8 +479,6 @@ impl Sequencer {
         )
         .on_hover_text("Speed");
 
-        let mut keyframes = self.keyframes.lock().unwrap();
-
         let mut resolution = self
             .mouse_movement_record_resolution
             .load(Ordering::Relaxed);
@@ -478,10 +494,6 @@ impl Sequencer {
         if self.recording.load(Ordering::Relaxed) {
             if ui.button("⏹").on_hover_text("Stop Recording: F8").clicked() {
                 self.recording.swap(false, Ordering::Relaxed);
-                self.time = 0.;
-                keyframes.pop();
-                self.playing_keyframes.lock().unwrap().pop();
-                log::info!("Stop Recording");
             }
         } else {
             if ui
@@ -489,14 +501,7 @@ impl Sequencer {
                 .on_hover_text("Start Recording: F8")
                 .clicked()
             {
-                keyframes.clear();
-                self.playing_keyframes.lock().unwrap().clear();
-                let mut rec_instant = self.recording_instant.lock().unwrap();
-                let _ = std::mem::replace(&mut *rec_instant, Instant::now());
-                std::mem::drop(keyframes);
-                std::mem::drop(rec_instant);
                 self.recording.swap(true, Ordering::Relaxed);
-                log::info!("Start Recording");
             }
         }
     }
@@ -560,7 +565,7 @@ impl Sequencer {
                         ui.strong("Inputs");
                     });
                     header.col(|ui| {
-                        self.render_control_bar(ui);
+                        self.render_control_bar(ctx, ui);
                     });
                 })
                 .body(|mut body| {
@@ -593,8 +598,7 @@ impl Sequencer {
                 });
         });
     }
-
-    pub fn debug_panel(&mut self, ctx: &egui::Context) {
+    pub fn debug_panel(&mut self, ctx: &egui::Context, offset: &mut Vec2) {
         egui::SidePanel::right("Debug")
             .min_width(200.0)
             .resizable(true)
@@ -605,12 +609,16 @@ impl Sequencer {
                 //todo: add mouse position
                 ui.horizontal(|ui| {
                     ui.label("Offset: ");
-                    ui.add(egui::DragValue::new(&mut self.offset.x).speed(1))
+                    ui.add(egui::DragValue::new(&mut offset.x).speed(1))
                         .on_hover_text("X");
-                    ui.add(egui::DragValue::new(&mut self.offset.y).speed(1))
+                    ui.add(egui::DragValue::new(&mut offset.y).speed(1))
                         .on_hover_text("Y");
                 });
-                ui.label(format!("Keyframe state: {:?}", self.playing_keyframes));
+                //ui.label(format!("Keyframe state: {:?}", self.playing_keyframes));
+                ui.label(format!(
+                    "Rec: {}",
+                    self.was_recording == self.recording.load(Ordering::Relaxed)
+                ));
                 ui.label(format!("Time: {}s", self.time));
                 ui.label(format!("Previous Time: {}s", self.prev_time));
                 ui.label(format!("Scale: {}", self.scale));
@@ -641,6 +649,11 @@ impl Sequencer {
                                 //ui.text_edit_singleline(&mut self.sequencer.keyframes[i].keyframe_type)
                                 ui.label(format!("position: {:?}", pos));
                             }
+                            KeyframeType::Scroll(delta) => {
+                                ui.strong("Scroll");
+                                //ui.text_edit_singleline(&mut self.sequencer.keyframes[i].keyframe_type)
+                                ui.label(format!("delta: {:?}", delta));
+                            }
                         }
 
                         ui.label("Timestamp");
@@ -659,7 +672,18 @@ impl Sequencer {
                 }
             });
     }
-    pub fn update(&mut self, last_instant: &mut Instant) {
+    pub fn update(&mut self, last_instant: &mut Instant, offset: Vec2) {
+        if self.was_recording != self.recording.load(Ordering::Relaxed) {
+            self.was_recording = self.recording.load(Ordering::Relaxed);
+            self.toggle_recording();
+            if self.was_recording {
+                //means it started now
+                //ctx.send_viewport_cmd(egui::ViewportCommand::WindowLevel(egui::WindowLevel::AlwaysOnBottom));
+                println!("Start recording");
+            } else {
+                println!("Stop recording");
+            }
+        }
         let keyframes = self.keyframes.lock().unwrap();
         let mut playing_keyframes = self.playing_keyframes.lock().unwrap();
         if self.recording.load(Ordering::Relaxed) {
@@ -695,14 +719,14 @@ impl Sequencer {
                     playing_keyframes[i] = 1; //change keyframe state to playing, highlight
                     if current_keyframe_state != playing_keyframes[i] {
                         if play {
-                            handle_playing_keyframe(keyframe, true, self.offset);
+                            handle_playing_keyframe(keyframe, true, offset);
                         }
                     }
                 } else {
                     playing_keyframes[i] = 0; //change keyframe state to not playing, no highlight
                     if current_keyframe_state != playing_keyframes[i] {
                         if play {
-                            handle_playing_keyframe(keyframe, false, self.offset);
+                            handle_playing_keyframe(keyframe, false, offset);
                         }
                     }
                 }
@@ -742,6 +766,15 @@ fn handle_playing_keyframe(keyframe: &Keyframe, start: bool, offset: Vec2) {
                 .expect(
                     "Failed to simulate Mouse Movement (Probably due to an anticheat installed)",
                 );
+            }
+        }
+        KeyframeType::Scroll(delta) => {
+            if start {
+                rdev::simulate(&rdev::EventType::Wheel {
+                    delta_x: (delta.x) as i64,
+                    delta_y: (delta.y) as i64,
+                })
+                .expect("Failed to simulate Mouse Scroll (Possibly due to anticheat)");
             }
         }
     }

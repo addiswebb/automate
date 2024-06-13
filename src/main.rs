@@ -18,7 +18,7 @@ fn main() -> eframe::Result<()> {
         ..Default::default()
     };
     eframe::run_native(
-        "Automate",
+        "untitled - Automate",
         native_options,
         Box::new(|cc| Box::new(automate::App::new(cc))),
     )

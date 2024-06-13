@@ -6,6 +6,7 @@ pub enum KeyframeType {
     KeyBtn(rdev::Key),      //0
     MouseBtn(rdev::Button), //1
     MouseMove(Vec2),        //2
+    Scroll(Vec2)            //3
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
