@@ -55,7 +55,7 @@ pub struct Sequencer {
     speed: f32,
     time: f32,
     prev_time: f32,
-    play: bool,
+    play: Arc<AtomicBool>,
     mouse_movement_record_resolution: Arc<AtomicI32>,
     pub recording: Arc<AtomicBool>,
     recording_instant: Arc<Mutex<Instant>>,
@@ -67,12 +67,14 @@ impl Sequencer {
         let keyframes: Arc<Mutex<Vec<Keyframe>>> = Arc::new(Mutex::new(vec![]));
         let playing_keyframes = Arc::new(Mutex::new(vec![]));
         let recording = Arc::new(AtomicBool::new(false));
+        let play = Arc::new(AtomicBool::new(false));
         let mouse_movement_record_resolution = Arc::new(AtomicI32::new(20));
         let recording_instant = Arc::new(Mutex::new(Instant::now()));
 
         let shared_kfs = Arc::clone(&keyframes);
         let shared_pkfs = Arc::clone(&playing_keyframes);
         let shared_rec = Arc::clone(&recording);
+        let shared_play = Arc::clone(&play);
         let shared_count = Arc::clone(&mouse_movement_record_resolution);
         let shared_instant = Arc::clone(&recording_instant);
 
@@ -111,7 +113,8 @@ impl Sequencer {
                                 }
                             },
                             rdev::Key::Escape=>{
-                                panic!("Stopped execution due to ESCAPE keybind");
+                                shared_play.swap(false, Ordering::Relaxed);
+                                //panic!("Stopped execution due to ESCAPE keybind");
                             },
                             rdev::Key::F9 =>{
                                 keyframe = Some(Keyframe{
@@ -246,7 +249,7 @@ impl Sequencer {
             speed: 1.0,
             time: 0.0,
             prev_time: 0.0,
-            play: false,
+            play,
             mouse_movement_record_resolution,
             selected_keyframe: None,
             playing_keyframes,
@@ -257,7 +260,7 @@ impl Sequencer {
     }
 
     pub fn toggle_play(&mut self){
-        self.play = !self.play;
+        self.play.swap(!self.play.load(Ordering::Relaxed), Ordering::Relaxed);
     }
     pub fn reset_time(&mut self){
         self.time=0.;
@@ -639,17 +642,18 @@ impl Sequencer {
         }
         let now = Instant::now();
         let dt = now - *last_instant;
-        if self.play || self.recording.load(Ordering::Relaxed) {
+        let play = self.play.load(Ordering::Relaxed);
+        if play || self.recording.load(Ordering::Relaxed) {
             self.time += dt.as_secs_f32() * self.speed;
         }
-        if self.play && keyframes.last().is_some(){
+        if play && keyframes.last().is_some(){
             let last = keyframes.last().unwrap();
             if self.time >= last.timestamp + last.duration {
                 if self.repeats > 1 {
                     self.time = 0.0;
                     self.repeats -= 1;
                 } else {
-                    self.play = false;
+                    self.play.swap(false, Ordering::Relaxed);
                 }
             }
         }
@@ -663,14 +667,14 @@ impl Sequencer {
                 {
                     playing_keyframes[i] = 1; //change keyframe state to playing, highlight
                     if current_keyframe_state != playing_keyframes[i] {
-                        if self.play {
+                        if play {
                             handle_playing_keyframe(keyframe, true, self.offset);
                         }
                     }
                 } else {
                     playing_keyframes[i] = 0; //change keyframe state to not playing, no highlight
                     if current_keyframe_state != playing_keyframes[i] {
-                        if self.play {
+                        if play {
                             handle_playing_keyframe(keyframe, false, self.offset);
                         }
                     }
@@ -686,25 +690,26 @@ fn handle_playing_keyframe(keyframe: &Keyframe, start: bool, offset: Vec2) {
     match &keyframe.keyframe_type {
         KeyframeType::KeyBtn(key) => {
             if start {
-                rdev::simulate(&rdev::EventType::KeyPress(*key)).ok();
+                rdev::simulate(&rdev::EventType::KeyPress(*key)).expect("Failed to simulate keypress");
             } else {
-                rdev::simulate(&rdev::EventType::KeyRelease(*key)).ok();
+                rdev::simulate(&rdev::EventType::KeyRelease(*key)).expect("Failed to simulate keyrelease");
             }
         }
         KeyframeType::MouseBtn(btn) => {
             if start {
-                rdev::simulate(&rdev::EventType::ButtonPress(*btn)).ok();
+                rdev::simulate(&rdev::EventType::ButtonPress(*btn)).expect("Failed to simulate Button Release");
             } else {
-                rdev::simulate(&rdev::EventType::ButtonRelease(*btn)).ok();
+                rdev::simulate(&rdev::EventType::ButtonRelease(*btn)).expect("Failed to simulate Button Release");
             }
         }
         KeyframeType::MouseMove(pos) => {
             if start {
+                println!("test");
                 rdev::simulate(&rdev::EventType::MouseMove {
                     x: (pos.x + offset.x) as f64,
                     y: (pos.y + offset.y) as f64,
                 })
-                .ok();
+                .expect("Failed to simulate Mouse Movement (Probably due to an anticheat installed)");
             }
         }
     }
