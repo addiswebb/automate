@@ -2,4 +2,5 @@
 
 mod app;
 mod sequencer;
+mod keyframe;
 pub use app::App;

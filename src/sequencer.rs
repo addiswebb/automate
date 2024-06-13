@@ -7,38 +7,9 @@ use eframe::egui::{self, pos2, Ui, Vec2};
 use egui::{emath::RectTransform, Pos2, Rect};
 use serde::{Deserialize, Serialize};
 
+use crate::keyframe::{Keyframe, KeyframeType};
+
 const ROW_HEIGHT: f32 = 24.0;
-
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub enum KeyframeType {
-    KeyBtn(rdev::Key),      //0
-    MouseBtn(rdev::Button), //1
-    MouseMove(Vec2),        //2
-}
-
-#[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct Keyframe {
-    pub timestamp: f32,
-    /*
-       For mouse move, it interplates over the duration
-       For mouse btn, it holds button for the duration
-       For key btn, it holds button for durration (allows for repeated keystrokes)
-    */
-    pub duration: f32,
-    pub keyframe_type: KeyframeType,
-    pub id: u8,
-}
-
-impl Default for Keyframe {
-    fn default() -> Self {
-        Self {
-            timestamp: 0.0,
-            duration: 0.0,
-            keyframe_type: KeyframeType::KeyBtn(rdev::Key::Space),
-            id: 0,
-        }
-    }
-}
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct SequencerState {
@@ -631,6 +602,7 @@ impl Sequencer {
                 ui.heading("Debug");
                 let (w, h) = rdev::display_size().unwrap();
                 ui.label(format!("Display: ({},{})", w, h));
+                //todo: add mouse position
                 ui.horizontal(|ui| {
                     ui.label("Offset: ");
                     ui.add(egui::DragValue::new(&mut self.offset.x).speed(1))

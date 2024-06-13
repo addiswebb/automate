@@ -1,7 +1,7 @@
 use std::{fs::File, io::{Read, Write}, time::Instant};
 use rfd::FileDialog;
 
-use crate::sequencer::{Keyframe, Sequencer, SequencerState};
+use crate::sequencer::{Sequencer, SequencerState};
 
 
 /// We derive Deserialize/Serialize so we can persist app state on shutdown.
