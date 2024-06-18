@@ -667,25 +667,8 @@ impl Sequencer {
     }
     fn scroll_bar(&mut self, ui: &mut Ui, max_t: f32) {
         let t_width= ui.max_rect().width() * (1.0 / scale(ui, 1.0, self.scale));
-        let mut t_ratio = t_width/max_t;
-        if t_ratio >= 1.0{
-            t_ratio = 1.0;
-        }
+        let t_ratio = (t_width/max_t).clamp(0.0, 1.0);
         
-        let rect = time_to_rect(
-                        scale(ui, 0.0, self.scale),
-                        scale(ui, t_width, self.scale),
-                        0.0,
-                        ui.spacing().item_spacing,
-                        ui.max_rect(),
-                    ).unwrap();
-
-        ui.painter().rect(
-            rect,
-            egui::Rounding::same(2.0),
-            egui::Color32::TRANSPARENT,
-            egui::Stroke::new(0.2, egui::Color32::LIGHT_GRAY),
-        );
         let x = self.scroll.clamp(0.0, t_width-(t_width*t_ratio));
         let rect = time_to_rect(
                         scale(ui, x, self.scale),
@@ -698,7 +681,7 @@ impl Sequencer {
             rect,
             egui::Rounding::same(2.0),
             egui::Color32::DARK_GRAY,
-            egui::Stroke::new(1.0, egui::Color32::LIGHT_GRAY),
+            egui::Stroke::new(1.0, egui::Color32::DARK_GRAY),
         );
         
     }

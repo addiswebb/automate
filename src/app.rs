@@ -15,6 +15,7 @@ pub struct App {
     #[serde(skip)]
     last_instant: Instant,
     offset: Vec2,
+    #[serde(skip)] 
     file: String,
     #[serde(skip)] 
     allowed_to_close: bool,
