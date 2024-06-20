@@ -477,6 +477,7 @@ impl Sequencer {
         }
         if let Some(i) = keyframe_to_delete {
             keyframes.remove(i);
+            self.changed.swap(true, Ordering::Relaxed);
         }
     }
     fn render_control_bar(&mut self, ui: &mut Ui) {
@@ -839,10 +840,14 @@ impl Sequencer {
             egui::Sense::click_and_drag(),
         );
         if response.clicked() {
-            let mut keyframe_state = self.keyframe_state.lock().unwrap();
-            for i in 0..keyframe_state.len() {
-                keyframe_state[i] = 0;
-            }
+            ui.input(|i| {
+                if !i.modifiers.ctrl {
+                    let mut keyframe_state = self.keyframe_state.lock().unwrap();
+                    for i in 0..keyframe_state.len() {
+                        keyframe_state[i] = 0;
+                    }
+                }
+            });
         }
         if response.drag_started() {
             ui.input(|i| {
