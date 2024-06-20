@@ -372,16 +372,18 @@ impl Sequencer {
                 }
                 let rect = rect.unwrap();
                 {
-                    let a = rect.min;
-                    let b = pos2(rect.max.x, rect.min.y);
-                    let c = pos2(rect.min.x, rect.max.y);
-                    let d = rect.max;
-                    if self.compute_selection_rect(max_rect).contains(a)
-                        || self.compute_selection_rect(max_rect).contains(b)
-                        || self.compute_selection_rect(max_rect).contains(c)
-                        || self.compute_selection_rect(max_rect).contains(d)
-                    {
-                        self.keyframe_state.lock().unwrap()[i] = 2;
+                    let selection_rect = self.compute_selection_rect(max_rect);
+                    if self.selecting {
+                        self.keyframe_state.lock().unwrap()[i] = if selection_rect
+                            .contains(rect.left_top())
+                            || selection_rect.contains(rect.right_top())
+                            || selection_rect.contains(rect.left_bottom())
+                            || selection_rect.contains(rect.right_bottom())
+                        {
+                            2
+                        } else {
+                            0
+                        };
                     }
                 }
 
@@ -857,6 +859,14 @@ impl Sequencer {
                 }
             }
         });
+        if response.hovered(){
+            ui.input(|i|{
+                if i.pointer.any_pressed(){
+                    self.selection.min = response.interact_pointer_pos().unwrap();
+                    self.selection.max = self.selection.min;
+                }
+            });
+        }
         if response.clicked() {
             ui.input(|i| {
                 if !i.modifiers.ctrl {
@@ -877,8 +887,6 @@ impl Sequencer {
                 }
             });
             self.selecting = true;
-            self.selection.min = response.interact_pointer_pos().unwrap();
-            self.selection.max = self.selection.min;
         }
         if self.selecting {
             self.selection.max += response.drag_delta();
