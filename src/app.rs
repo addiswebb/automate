@@ -167,8 +167,7 @@ impl eframe::App for App {
                 }
             }
             if i.viewport().close_requested()
-                && !self.sequencer.keyframes.lock().unwrap().is_empty()
-                && self.file == "untitled.auto".to_string()
+                && !self.saved_file_uptodate
             {
                 if !self.allowed_to_close{
                     log::info!("Close without saving?");
@@ -183,7 +182,7 @@ impl eframe::App for App {
                 .resizable(false)
                 .movable(true)
                 .collapsible(false)
-                .fixed_size(Vec2::new(200., 80.))
+                .fixed_size(Vec2::new(400., 150.))
                 .show(ctx, |ui| {
                     ui.heading("Do you want to save changes to Untitled?");
                     ui.horizontal(|ui| {

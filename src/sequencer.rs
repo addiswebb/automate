@@ -231,8 +231,8 @@ impl Sequencer {
                                 }
                             }
                             rdev::EventType::Wheel { delta_x, delta_y } => {
-                                match *delta_x == 0 && *delta_y == 0{
-                                    true =>  None,
+                                match *delta_x == 0 && *delta_y == 0 {
+                                    true => None,
                                     false => Some(Keyframe {
                                         timestamp: dt.as_secs_f32(),
                                         duration: 0.1,
@@ -241,7 +241,7 @@ impl Sequencer {
                                             *delta_y as f32,
                                         )),
                                         id: 2,
-                                    })
+                                    }),
                                 }
                             } //_ => None,
                         };
@@ -377,17 +377,23 @@ impl Sequencer {
                 let rect = rect.unwrap();
                 {
                     let selection_rect = self.compute_selection_rect(max_rect);
+
+                    let mut ctrl = false;
+                    ui.input(|i| {
+                        ctrl = i.modifiers.ctrl;
+                    });
                     if self.selecting {
-                        self.keyframe_state.lock().unwrap()[i] = if selection_rect
-                            .contains(rect.left_top())
+                        if selection_rect.contains(rect.left_top())
                             || selection_rect.contains(rect.right_top())
                             || selection_rect.contains(rect.left_bottom())
                             || selection_rect.contains(rect.right_bottom())
                         {
-                            2
-                        } else {
-                            0
-                        };
+                            self.keyframe_state.lock().unwrap()[i] = 2;
+                        }else{
+                            if !ctrl{
+                                self.keyframe_state.lock().unwrap()[i] = 0;
+                            }
+                        }
                     }
                 }
 
@@ -410,28 +416,37 @@ impl Sequencer {
                     _ => egui::Stroke::new(0.4, egui::Color32::from_rgb(15, 37, 42)), //Not selected
                 };
 
-                let keyframe = ui
-                    .put(
-                        rect,
-                        egui::Button::new(
-                            egui::RichText::new(format!("{}", label)).color(egui::Color32::BLACK),
-                        )
-                        .sense(egui::Sense::click_and_drag())
-                        .wrap(false)
-                        .fill(egui::Color32::from_rgb(95, 186, 213))
-                        .stroke(stroke),
-                    )
-                    .on_hover_text(format!("{:?}", keyframes[i].keyframe_type));
+                // let keyframe = ui
+                //     .put(
+                //         rect,
+                //         egui::Button::new(
+                //             egui::RichText::new(format!("{}", label)).color(egui::Color32::BLACK),
+                //         )
+                //         .sense(egui::Sense::click_and_drag())
+                //         .wrap(false)
+                //         .fill(egui::Color32::from_rgb(95, 186, 213))
+                //         .stroke(stroke),
+                //     )
+                //     .on_hover_text(format!("{:?}", keyframes[i].keyframe_type));
+                let keyframe = ui.allocate_rect(rect, egui::Sense::click_and_drag());
+                ui.painter().rect(
+                    rect,
+                    egui::Rounding::same(2.0),
+                    egui::Color32::from_rgb(95, 186, 213),
+                    stroke,
+                );
 
                 if keyframe.clicked() {
                     if self.selected_keyframe == Some(i)
                         || self.keyframe_state.lock().unwrap()[i] == 2
                     {
+                        println!("d");
                         self.keyframe_state.lock().unwrap()[i] = 0;
                         self.selected_keyframe = None;
                     } else {
                         ui.input(|i| {
                             if !i.modifiers.ctrl {
+                                println!("kf clicked but not selected: {:?}",i.modifiers);
                                 let mut keyframe_state = self.keyframe_state.lock().unwrap();
                                 for i in 0..keyframe_state.len() {
                                     keyframe_state[i] = 0;
@@ -874,6 +889,7 @@ impl Sequencer {
         if response.clicked() {
             ui.input(|i| {
                 if !i.modifiers.ctrl {
+                    println!("missed {:?}",i.modifiers);
                     let mut keyframe_state = self.keyframe_state.lock().unwrap();
                     for i in 0..keyframe_state.len() {
                         keyframe_state[i] = 0;
@@ -884,6 +900,7 @@ impl Sequencer {
         if response.drag_started() {
             ui.input(|i| {
                 if !i.modifiers.ctrl {
+                    println!("drag start {:?}",i.modifiers);
                     let mut keyframe_state = self.keyframe_state.lock().unwrap();
                     for i in 0..keyframe_state.len() {
                         keyframe_state[i] = 0;
