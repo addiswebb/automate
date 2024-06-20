@@ -23,9 +23,15 @@ pub struct SequencerState {
 #[serde(default)] // if we add new fields, give them default values when deserializing old state
 pub struct Sequencer {
     #[serde(skip)]
+    pub changed: Arc<AtomicBool>,
+    #[serde(skip)]
     dragging: bool,
     #[serde(skip)]
     drag_start: Pos2,
+    #[serde(skip)]
+    selecting: bool,
+    #[serde(skip)]
+    selection: Rect,
     //can_resize: bool,
     //resize_left: bool, //left: true, right: false
     #[serde(skip)]
@@ -35,7 +41,7 @@ pub struct Sequencer {
     #[serde(skip)]
     pub selected_keyframe: Option<usize>,
     #[serde(skip)]
-    pub playing_keyframes: Arc<Mutex<Vec<usize>>>,
+    pub keyframe_state: Arc<Mutex<Vec<usize>>>,
     scale: f32, // egui points to seconds scale
     repeats: i32,
     speed: f32,
@@ -63,18 +69,20 @@ pub struct Sequencer {
 impl Sequencer {
     pub fn new() -> Self {
         let keyframes: Arc<Mutex<Vec<Keyframe>>> = Arc::new(Mutex::new(vec![]));
-        let playing_keyframes = Arc::new(Mutex::new(vec![]));
+        let keyframe_state = Arc::new(Mutex::new(vec![]));
         let recording = Arc::new(AtomicBool::new(false));
         let play = Arc::new(AtomicBool::new(false));
         let mouse_movement_record_resolution = Arc::new(AtomicI32::new(20));
         let recording_instant = Arc::new(Mutex::new(Instant::now()));
+        let changed = Arc::new(AtomicBool::new(false));
 
         let shared_kfs = Arc::clone(&keyframes);
-        let shared_pkfs = Arc::clone(&playing_keyframes);
+        let shared_pkfs = Arc::clone(&keyframe_state);
         let shared_rec = Arc::clone(&recording);
         let shared_play = Arc::clone(&play);
         let shared_count = Arc::clone(&mouse_movement_record_resolution);
         let shared_instant = Arc::clone(&recording_instant);
+        let shared_changed = Arc::clone(&changed);
 
         let mut mouse_presses = vec![];
         let mut mouse_pressed_at = vec![];
@@ -189,6 +197,7 @@ impl Sequencer {
                                     let index = indices_to_remove[i] - (i * 1);
                                     key_presses.remove(index);
                                     key_pressed_at.remove(index);
+                                    shared_changed.swap(true, Ordering::Relaxed);
                                 }
 
                                 match found_press {
@@ -230,14 +239,14 @@ impl Sequencer {
                                 )),
                                 id: 3,
                             }),
-                            //Todo: add scroll
-                            _ => None,
+                            //_ => None,
                         };
                         if keyframe.is_some() {
                             let mut keyframes = shared_kfs.lock().unwrap();
-                            let mut playing_keyframes = shared_pkfs.lock().unwrap();
+                            let mut keyframe_state = shared_pkfs.lock().unwrap();
                             keyframes.push(keyframe.unwrap());
-                            playing_keyframes.push(0);
+                            keyframe_state.push(0);
+                            shared_changed.swap(true, Ordering::Relaxed);
                         }
                     }
                 }) {
@@ -246,8 +255,11 @@ impl Sequencer {
             });
         Self {
             keyframes,
+            changed,
             drag_start: pos2(0., 0.),
             dragging: false,
+            selection: Rect::ZERO,
+            selecting: false,
             //can_resize: false,
             resizing: false,
             //resize_left: false,
@@ -260,7 +272,7 @@ impl Sequencer {
             play,
             mouse_movement_record_resolution,
             selected_keyframe: None,
-            playing_keyframes,
+            keyframe_state,
             recording,
             clear_before_recording: true,
             was_recording: false,
@@ -278,7 +290,7 @@ impl Sequencer {
     }
     pub fn load_from_state(&mut self, state: SequencerState) {
         let mut shared_kfs = self.keyframes.lock().unwrap();
-        let mut shared_pkfs = self.playing_keyframes.lock().unwrap();
+        let mut shared_pkfs = self.keyframe_state.lock().unwrap();
         shared_kfs.clear();
         shared_kfs.extend(state.keyframes.into_iter());
         shared_pkfs.clear();
@@ -300,7 +312,7 @@ impl Sequencer {
     pub fn toggle_recording(&mut self) {
         if !self.recording.load(Ordering::Relaxed) {
             let mut keyframes = self.keyframes.lock().unwrap();
-            let mut playing_keyframes = self.playing_keyframes.lock().unwrap();
+            let mut keyframe_state = self.keyframe_state.lock().unwrap();
             let last = keyframes.last().unwrap();
             if (last.timestamp + last.duration - self.time).abs() <= 0.04 {
                 let is_record_stop_keyframe = match last.keyframe_type {
@@ -310,23 +322,23 @@ impl Sequencer {
                 };
                 if is_record_stop_keyframe {
                     keyframes.pop();
-                    playing_keyframes.pop();
+                    keyframe_state.pop();
                 }
             }
             std::mem::drop(keyframes);
-            std::mem::drop(playing_keyframes);
+            std::mem::drop(keyframe_state);
             if self.clear_before_recording {
                 self.time = 0.;
             }
             log::info!("Stop Recording");
         } else {
             let mut keyframes = self.keyframes.lock().unwrap();
-            let mut playing_keyframes = self.playing_keyframes.lock().unwrap();
+            let mut keyframe_state = self.keyframe_state.lock().unwrap();
             let mut rec_instant = self.recording_instant.lock().unwrap();
             if self.clear_before_recording {
                 self.time = 0.;
                 keyframes.clear();
-                playing_keyframes.clear();
+                keyframe_state.clear();
                 let _ = std::mem::replace(&mut *rec_instant, Instant::now());
             } else {
                 let _ = std::mem::replace(
@@ -341,20 +353,27 @@ impl Sequencer {
         let mut keyframe_to_delete: Option<usize> = None;
         let max_rect = ui.max_rect();
         let mut keyframes = self.keyframes.lock().unwrap();
-        let offset = scale(ui,self.scroll, self.scale);
+        let offset = scale(ui, self.scroll, self.scale);
         for i in 0..keyframes.len() {
             if keyframes[i].id == id {
                 let rect = time_to_rect(
-                    scale(ui, keyframes[i].timestamp, self.scale)-offset,
-                    scale(ui, keyframes[i].duration, self.scale)-offset,
-                    scale(ui, ui.max_rect().width() * (1.0 / scale(ui, 1.0, self.scale)) , self.scale),
+                    scale(ui, keyframes[i].timestamp, self.scale) - offset,
+                    scale(ui, keyframes[i].duration, self.scale) - offset,
+                    scale(
+                        ui,
+                        ui.max_rect().width() * (1.0 / scale(ui, 1.0, self.scale)),
+                        self.scale,
+                    ),
                     ui.spacing().item_spacing,
                     max_rect,
                 );
-                if rect.is_none(){
+                if rect.is_none() {
                     continue;
                 }
                 let rect = rect.unwrap();
+                if self.compute_selection_rect(max_rect).contains_rect(rect) {
+                    self.keyframe_state.lock().unwrap()[i] = 2;
+                }
 
                 let width = rect.width();
                 let mut label = format!("{:?}", keyframes[i].keyframe_type);
@@ -369,16 +388,12 @@ impl Sequencer {
                     };
                 }
 
-                let mut stroke = if self.selected_keyframe == Some(i) {
-                    egui::Stroke::new(1.5, egui::Color32::from_rgb(233, 181, 125))
-                //Selected
-                } else {
-                    egui::Stroke::new(0.4, egui::Color32::from_rgb(15, 37, 42)) //Not selected
+                let stroke = match self.keyframe_state.lock().unwrap()[i] {
+                    1 => egui::Stroke::new(1.5, egui::Color32::LIGHT_RED), //Playing
+                    2 => egui::Stroke::new(1.5, egui::Color32::from_rgb(233, 181, 125)), //Selected
+                    _ => egui::Stroke::new(0.4, egui::Color32::from_rgb(15, 37, 42)), //Not selected
                 };
 
-                if self.playing_keyframes.lock().unwrap()[i] == 1 {
-                    stroke = egui::Stroke::new(1.5, egui::Color32::LIGHT_RED); //Playing
-                }
                 let keyframe = ui
                     .put(
                         rect,
@@ -393,10 +408,22 @@ impl Sequencer {
                     .on_hover_text(format!("{:?}", keyframes[i].keyframe_type));
 
                 if keyframe.clicked() {
-                    self.selected_keyframe = if self.selected_keyframe == Some(i) {
-                        None
+                    if self.selected_keyframe == Some(i)
+                        || self.keyframe_state.lock().unwrap()[i] == 2
+                    {
+                        self.keyframe_state.lock().unwrap()[i] = 0;
+                        self.selected_keyframe = None;
                     } else {
-                        Some(i)
+                        ui.input(|i| {
+                            if !i.modifiers.ctrl {
+                                let mut keyframe_state = self.keyframe_state.lock().unwrap();
+                                for i in 0..keyframe_state.len() {
+                                    keyframe_state[i] = 0;
+                                }
+                            }
+                        });
+                        self.keyframe_state.lock().unwrap()[i] = 2;
+                        self.selected_keyframe = Some(i);
                     }
                 }
 
@@ -409,17 +436,23 @@ impl Sequencer {
                 if keyframe.hovered() {
                     ui.output_mut(|o| o.cursor_icon = egui::CursorIcon::PointingHand);
                 }
+
                 if self.dragging {
                     if let Some(end) = keyframe.interact_pointer_pos() {
-                        let x = 1.0 / scale(ui, 1.0, self.scale);
-                        let drag_delta = end.x - self.drag_start.x;
-                        let t = keyframes[i].timestamp + drag_delta * x;
-                        //&& t < pos_to_time(max_rect.max, max_rect)-self.keyframes[i].duration
-                        //stop from going to far left vv | ^^ to far right
+                        let drag_delta =
+                            (end.x - self.drag_start.x) * (1.0 / scale(ui, 1.0, self.scale));
+                        let t = keyframes[i].timestamp + drag_delta;
                         if t > 0.0 {
+                            let state = self.keyframe_state.lock().unwrap();
                             keyframes[i].timestamp = t;
+                            for j in 0..state.len() {
+                                if state[j] == 2 && j != i {
+                                    keyframes[j].timestamp += drag_delta;
+                                }
+                            }
                             self.drag_start.x = end.x;
-                        }
+                            self.changed.swap(true, Ordering::Relaxed);
+                        } 
                     }
                 }
                 if keyframe.drag_stopped() {
@@ -446,7 +479,6 @@ impl Sequencer {
             keyframes.remove(i);
         }
     }
-
     fn render_control_bar(&mut self, ui: &mut Ui) {
         if ui.button("⏪").on_hover_text("Restart").clicked() {
             self.reset_time();
@@ -525,7 +557,7 @@ impl Sequencer {
                 .clamp_range(0.0..=1000.0),
         )
         .on_hover_text("Scroll");
-        
+
         if self.recording.load(Ordering::Relaxed) {
             if ui.button("⏹").on_hover_text("Stop Recording: F8").clicked() {
                 self.recording.swap(false, Ordering::Relaxed);
@@ -541,8 +573,12 @@ impl Sequencer {
         }
     }
     fn render_timeline(&self, ui: &mut Ui) {
-        let pos = time_to_rect(0.0, 0.0,0.0, ui.spacing().item_spacing, ui.max_rect()).unwrap().min;
-        for i in 0..(ui.max_rect().width() * (1.0 / scale(ui, 1.0, self.scale)) + self.scroll).ceil() as i32 {
+        let pos = time_to_rect(0.0, 0.0, 0.0, ui.spacing().item_spacing, ui.max_rect())
+            .unwrap()
+            .min;
+        for i in 0..(ui.max_rect().width() * (1.0 / scale(ui, 1.0, self.scale)) + self.scroll)
+            .ceil() as i32
+        {
             let point = pos + egui::vec2(scale(ui, i as f32 - self.scroll, self.scale), 0.0);
             ui.painter().text(
                 point,
@@ -560,23 +596,22 @@ impl Sequencer {
             );
         }
     }
-    fn render_playhead(&mut self, ui: &mut Ui, rows: i32) {
+    fn render_playhead(&mut self, ui: &mut Ui, rows: i32, rect: Rect) {
         let point = time_to_rect(
             scale(ui, self.time, self.scale),
             0.0,
             0.0,
             ui.spacing().item_spacing,
-            ui.max_rect(),
-        ).unwrap()
+            rect,
+        )
+        .unwrap()
         .min;
 
-        let p1 = pos2(
-            point.x,
-            ui.max_rect().min.y - (ROW_HEIGHT * (rows - 1) as f32) - (3 * rows) as f32,
-        );
+        // let point = point;
+        let p1 = pos2(point.x + 1., point.y - 5.);
         let p2 = pos2(p1.x, p1.y + ROW_HEIGHT * rows as f32 + (3 * rows) as f32);
         ui.painter().text(
-            p1 - egui::vec2(0.0, 2.0),
+            p1 - egui::vec2(0.0, 4.0),
             egui::Align2::CENTER_TOP,
             "⏷",
             egui::FontId::monospace(10.0),
@@ -588,6 +623,7 @@ impl Sequencer {
     pub fn show(&mut self, ctx: &egui::Context) {
         egui::TopBottomPanel::bottom("Sequencer").show(ctx, |ui| {
             use egui_extras::{Column, TableBuilder};
+            let mut max_rect = Rect::ZERO;
             let mut table = TableBuilder::new(ui)
                 .striped(false)
                 .resizable(false)
@@ -622,6 +658,8 @@ impl Sequencer {
                             ui.label("Keyboard");
                         });
                         row.col(|ui| {
+                            max_rect = ui.max_rect();
+                            self.sense(ui);
                             self.render_keyframes(ui, 0);
                         });
                     });
@@ -631,6 +669,7 @@ impl Sequencer {
                             ui.label("Mouse");
                         });
                         row.col(|ui| {
+                            self.sense(ui);
                             self.render_keyframes(ui, 1);
                             self.render_keyframes(ui, 3);
                         });
@@ -640,21 +679,22 @@ impl Sequencer {
                             ui.label("Movement");
                         });
                         row.col(|ui| {
+                            self.sense(ui);
                             self.render_keyframes(ui, 2);
-                            self.render_playhead(ui, 3);
                         });
                     });
                     body.row(ROW_HEIGHT, |mut row| {
                         row.col(|_| {});
                         row.col(|ui| {
-                            let mut max_t = ui.max_rect().width() * (1.0 / scale(ui, 1.0, self.scale));
+                            let mut max_t =
+                                ui.max_rect().width() * (1.0 / scale(ui, 1.0, self.scale));
                             {
                                 let keyframes = self.keyframes.lock().unwrap();
                                 let last = keyframes.last();
-                                if last.is_some(){
+                                if last.is_some() {
                                     let last = last.unwrap();
                                     let t = last.timestamp + last.duration;
-                                    if t >= max_t{
+                                    if t >= max_t {
                                         max_t = t;
                                     }
                                 }
@@ -663,27 +703,40 @@ impl Sequencer {
                         });
                     });
                 });
+
+            max_rect.max.y += ROW_HEIGHT * 2.0;
+            if self.selecting {
+                let rect = self.compute_selection_rect(max_rect);
+                ui.painter().rect(
+                    rect,
+                    egui::Rounding::same(2.0),
+                    egui::Color32::from_rgba_unmultiplied(0xAD, 0xD8, 0xE6, 20),
+                    egui::Stroke::new(0.4, egui::Color32::DARK_BLUE),
+                );
+            }
+
+            self.render_playhead(ui, 3, max_rect);
         });
     }
     fn scroll_bar(&mut self, ui: &mut Ui, max_t: f32) {
-        let t_width= ui.max_rect().width() * (1.0 / scale(ui, 1.0, self.scale));
-        let t_ratio = (t_width/max_t).clamp(0.0, 1.0);
-        
-        let x = self.scroll.clamp(0.0, t_width-(t_width*t_ratio));
+        let t_width = ui.max_rect().width() * (1.0 / scale(ui, 1.0, self.scale));
+        let t_ratio = (t_width / max_t).clamp(0.0, 1.0);
+
+        let x = self.scroll.clamp(0.0, t_width - (t_width * t_ratio));
         let rect = time_to_rect(
-                        scale(ui, x, self.scale),
-                        scale(ui, t_width* t_ratio-0.01,self.scale),
-                        0.0,
-                        ui.spacing().item_spacing,
-                        ui.max_rect(),
-                    ).unwrap();
+            scale(ui, x, self.scale),
+            scale(ui, t_width * t_ratio - 0.01, self.scale),
+            0.0,
+            ui.spacing().item_spacing,
+            ui.max_rect(),
+        )
+        .unwrap();
         ui.painter().rect(
             rect,
             egui::Rounding::same(2.0),
             egui::Color32::DARK_GRAY,
             egui::Stroke::new(1.0, egui::Color32::DARK_GRAY),
         );
-        
     }
     pub fn debug_panel(&mut self, ctx: &egui::Context, offset: &mut Vec2) {
         egui::SidePanel::right("Debug")
@@ -693,6 +746,7 @@ impl Sequencer {
                 ui.heading("Debug");
                 let (w, h) = rdev::display_size().unwrap();
                 ui.label(format!("Display: ({},{})", w, h));
+                ui.label(format!("selection: {:?}", self.selection));
                 //todo: add mouse position
                 ui.horizontal(|ui| {
                     ui.label("Offset: ");
@@ -701,7 +755,7 @@ impl Sequencer {
                     ui.add(egui::DragValue::new(&mut offset.y).speed(1))
                         .on_hover_text("Y");
                 });
-                //ui.label(format!("Keyframe state: {:?}", self.playing_keyframes));
+                //ui.label(format!("Keyframe state: {:?}", self.keyframe_state));
                 ui.label(format!(
                     "Rec: {}",
                     self.was_recording == self.recording.load(Ordering::Relaxed)
@@ -760,6 +814,57 @@ impl Sequencer {
                 }
             });
     }
+    fn compute_selection_rect(&self, max_rect: Rect) -> Rect {
+        let mut rect = self.selection;
+        if self.selection.min.y > self.selection.max.y {
+            rect = Rect {
+                min: pos2(rect.min.x, rect.max.y),
+                max: pos2(rect.max.x, rect.min.y),
+            };
+        }
+        if self.selection.min.x > self.selection.max.x {
+            rect = Rect {
+                min: pos2(rect.max.x, rect.min.y),
+                max: pos2(rect.min.x, rect.max.y),
+            };
+        }
+        Rect {
+            min: rect.min.clamp(max_rect.min, max_rect.max),
+            max: rect.max.clamp(max_rect.min, max_rect.max),
+        }
+    }
+    fn sense(&mut self, ui: &mut Ui) {
+        let response = ui.allocate_response(
+            ui.available_size_before_wrap(),
+            egui::Sense::click_and_drag(),
+        );
+        if response.clicked() {
+            let mut keyframe_state = self.keyframe_state.lock().unwrap();
+            for i in 0..keyframe_state.len() {
+                keyframe_state[i] = 0;
+            }
+        }
+        if response.drag_started() {
+            ui.input(|i| {
+                if !i.modifiers.ctrl {
+                    let mut keyframe_state = self.keyframe_state.lock().unwrap();
+                    for i in 0..keyframe_state.len() {
+                        keyframe_state[i] = 0;
+                    }
+                }
+            });
+            self.selecting = true;
+            self.selection.min = response.interact_pointer_pos().unwrap();
+            self.selection.max = self.selection.min;
+        }
+        if self.selecting {
+            self.selection.max += response.drag_delta();
+        }
+        if response.drag_stopped() {
+            self.selecting = false;
+            self.selection = Rect::ZERO;
+        }
+    }
     pub fn update(&mut self, last_instant: &mut Instant, ctx: &egui::Context, offset: Vec2) {
         if self.was_recording != self.recording.load(Ordering::Relaxed) {
             self.was_recording = self.recording.load(Ordering::Relaxed);
@@ -769,9 +874,9 @@ impl Sequencer {
             }
         }
         let keyframes = self.keyframes.lock().unwrap();
-        let mut playing_keyframes = self.playing_keyframes.lock().unwrap();
+        let mut keyframe_state = self.keyframe_state.lock().unwrap();
         if self.recording.load(Ordering::Relaxed) {
-            if keyframes.len() != playing_keyframes.len() {
+            if keyframes.len() != keyframe_state.len() {
                 panic!("playing vec is out of sync")
             }
         }
@@ -798,19 +903,19 @@ impl Sequencer {
             //The playhead has moved if the current time is not equal to the previous time
             for i in 0..keyframes.len() {
                 let keyframe = &keyframes[i];
-                let current_keyframe_state = playing_keyframes[i]; //1 if playing, 0 if not
+                let current_keyframe_state = keyframe_state[i]; //1 if playing, 0 if not
                 if self.time >= keyframe.timestamp
                     && self.time <= keyframe.timestamp + keyframe.duration
                 {
-                    playing_keyframes[i] = 1; //change keyframe state to playing, highlight
-                    if current_keyframe_state != playing_keyframes[i] {
+                    keyframe_state[i] = 1; //change keyframe state to playing, highlight
+                    if current_keyframe_state != keyframe_state[i] {
                         if play {
                             handle_playing_keyframe(keyframe, true, offset);
                         }
                     }
                 } else {
-                    playing_keyframes[i] = 0; //change keyframe state to not playing, no highlight
-                    if current_keyframe_state != playing_keyframes[i] {
+                    keyframe_state[i] = 0; //change keyframe state to not playing, no highlight
+                    if current_keyframe_state != keyframe_state[i] {
                         if play {
                             handle_playing_keyframe(keyframe, false, offset);
                         }
@@ -871,13 +976,10 @@ impl Default for Sequencer {
         Self::new()
     }
 }
-fn time_to_rect(t: f32, d: f32, max_t: f32,spacing: Vec2, res_rect: Rect) -> Option<Rect> {
+fn time_to_rect(t: f32, d: f32, max_t: f32, spacing: Vec2, res_rect: Rect) -> Option<Rect> {
     let to_screen =
         RectTransform::from_to(Rect::from_min_size(Pos2::ZERO, res_rect.size()), res_rect);
-    let mut p1 = Pos2 {
-        x: t,
-        y: 0.0,
-    };
+    let mut p1 = Pos2 { x: t, y: 0.0 };
     let height = ROW_HEIGHT - (spacing.y * 2.0);
     let width = if d < height { height } else { d };
     let mut p2 = p1
@@ -885,18 +987,19 @@ fn time_to_rect(t: f32, d: f32, max_t: f32,spacing: Vec2, res_rect: Rect) -> Opt
             x: width,
             y: height,
         };
-    if max_t != 0.0 { // 0.0 is for non-keyframe use cases to ignore
-        if p1.x > max_t || p2.x < 0.0{
-            return None
+    if max_t != 0.0 {
+        // 0.0 is for non-keyframe use cases to ignore
+        if p1.x > max_t || p2.x < 0.0 {
+            return None;
         }
-        if p2.x > max_t{
-            p2.x = max_t-1.0;
+        if p2.x > max_t {
+            p2.x = max_t - 1.0;
         }
-        if p1.x < 0.0{
+        if p1.x < 0.0 {
             p1.x = 0.0;
         }
     }
-    
+
     Some(Rect {
         min: to_screen.transform_pos(p1 + Vec2::splat(spacing.y)),
         max: to_screen.transform_pos(p2),
@@ -1148,5 +1251,3 @@ fn scale(ui: &Ui, i: f32, scale: f32) -> f32 {
     let spacing = width / (num_of_digits);
     i * spacing
 }
-
-
