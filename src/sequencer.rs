@@ -371,8 +371,18 @@ impl Sequencer {
                     continue;
                 }
                 let rect = rect.unwrap();
-                if self.compute_selection_rect(max_rect).contains_rect(rect) {
-                    self.keyframe_state.lock().unwrap()[i] = 2;
+                {
+                    let a = rect.min;
+                    let b = pos2(rect.max.x, rect.min.y);
+                    let c = pos2(rect.min.x, rect.max.y);
+                    let d = rect.max;
+                    if self.compute_selection_rect(max_rect).contains(a)
+                        || self.compute_selection_rect(max_rect).contains(b)
+                        || self.compute_selection_rect(max_rect).contains(c)
+                        || self.compute_selection_rect(max_rect).contains(d)
+                    {
+                        self.keyframe_state.lock().unwrap()[i] = 2;
+                    }
                 }
 
                 let width = rect.width();
@@ -452,7 +462,7 @@ impl Sequencer {
                             }
                             self.drag_start.x = end.x;
                             self.changed.swap(true, Ordering::Relaxed);
-                        } 
+                        }
                     }
                 }
                 if keyframe.drag_stopped() {
@@ -839,6 +849,14 @@ impl Sequencer {
             ui.available_size_before_wrap(),
             egui::Sense::click_and_drag(),
         );
+        ui.input(|i| {
+            if i.modifiers.ctrl && i.key_pressed(egui::Key::A) {
+                let mut keyframe_state = self.keyframe_state.lock().unwrap();
+                for i in 0..keyframe_state.len() {
+                    keyframe_state[i] = 2;
+                }
+            }
+        });
         if response.clicked() {
             ui.input(|i| {
                 if !i.modifiers.ctrl {
