@@ -4,8 +4,8 @@ use std::time::Duration;
 use std::{thread, time::Instant};
 
 use eframe::egui::{self, pos2, Ui, Vec2};
-use egui::Widget;
 use egui::{emath::RectTransform, Pos2, Rect};
+use egui::{NumExt, Widget};
 use serde::{Deserialize, Serialize};
 
 use crate::keyframe::{Keyframe, KeyframeType};
@@ -173,7 +173,7 @@ impl Sequencer {
                                         timestamp: pressed_at.as_secs_f32(),
                                         duration: (dt - pressed_at).as_secs_f32(),
                                         keyframe_type: KeyframeType::MouseBtn(*btn),
-                                        id: 1,
+                                        id: 2,
                                     }),
                                     false => None,
                                 }
@@ -230,16 +230,20 @@ impl Sequencer {
                                     true => None,
                                 }
                             }
-                            rdev::EventType::Wheel { delta_x, delta_y } => Some(Keyframe {
-                                timestamp: dt.as_secs_f32(),
-                                duration: 0.1,
-                                keyframe_type: KeyframeType::Scroll(Vec2::new(
-                                    *delta_x as f32,
-                                    *delta_y as f32,
-                                )),
-                                id: 3,
-                            }),
-                            //_ => None,
+                            rdev::EventType::Wheel { delta_x, delta_y } => {
+                                match *delta_x == 0 && *delta_y == 0{
+                                    true =>  None,
+                                    false => Some(Keyframe {
+                                        timestamp: dt.as_secs_f32(),
+                                        duration: 0.1,
+                                        keyframe_type: KeyframeType::Scroll(Vec2::new(
+                                            *delta_x as f32,
+                                            *delta_y as f32,
+                                        )),
+                                        id: 2,
+                                    })
+                                }
+                            } //_ => None,
                         };
                         if keyframe.is_some() {
                             let mut keyframes = shared_kfs.lock().unwrap();
@@ -859,9 +863,9 @@ impl Sequencer {
                 }
             }
         });
-        if response.hovered(){
-            ui.input(|i|{
-                if i.pointer.any_pressed(){
+        if response.hovered() {
+            ui.input(|i| {
+                if i.pointer.any_pressed() {
                     self.selection.min = response.interact_pointer_pos().unwrap();
                     self.selection.max = self.selection.min;
                 }

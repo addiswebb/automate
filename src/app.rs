@@ -53,48 +53,40 @@ impl App {
         Default::default()
     }
     fn new_file(&mut self) {
-        self.sequencer.keyframes.lock().unwrap().clear();
-        self.sequencer.keyframe_state.lock().unwrap().clear();
-        self.sequencer.reset_time();
-        self.file = "untitled.auto".to_string();
-        self.sequencer.loaded_file = self.file.clone();
-        self.saved_file_uptodate = true;
+        if self.file != "untitled.auto"{
+            self.sequencer.keyframes.lock().unwrap().clear();
+            self.sequencer.keyframe_state.lock().unwrap().clear();
+            self.sequencer.reset_time();
+            self.file = "untitled.auto".to_string();
+            self.sequencer.loaded_file = self.file.clone();
+            self.saved_file_uptodate = true;
+            self.sequencer.changed.swap(false, Ordering::Relaxed);
+            log::info!("New file: {:?}","untitled.auto");
+        }else{
+            self.show_close_dialog = true;
+        }
     }
     fn save_file(&mut self){
         let state = self.sequencer.save_to_state();
-        let json = serde_json::to_string(&state);
+        let json = serde_json::to_string_pretty(&state);
         if json.is_ok() {
+            if self.file == "untitled.auto"{
+                self.file = FileDialog::new()
+                .add_filter("automate", &["auto"])
+                .set_directory("/")
+                .save_file()
+                .unwrap().file_name().unwrap().to_str().unwrap().to_string();
+            }
+
             let mut file = File::create(self.file.clone()).unwrap();
-            let json = json.unwrap();
-            file.write_all(json.as_bytes()).unwrap();
+            file.write_all(json.unwrap().as_bytes()).unwrap();
             self.sequencer.loaded_file = self.file.clone();
+            self.saved_file_uptodate = true;
+            self.sequencer.changed.swap(false, Ordering::Relaxed);
             log::info!("Save file: {:?}", self.file);
         } else {
             log::error!("Failed to save 'file.auto'");
         }
-        self.saved_file_uptodate = true;
-        self.sequencer.changed.swap(false, Ordering::Relaxed);
-    }
-    fn save_new_file(&mut self) {
-        let state = self.sequencer.save_to_state();
-        let json = serde_json::to_string(&state);
-        if json.is_ok() {
-            let path = FileDialog::new()
-                .add_filter("automate", &["auto"])
-                .set_directory("/")
-                .save_file()
-                .unwrap();
-            let mut file = File::create(path.clone()).unwrap();
-            let json = json.unwrap();
-            file.write_all(json.as_bytes()).unwrap();
-            self.file = path.file_name().unwrap().to_str().unwrap().to_string();
-            self.sequencer.loaded_file = self.file.clone();
-            log::info!("Save new file: {:?}", path);
-        } else {
-            log::error!("Failed to save 'file.auto'");
-        }
-        self.saved_file_uptodate = true;
-        self.sequencer.changed.swap(false, Ordering::Relaxed);
     }
     fn open_file(&mut self) {
         let path = FileDialog::new()
@@ -105,15 +97,21 @@ impl App {
         self.load_file(&path);
     }
     fn load_file(&mut self, path: &PathBuf) {
-        let mut file = File::open(path.clone()).unwrap();
-        let mut contents = String::new();
-        file.read_to_string(&mut contents).unwrap();
-        let data: SequencerState = serde_json::from_str(&contents.as_str()).unwrap();
-        self.sequencer.load_from_state(data);
-        self.file = path.file_name().unwrap().to_str().unwrap().to_string();
-        self.sequencer.loaded_file = self.file.clone();
-        log::info!("Load file: {:?}", path);
-        self.saved_file_uptodate = true;
+        let stream = File::open(path.clone());
+        if stream.is_ok(){
+            let mut file = stream.unwrap();
+            let mut contents = String::new();
+            file.read_to_string(&mut contents).unwrap();
+            let data: SequencerState = serde_json::from_str(&contents.as_str()).unwrap();
+            self.sequencer.load_from_state(data);
+            self.file = path.file_name().unwrap().to_str().unwrap().to_string();
+            self.sequencer.loaded_file = self.file.clone();
+            self.saved_file_uptodate = true;
+            log::info!("Load file: {:?}", path);
+        }else{
+            self.new_file();
+            log::info!("Failed to load file: {:?} - {:?}", path,stream.err().unwrap());
+        }
     }
     fn set_title(&self, ctx: &egui::Context){
         let saved = match self.saved_file_uptodate{
@@ -122,7 +120,7 @@ impl App {
         };
         ctx.send_viewport_cmd(egui::ViewportCommand::Title(format!(
             "{}{} - Automate",
-            self.file.replace(".auto", ""),
+            self.file,//.replace(".auto", ""),
             saved,
         )));
     }
@@ -145,6 +143,7 @@ impl eframe::App for App {
             self.saved_file_uptodate = false;
         }
         self.set_title(ctx);
+        let mut cancel_close = false;
         ctx.input(|i| {
             //Keybinds within app
             if i.key_released(egui::Key::F8) {
@@ -159,11 +158,12 @@ impl eframe::App for App {
             if i.key_pressed(egui::Key::ArrowRight) {
                 self.sequencer.step_time();
             }
-            if i.modifiers.ctrl && i.key_pressed(egui::Key::S){
-                if self.file != "untitled.auto"{
+            if i.modifiers.ctrl{
+                if i.key_pressed(egui::Key::S){
                     self.save_file();
-                }else{
-                    self.save_new_file();
+                }
+                if i.key_pressed(egui::Key::N){
+                    self.new_file();
                 }
             }
             if i.viewport().close_requested()
@@ -171,10 +171,9 @@ impl eframe::App for App {
                 && self.file == "untitled.auto".to_string()
             {
                 if !self.allowed_to_close{
-                    log::info!("Trying to close without saving");
+                    log::info!("Close without saving?");
                     self.show_close_dialog = true;
-                    //Todo: Make this work without freezing
-                    //ctx.send_viewport_cmd(egui::ViewportCommand::CancelClose); (this freezes)
+                    cancel_close = true;
                 }
             }
         });
@@ -189,7 +188,7 @@ impl eframe::App for App {
                     ui.heading("Do you want to save changes to Untitled?");
                     ui.horizontal(|ui| {
                         if ui.button("Save").clicked() {
-                            self.save_new_file();
+                            self.save_file();
                             self.show_close_dialog = false;
                             self.allowed_to_close = true;
                             ctx.send_viewport_cmd(egui::ViewportCommand::Close);
@@ -218,11 +217,7 @@ impl eframe::App for App {
                     }
 
                     if ui.button("Save").clicked() {
-                        if self.file != "untitled.auto"{
-                            self.save_file();
-                        }else{
-                            self.save_new_file();
-                        }
+                        self.save_file();
                         self.set_title(ctx);
                         ui.close_menu();
                     }
@@ -243,6 +238,9 @@ impl eframe::App for App {
         self.sequencer.debug_panel(ctx, &mut self.offset);
         self.sequencer.selected_panel(ctx);
 
+        if cancel_close{
+            ctx.send_viewport_cmd(egui::ViewportCommand::CancelClose);
+        }
         ctx.request_repaint();
     }
 }
