@@ -64,8 +64,6 @@ pub struct Sequencer {
     recording_instant: Arc<Mutex<Instant>>,
     #[serde(skip)]
     pub loaded_file: String,
-    #[serde(skip)]
-    max_rect: Rect,
 }
 
 impl Sequencer {
@@ -284,7 +282,6 @@ impl Sequencer {
             was_recording: false,
             recording_instant,
             loaded_file: "".to_string(),
-            max_rect: Rect::ZERO,
         }
     }
 
@@ -758,7 +755,6 @@ impl Sequencer {
 
             max_rect.max.y += ROW_HEIGHT * 2.0;
             if self.selecting {
-                self.max_rect = max_rect;
                 ui.painter().rect(
                     self.compute_selection_rect(max_rect),
                     egui::Rounding::same(2.0),
@@ -798,7 +794,6 @@ impl Sequencer {
                 ui.heading("Debug");
                 let (w, h) = rdev::display_size().unwrap();
                 ui.label(format!("Display: ({},{})", w, h));
-                ui.label(format!("calc selection: {:?}", self.compute_selection_rect(self.max_rect)));
                 ui.label(format!("selection: {:?}", self.selection));
                 //todo: add mouse position
                 ui.horizontal(|ui| {

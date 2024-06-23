@@ -166,6 +166,10 @@ impl eframe::App for App {
                     self.new_file();
                 }
             }
+            if i.key_pressed(egui::Key::Tab){
+                println!("{:?}",i.viewport().inner_rect.unwrap().size())
+            }
+
             if i.viewport().close_requested()
                 && !self.saved_file_uptodate
             {
