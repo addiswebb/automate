@@ -182,7 +182,7 @@ impl eframe::App for App {
                 .resizable(false)
                 .movable(true)
                 .collapsible(false)
-                .fixed_size(Vec2::new(400., 150.))
+                // .fixed_size(Vec2::new(400., 150.))
                 .show(ctx, |ui| {
                     ui.heading("Do you want to save changes to Untitled?");
                     ui.horizontal(|ui| {

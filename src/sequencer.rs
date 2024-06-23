@@ -5,7 +5,7 @@ use std::{thread, time::Instant};
 
 use eframe::egui::{self, pos2, Ui, Vec2};
 use egui::{emath::RectTransform, Pos2, Rect};
-use egui::{NumExt, Widget};
+use egui::{vec2, NumExt, Widget};
 use serde::{Deserialize, Serialize};
 
 use crate::keyframe::{Keyframe, KeyframeType};
@@ -64,6 +64,8 @@ pub struct Sequencer {
     recording_instant: Arc<Mutex<Instant>>,
     #[serde(skip)]
     pub loaded_file: String,
+    #[serde(skip)]
+    max_rect: Rect,
 }
 
 impl Sequencer {
@@ -240,7 +242,7 @@ impl Sequencer {
                                             *delta_x as f32,
                                             *delta_y as f32,
                                         )),
-                                        id: 2,
+                                        id: 3,
                                     }),
                                 }
                             } //_ => None,
@@ -282,6 +284,7 @@ impl Sequencer {
             was_recording: false,
             recording_instant,
             loaded_file: "".to_string(),
+            max_rect: Rect::ZERO,
         }
     }
 
@@ -353,13 +356,13 @@ impl Sequencer {
             log::info!("Start Recording");
         }
     }
-    fn render_keyframes(&mut self, ui: &mut Ui, id: u8) {
+    fn render_keyframes(&mut self, ui: &mut Ui, ids: Vec<u8>) {
         let mut keyframe_to_delete: Option<usize> = None;
         let max_rect = ui.max_rect();
         let mut keyframes = self.keyframes.lock().unwrap();
         let offset = scale(ui, self.scroll, self.scale);
         for i in 0..keyframes.len() {
-            if keyframes[i].id == id {
+            if ids.contains(&keyframes[i].id) {
                 let rect = time_to_rect(
                     scale(ui, keyframes[i].timestamp, self.scale) - offset,
                     scale(ui, keyframes[i].duration, self.scale) - offset,
@@ -376,23 +379,25 @@ impl Sequencer {
                 }
                 let rect = rect.unwrap();
                 {
-                    let selection_rect = self.compute_selection_rect(max_rect);
 
                     let mut ctrl = false;
                     ui.input(|i| {
                         ctrl = i.modifiers.ctrl;
                     });
                     if self.selecting {
-                        if selection_rect.contains(rect.left_top())
-                            || selection_rect.contains(rect.right_top())
-                            || selection_rect.contains(rect.left_bottom())
-                            || selection_rect.contains(rect.right_bottom())
+                        if selection_contains_keyframe(self.compute_selection_rect(max_rect), rect)
                         {
                             self.keyframe_state.lock().unwrap()[i] = 2;
-                        }else{
-                            if !ctrl{
+                        } else {
+                            if !ctrl {
                                 self.keyframe_state.lock().unwrap()[i] = 0;
                             }
+                        }
+                    }
+                    if self.selected_keyframe.is_some() {
+                        if self.selected_keyframe.unwrap() == i {
+                            // println!("{:?},{:?}",self.selection.min,rect.min);
+                            println!("{:?}",ids);
                         }
                     }
                 }
@@ -410,6 +415,13 @@ impl Sequencer {
                     };
                 }
 
+                let color = match keyframes[i].id {
+                    0 => egui::Color32::LIGHT_RED,              //Keyboard
+                    1 => egui::Color32::from_rgb(95, 186, 213), //Mouse move
+                    2 => egui::Color32::LIGHT_GREEN,            //Button Click
+                    3 => egui::Color32::LIGHT_YELLOW,           //Scroll
+                    _ => egui::Color32::LIGHT_GRAY,
+                };
                 let stroke = match self.keyframe_state.lock().unwrap()[i] {
                     1 => egui::Stroke::new(1.5, egui::Color32::LIGHT_RED), //Playing
                     2 => egui::Stroke::new(1.5, egui::Color32::from_rgb(233, 181, 125)), //Selected
@@ -428,31 +440,37 @@ impl Sequencer {
                 //         .stroke(stroke),
                 //     )
                 //     .on_hover_text(format!("{:?}", keyframes[i].keyframe_type));
-                let keyframe = ui.allocate_rect(rect, egui::Sense::click_and_drag());
+                let keyframe = ui
+                    .allocate_rect(rect, egui::Sense::click_and_drag())
+                    .on_hover_text(format!("{:?}", keyframes[i].keyframe_type));
                 ui.painter().rect(
                     rect,
                     egui::Rounding::same(2.0),
-                    egui::Color32::from_rgb(95, 186, 213),
+                    //egui::Color32::from_rgb(95, 186, 213),
+                    color,
                     stroke,
                 );
 
                 if keyframe.clicked() {
+                    let mut ctrl = false;
+                    ui.input(|i| {
+                        ctrl = i.modifiers.ctrl;
+                    });
                     if self.selected_keyframe == Some(i)
                         || self.keyframe_state.lock().unwrap()[i] == 2
                     {
-                        println!("d");
-                        self.keyframe_state.lock().unwrap()[i] = 0;
-                        self.selected_keyframe = None;
+                        println!("{}", ctrl);
+                        if !ctrl {
+                            self.keyframe_state.lock().unwrap()[i] = 0;
+                            self.selected_keyframe = None;
+                        }
                     } else {
-                        ui.input(|i| {
-                            if !i.modifiers.ctrl {
-                                println!("kf clicked but not selected: {:?}",i.modifiers);
-                                let mut keyframe_state = self.keyframe_state.lock().unwrap();
-                                for i in 0..keyframe_state.len() {
-                                    keyframe_state[i] = 0;
-                                }
+                        if !ctrl {
+                            let mut keyframe_state = self.keyframe_state.lock().unwrap();
+                            for i in 0..keyframe_state.len() {
+                                keyframe_state[i] = 0;
                             }
-                        });
+                        }
                         self.keyframe_state.lock().unwrap()[i] = 2;
                         self.selected_keyframe = Some(i);
                     }
@@ -687,32 +705,34 @@ impl Sequencer {
                     });
                     body.row(ROW_HEIGHT, |mut row| {
                         row.col(|ui| {
-                            ui.label("Keyboard");
+                            ui.label("Keyboard")
+                            .on_hover_text("id: 0");
                         });
                         row.col(|ui| {
                             max_rect = ui.max_rect();
                             self.sense(ui);
-                            self.render_keyframes(ui, 0);
+                            self.render_keyframes(ui, vec![0]);
                         });
                     });
 
                     body.row(ROW_HEIGHT, |mut row| {
                         row.col(|ui| {
-                            ui.label("Mouse");
+                            ui.label("Mouse")
+                            .on_hover_text("id: 2,3");
                         });
                         row.col(|ui| {
                             self.sense(ui);
-                            self.render_keyframes(ui, 1);
-                            self.render_keyframes(ui, 3);
+                            self.render_keyframes(ui, vec![2, 3]);
                         });
                     });
                     body.row(ROW_HEIGHT, |mut row| {
                         row.col(|ui| {
-                            ui.label("Movement");
+                            ui.label("Movement")
+                            .on_hover_text("id: 1");
                         });
                         row.col(|ui| {
                             self.sense(ui);
-                            self.render_keyframes(ui, 2);
+                            self.render_keyframes(ui, vec![1]);
                         });
                     });
                     body.row(ROW_HEIGHT, |mut row| {
@@ -738,9 +758,9 @@ impl Sequencer {
 
             max_rect.max.y += ROW_HEIGHT * 2.0;
             if self.selecting {
-                let rect = self.compute_selection_rect(max_rect);
+                self.max_rect = max_rect;
                 ui.painter().rect(
-                    rect,
+                    self.compute_selection_rect(max_rect),
                     egui::Rounding::same(2.0),
                     egui::Color32::from_rgba_unmultiplied(0xAD, 0xD8, 0xE6, 20),
                     egui::Stroke::new(0.4, egui::Color32::DARK_BLUE),
@@ -778,6 +798,7 @@ impl Sequencer {
                 ui.heading("Debug");
                 let (w, h) = rdev::display_size().unwrap();
                 ui.label(format!("Display: ({},{})", w, h));
+                ui.label(format!("calc selection: {:?}", self.compute_selection_rect(self.max_rect)));
                 ui.label(format!("selection: {:?}", self.selection));
                 //todo: add mouse position
                 ui.horizontal(|ui| {
@@ -840,7 +861,7 @@ impl Sequencer {
                         ui.add(
                             egui::DragValue::new(&mut keyframe.duration)
                                 .speed(0.1)
-                                .clamp_range(0.1..=10.0),
+                                .clamp_range(0.00001..=10.0),
                         );
                     }
                 }
@@ -889,7 +910,6 @@ impl Sequencer {
         if response.clicked() {
             ui.input(|i| {
                 if !i.modifiers.ctrl {
-                    println!("missed {:?}",i.modifiers);
                     let mut keyframe_state = self.keyframe_state.lock().unwrap();
                     for i in 0..keyframe_state.len() {
                         keyframe_state[i] = 0;
@@ -900,7 +920,6 @@ impl Sequencer {
         if response.drag_started() {
             ui.input(|i| {
                 if !i.modifiers.ctrl {
-                    println!("drag start {:?}",i.modifiers);
                     let mut keyframe_state = self.keyframe_state.lock().unwrap();
                     for i in 0..keyframe_state.len() {
                         keyframe_state[i] = 0;
@@ -1033,7 +1052,7 @@ fn time_to_rect(t: f32, d: f32, max_t: f32, spacing: Vec2, res_rect: Rect) -> Op
         RectTransform::from_to(Rect::from_min_size(Pos2::ZERO, res_rect.size()), res_rect);
     let mut p1 = Pos2 { x: t, y: 0.0 };
     let height = ROW_HEIGHT - (spacing.y * 2.0);
-    let width = if d < height { height } else { d };
+    let width = d.clamp(3.0, f32::INFINITY);
     let mut p2 = p1
         + Vec2 {
             x: width,
@@ -1051,11 +1070,25 @@ fn time_to_rect(t: f32, d: f32, max_t: f32, spacing: Vec2, res_rect: Rect) -> Op
             p1.x = 0.0;
         }
     }
-
     Some(Rect {
-        min: to_screen.transform_pos(p1 + Vec2::splat(spacing.y)),
+        min: to_screen.transform_pos(p1),
         max: to_screen.transform_pos(p2),
     })
+}
+
+fn selection_contains_keyframe(selection: Rect, keyframe: Rect)->bool{
+    if selection_contains_point(selection, keyframe.left_top())
+        || selection_contains_point(selection, keyframe.left_bottom())
+        || selection_contains_point(selection, keyframe.right_top())
+        || selection_contains_point(selection, keyframe.right_bottom())
+    {
+        true
+    }else{
+        false
+    }
+}
+fn selection_contains_point(selection:Rect, p: Pos2)->bool{
+    (selection.min.x <= p.x) & (p.x < selection.max.x) & (selection.min.y <= p.y) & (p.y < selection.max.y)
 }
 
 fn strings_to_keys(string: &String) -> Vec<rdev::Key> {
