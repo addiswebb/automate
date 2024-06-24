@@ -546,8 +546,14 @@ impl Sequencer {
             self.reset_time();
         }
         if ui.button("⏴").on_hover_text("Reverse").clicked() {}
-        if ui.button("⏵").on_hover_text("Play").clicked() {
-            self.toggle_play();
+        if self.play.load(Ordering::Relaxed) {
+            if ui.button("⏸").on_hover_text("Pause").clicked() {
+                self.toggle_play();
+            }
+        }else{
+            if ui.button("⏵").on_hover_text("Play").clicked() {
+                self.toggle_play();
+            }
         }
         if ui.button("⏩").on_hover_text("Step").clicked() {
             self.step_time();
