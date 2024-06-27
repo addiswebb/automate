@@ -155,6 +155,8 @@ impl eframe::App for App {
             if i.key_pressed(egui::Key::ArrowLeft) {
                 self.sequencer.reset_time();
             }
+            self.sequencer.zoom(i.smooth_scroll_delta.x);
+            self.sequencer.scroll(i.smooth_scroll_delta.y);
             if i.modifiers.ctrl{
                 if i.key_pressed(egui::Key::S){
                     self.save_file();
@@ -169,22 +171,16 @@ impl eframe::App for App {
                     if !keyframe_state.is_empty(){
                         if !self.sequencer.selected_keyframes.is_empty() { 
                             let next = self.sequencer.selected_keyframes.last().unwrap().clone();
-                            println!("next {next}");
                             if keyframe_state.len() > last{
-                                println!(" +1");
                                 last = next+1;
                             }else{
-                                println!(" -2");
                                 last = next -2;
                             }
                         }
                         if i.modifiers.shift {
-                            println!("  shift");
                             if !self.sequencer.selected_keyframes.contains(&last){
-                                println!("  not contains: push");
                                 self.sequencer.selected_keyframes.push(last)
                             }else{
-                                println!("  contains: no push");
                             }
                         }else{
                             self.sequencer.selected_keyframes = [last].into();
@@ -198,24 +194,18 @@ impl eframe::App for App {
                     if !keyframe_state.is_empty(){
                         if !self.sequencer.selected_keyframes.is_empty() { 
                             let next = self.sequencer.selected_keyframes.first().unwrap().clone();
-                            println!("next {next}");
                             if next > 0{
                                 last = next - 1;
-                                println!(" -1");
                             }else{
-                                println!("  0");
                                 last = 0;
                             }
                         }else{
                             last = 0;
                         }
                         if i.modifiers.shift {
-                            println!("  shift");
                             if !self.sequencer.selected_keyframes.contains(&last){
-                                println!("  not contain: push");
                                 self.sequencer.selected_keyframes.push(last)
                             }else {
-                                println!("  contain: no push");
                             }
                         }else{
                             self.sequencer.selected_keyframes = [last].into();
@@ -247,7 +237,6 @@ impl eframe::App for App {
                 .resizable(false)
                 .movable(true)
                 .collapsible(false)
-                // .fixed_size(Vec2::new(400., 150.))
                 .show(ctx, |ui| {
                     ui.heading("Do you want to save changes to Untitled?");
                     ui.horizontal(|ui| {

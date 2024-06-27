@@ -313,6 +313,16 @@ impl Sequencer {
     pub fn step_time(&mut self) {
         self.time += 0.1;
     }
+    pub fn zoom(&mut self, delta: f32){
+        let multiplier = 1.0;
+        println!("{}",self.scale);
+        self.scale += delta * multiplier;
+        println!("{}",self.scale);
+    }
+    pub fn scroll(&mut self,delta: f32){
+        let multiplier = 1.0/80.0;
+        self.scroll += delta * multiplier;
+    }
     pub fn toggle_recording(&mut self) {
         if !self.recording.load(Ordering::Relaxed) {
             let mut keyframes = self.keyframes.lock().unwrap();
