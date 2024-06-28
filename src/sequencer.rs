@@ -5,7 +5,7 @@ use std::{thread, time::Instant};
 
 use eframe::egui::{self, pos2, Ui, Vec2};
 use egui::{emath::RectTransform, Pos2, Rect};
-use egui::{vec2, NumExt, Widget};
+use egui::{vec2, Align2, FontId, NumExt, Widget};
 use serde::{Deserialize, Serialize};
 
 use crate::keyframe::{Keyframe, KeyframeType};
@@ -313,12 +313,12 @@ impl Sequencer {
     pub fn step_time(&mut self) {
         self.time += 0.1;
     }
-    pub fn zoom(&mut self, delta: f32){
-        let multiplier = 1.0/100.0;
+    pub fn zoom(&mut self, delta: f32) {
+        let multiplier = 1.0 / 100.0;
         self.scale += delta * multiplier;
     }
-    pub fn scroll(&mut self,delta: f32){
-        let multiplier = 1.0/80.0;
+    pub fn scroll(&mut self, delta: f32) {
+        let multiplier = 1.0 / 80.0;
         self.scroll += delta * multiplier;
     }
     pub fn toggle_recording(&mut self) {
@@ -408,16 +408,14 @@ impl Sequencer {
                 }
 
                 let width = rect.width();
-                let mut label = format!("{:?}", keyframes[i].keyframe_type);
-
-                if width / 10.0 < label.len() as f32 {
-                    label.truncate((width / 10.0) as usize);
-                }
-                if width < 20.0 {
-                    label = match &keyframes[i].keyframe_type {
-                        KeyframeType::KeyBtn(key) => format!("{:?}", key),
-                        _ => "".to_string(),
-                    };
+                let mut label =format!("{}", match &keyframes[i].keyframe_type {
+                    KeyframeType::KeyBtn(key) => key_to_char(key),
+                    KeyframeType::MouseBtn(btn) => button_to_char(btn),
+                    KeyframeType::MouseMove(_) => "".to_string(),
+                    KeyframeType::Scroll(delta) => scroll_to_char(delta),
+                });
+                if width < 10.0 {
+                    label = "".to_string();
                 }
 
                 let color = match keyframes[i].id {
@@ -433,24 +431,19 @@ impl Sequencer {
                     _ => egui::Stroke::new(0.4, egui::Color32::from_rgb(15, 37, 42)), //Not selected
                 };
 
-                // let keyframe = ui
-                //     .put(
-                //         rect,
-                //         egui::Button::new(
-                //             egui::RichText::new(format!("{}", label)).color(egui::Color32::BLACK),
-                //         )
-                //         .sense(egui::Sense::click_and_drag())
-                //         .wrap(false)
-                //         .fill(egui::Color32::from_rgb(95, 186, 213))
-                //         .stroke(stroke),
-                //     )
-                //     .on_hover_text(format!("{:?}", keyframes[i].keyframe_type));
                 let keyframe = ui
                     .allocate_rect(rect, egui::Sense::click_and_drag())
                     .on_hover_text(format!("{:?}", keyframes[i].keyframe_type));
                 ui.painter()
                     .rect(rect, egui::Rounding::same(2.0), color, stroke);
 
+                ui.painter().text(
+                    rect.center(),
+                    Align2::CENTER_CENTER,
+                    format!("{}", label),
+                    FontId::default(),
+                    egui::Color32::BLACK,
+                );
                 if keyframe.clicked() {
                     let mut ctrl = false;
                     ui.input(|i| {
@@ -510,7 +503,7 @@ impl Sequencer {
                     }
                 });
                 keyframe.context_menu(|ui| {
-                    if !self.selected_keyframes.contains(&i){
+                    if !self.selected_keyframes.contains(&i) {
                         self.selected_keyframes.push(i);
                     }
                     if ui.button("Delete").clicked() {
@@ -537,12 +530,12 @@ impl Sequencer {
                 }
                 keyframes.remove(*i);
                 keyframe_state.remove(*i);
-                if next != 0{
+                if next != 0 {
                     next -= 1;
                 }
             }
             self.selected_keyframes.clear();
-            if !keyframes.is_empty(){
+            if !keyframes.is_empty() {
                 self.selected_keyframes.push(next);
             }
             self.changed.swap(true, Ordering::Relaxed);
@@ -557,7 +550,7 @@ impl Sequencer {
             if ui.button("⏸").on_hover_text("Pause").clicked() {
                 self.toggle_play();
             }
-        }else{
+        } else {
             if ui.button("⏵").on_hover_text("Play").clicked() {
                 self.toggle_play();
             }
@@ -1349,6 +1342,24 @@ fn key_to_char(k: &rdev::Key) -> String {
         rdev::Key::ShiftLeft => "shiftleft".to_string(),
         rdev::Key::ShiftRight => "shiftright".to_string(),
     }
+}
+
+fn button_to_char(b: &rdev::Button) -> String {
+    match b {
+        rdev::Button::Left => "⏴".to_string(),
+        rdev::Button::Right => "⏵".to_string(),
+        rdev::Button::Middle => "◼".to_string(),
+        _ => "".to_string(),
+    }
+}
+fn scroll_to_char(delta: &Vec2) -> String {
+    return if delta.x != 0. {
+        "⬌".to_string()
+    } else if delta.y != 0. {
+        "⬍".to_string()
+    } else {
+        "".to_string()
+    };
 }
 
 fn scale(ui: &Ui, i: f32, scale: f32) -> f32 {
