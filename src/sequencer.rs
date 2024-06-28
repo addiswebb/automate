@@ -370,7 +370,7 @@ impl Sequencer {
             if ids.contains(&keyframes[i].id) {
                 let rect = time_to_rect(
                     scale(ui, keyframes[i].timestamp, self.scale) - offset,
-                    scale(ui, keyframes[i].duration, self.scale) - offset,
+                    scale(ui, keyframes[i].duration, self.scale),
                     scale(
                         ui,
                         ui.max_rect().width() * (1.0 / scale(ui, 1.0, self.scale)),
@@ -383,7 +383,9 @@ impl Sequencer {
                     continue;
                 }
                 let rect = rect.unwrap();
-                println!("width: {:?}",rect.width());
+                println!("offset: {:?}",offset);
+                // println!("  scale: {:?}",self.scale);
+                // println!("  test: {:?}",time_to_rect(10.0,2.0,100.0,ui.spacing().item_spacing,max_rect));
                 {
                     let mut ctrl = false;
                     ui.input(|i| {
