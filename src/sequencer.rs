@@ -383,6 +383,7 @@ impl Sequencer {
                     continue;
                 }
                 let rect = rect.unwrap();
+                println!("width: {:?}",rect.width());
                 {
                     let mut ctrl = false;
                     ui.input(|i| {
@@ -408,15 +409,12 @@ impl Sequencer {
                 }
 
                 let width = rect.width();
-                let mut label =format!("{}", match &keyframes[i].keyframe_type {
+                let label =format!("{}", match &keyframes[i].keyframe_type {
                     KeyframeType::KeyBtn(key) => key_to_char(key),
                     KeyframeType::MouseBtn(btn) => button_to_char(btn),
                     KeyframeType::MouseMove(_) => "".to_string(),
                     KeyframeType::Scroll(delta) => scroll_to_char(delta),
                 });
-                if width < 10.0 {
-                    label = "".to_string();
-                }
 
                 let color = match keyframes[i].id {
                     0 => egui::Color32::LIGHT_RED,              //Keyboard
@@ -437,13 +435,16 @@ impl Sequencer {
                 ui.painter()
                     .rect(rect, egui::Rounding::same(2.0), color, stroke);
 
-                ui.painter().text(
-                    rect.center(),
-                    Align2::CENTER_CENTER,
-                    format!("{}", label),
-                    FontId::default(),
-                    egui::Color32::BLACK,
-                );
+
+                if width > 10.0 {
+                    ui.painter().text(
+                        rect.center(),
+                        Align2::CENTER_CENTER,
+                        format!("{}", label),
+                        FontId::default(),
+                        egui::Color32::BLACK,
+                    );
+                }
                 if keyframe.clicked() {
                     let mut ctrl = false;
                     ui.input(|i| {
@@ -519,24 +520,40 @@ impl Sequencer {
             let selected_len = self.selected_keyframes.len();
             let kf_len = keyframe_state.len();
             self.selected_keyframes.sort();
+
+            if self.selected_keyframes.contains(&(kf_len-1)){
+                let x = self.selected_keyframes.pop();
+                keyframes.remove(x.unwrap());
+                keyframe_state.remove(x.unwrap());
+            }
             self.selected_keyframes.reverse();
 
-            let mut next = self.selected_keyframes.first().unwrap().clone() + 1;
-            for i in &self.selected_keyframes {
-                if selected_len == kf_len {
-                    keyframes.clear();
-                    keyframe_state.clear();
-                    break;
-                }
-                keyframes.remove(*i);
-                keyframe_state.remove(*i);
-                if next != 0 {
-                    next -= 1;
-                }
+
+            if self.selected_keyframes.contains(&(0)){
+                let x = self.selected_keyframes.pop();
+                keyframes.remove(x.unwrap());
+                keyframe_state.remove(x.unwrap());
             }
-            self.selected_keyframes.clear();
-            if !keyframes.is_empty() {
-                self.selected_keyframes.push(next);
+
+            if !self.selected_keyframes.is_empty(){
+
+                let mut next = self.selected_keyframes.first().unwrap().clone() + 1;
+                for i in &self.selected_keyframes {
+                    if selected_len == kf_len {
+                        keyframes.clear();
+                        keyframe_state.clear();
+                        break;
+                    }
+                    keyframes.remove(*i);
+                    keyframe_state.remove(*i);
+                    if next != 0 {
+                        next -= 1;
+                    }
+                }
+                self.selected_keyframes.clear();
+                if !keyframes.is_empty() {
+                    self.selected_keyframes.push(next);
+                }
             }
             self.changed.swap(true, Ordering::Relaxed);
         }
