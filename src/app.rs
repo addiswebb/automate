@@ -89,12 +89,16 @@ impl App {
         }
     }
     fn open_file(&mut self) {
-        let path = FileDialog::new()
+        FileDialog::new()
             .add_filter("automate", &["auto"])
             .set_directory("/")
-            .pick_file()
-            .unwrap();
-        self.load_file(&path);
+            .pick_file().and_then(|path| {
+                self.load_file(&path);
+                Some(())
+            });
+        // if path.is_some(){
+        //     self.load_file(&path.unwrap());
+        // }
     }
     fn load_file(&mut self, path: &PathBuf) {
         let stream = File::open(path.clone());

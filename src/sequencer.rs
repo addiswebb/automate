@@ -314,10 +314,8 @@ impl Sequencer {
         self.time += 0.1;
     }
     pub fn zoom(&mut self, delta: f32){
-        let multiplier = 1.0;
-        println!("{}",self.scale);
+        let multiplier = 1.0/100.0;
         self.scale += delta * multiplier;
-        println!("{}",self.scale);
     }
     pub fn scroll(&mut self,delta: f32){
         let multiplier = 1.0/80.0;
@@ -508,7 +506,6 @@ impl Sequencer {
                 }
                 ui.input_mut(|input| {
                     if input.consume_key(egui::Modifiers::NONE, egui::Key::Delete) {
-                        println!("delete");
                         delete = true;
                     }
                 });
@@ -600,7 +597,7 @@ impl Sequencer {
         ui.add(
             egui::DragValue::new(&mut self.scale)
                 .speed(0.1)
-                .clamp_range(0.01..=2.5),
+                .clamp_range(0.01..=5.0),
         )
         .on_hover_text("Zoom");
 
