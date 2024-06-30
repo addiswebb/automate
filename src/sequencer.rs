@@ -710,8 +710,12 @@ impl Sequencer {
         egui::TopBottomPanel::bottom("Sequencer").show(ctx, |ui| {
             use egui_extras::{Column, TableBuilder};
 
-            let mut max_rect = ui.max_rect().translate(vec2(6.5, 0.));
+            let mut max_rect = ui
+                .max_rect()
+                .translate(vec2(6.5, 0.))
+                .translate(vec2(0., (ROW_HEIGHT + ui.spacing().item_spacing.y) * 2.));
 
+            max_rect.max.y = max_rect.min.y + (ROW_HEIGHT ) * 4. + ui.spacing().item_spacing.y;
             max_rect.min.x += 60.;
             // println!("1: {:?}",max_rect.width());
             let mut table = TableBuilder::new(ui)
@@ -805,7 +809,6 @@ impl Sequencer {
                     });
                 });
 
-            max_rect.max.y += ROW_HEIGHT * 2.0;
             if self.selecting {
                 ui.painter().rect(
                     self.compute_selection_rect(max_rect),
@@ -814,7 +817,7 @@ impl Sequencer {
                     egui::Stroke::new(0.4, egui::Color32::DARK_BLUE),
                 );
             }
-
+            
             self.render_playhead(ui, 3, max_rect);
         });
     }
@@ -830,7 +833,7 @@ impl Sequencer {
             ui.spacing().item_spacing,
             max_rect,
         )
-        .unwrap();
+        .unwrap().translate(vec2(0.,2.));
         ui.painter().rect(
             rect,
             egui::Rounding::same(2.0),
