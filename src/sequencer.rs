@@ -665,7 +665,7 @@ impl Sequencer {
         //offset so that the left most digit is fully visible += 4.0;
         let (_, painter) = ui.appllocate_painter(ui.available_size(), egui::Sense::click());
         for i in self.scroll as i32
-            ..(max_rect.width() * (1.0 / scale(ui, 1.0, self.scale))).ceil() as i32
+            ..(max_rect.width() * (1.0 / scale(ui, 1.0, self.scale)) + self.scroll).ceil() as i32
         {
             let point = pos + egui::vec2(scale(ui, i as f32 - self.scroll, self.scale), 0.0);
             painter.text(
@@ -754,8 +754,6 @@ impl Sequencer {
                             ui.label("Keyboard").on_hover_text("id: 0");
                         });
                         row.col(|ui| {
-                            // max_rect = ui.max_rect();
-                            // println!("2: {:?}",ui.max_rect().width());
                             self.sense(ui);
                             self.render_keyframes(ui, vec![0]);
                         });
@@ -816,13 +814,6 @@ impl Sequencer {
                     egui::Stroke::new(0.4, egui::Color32::DARK_BLUE),
                 );
             }
-            // Debug
-            // ui.painter().rect(
-            //     max_rect,
-            //     egui::Rounding::same(2.0),
-            //     egui::Color32::from_rgba_unmultiplied(0xAD, 0xD8, 0xE6, 20),
-            //     egui::Stroke::new(0.4, egui::Color32::DARK_BLUE),
-            // );
 
             self.render_playhead(ui, 3, max_rect);
         });
@@ -840,7 +831,6 @@ impl Sequencer {
             max_rect,
         )
         .unwrap();
-        // println!("max_t: {}, t_width: {}, t_ratio: {}, width: {}", max_t,t_width,t_ratio, rect.width());
         ui.painter().rect(
             rect,
             egui::Rounding::same(2.0),
@@ -858,7 +848,6 @@ impl Sequencer {
                 ui.label(format!("Display: ({},{})", w, h));
 
                 ui.label(format!("selected: {:?}", self.selected_keyframes));
-                // ui.label(format!("selection: {:?}", self.selection));
                 //todo: add mouse position
                 ui.horizontal(|ui| {
                     ui.label("Offset: ");
@@ -867,7 +856,6 @@ impl Sequencer {
                     ui.add(egui::DragValue::new(&mut offset.y).speed(1))
                         .on_hover_text("Y");
                 });
-                //ui.label(format!("Keyframe state: {:?}", self.keyframe_state));
                 ui.label(format!(
                     "Rec: {}",
                     self.was_recording == self.recording.load(Ordering::Relaxed)
@@ -900,12 +888,10 @@ impl Sequencer {
                             }
                             KeyframeType::MouseMove(pos) => {
                                 ui.strong("Mouse move");
-                                //ui.text_edit_singleline(&mut self.sequencer.keyframes[i].keyframe_type)
                                 ui.label(format!("position: {:?}", pos));
                             }
                             KeyframeType::Scroll(delta) => {
                                 ui.strong("Scroll");
-                                //ui.text_edit_singleline(&mut self.sequencer.keyframes[i].keyframe_type)
                                 ui.label(format!("delta: {:?}", delta));
                             }
                         }
