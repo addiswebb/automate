@@ -369,7 +369,8 @@ impl Sequencer {
         for i in 0..keyframes.len() {
             if ids.contains(&keyframes[i].id) {
                 let rect = time_to_rect(
-                    scale(ui, keyframes[i].timestamp, self.scale) - offset,
+                    scale(ui, keyframes[i].timestamp, self.scale) - offset + 4.0,
+                    // +4 offset to allow for left most digit to always be visible
                     scale(ui, keyframes[i].duration, self.scale),
                     scale(
                         ui,
@@ -383,9 +384,7 @@ impl Sequencer {
                     continue;
                 }
                 let rect = rect.unwrap();
-                println!("offset: {:?}",offset);
-                // println!("  scale: {:?}",self.scale);
-                // println!("  test: {:?}",time_to_rect(10.0,2.0,100.0,ui.spacing().item_spacing,max_rect));
+
                 {
                     let mut ctrl = false;
                     ui.input(|i| {
@@ -411,12 +410,15 @@ impl Sequencer {
                 }
 
                 let width = rect.width();
-                let label =format!("{}", match &keyframes[i].keyframe_type {
-                    KeyframeType::KeyBtn(key) => key_to_char(key),
-                    KeyframeType::MouseBtn(btn) => button_to_char(btn),
-                    KeyframeType::MouseMove(_) => "".to_string(),
-                    KeyframeType::Scroll(delta) => scroll_to_char(delta),
-                });
+                let label = format!(
+                    "{}",
+                    match &keyframes[i].keyframe_type {
+                        KeyframeType::KeyBtn(key) => key_to_char(key),
+                        KeyframeType::MouseBtn(btn) => button_to_char(btn),
+                        KeyframeType::MouseMove(_) => "".to_string(),
+                        KeyframeType::Scroll(delta) => scroll_to_char(delta),
+                    }
+                );
 
                 let color = match keyframes[i].id {
                     0 => egui::Color32::LIGHT_RED,              //Keyboard
@@ -436,7 +438,6 @@ impl Sequencer {
                     .on_hover_text(format!("{:?}", keyframes[i].keyframe_type));
                 ui.painter()
                     .rect(rect, egui::Rounding::same(2.0), color, stroke);
-
 
                 if width > 10.0 {
                     ui.painter().text(
@@ -523,22 +524,20 @@ impl Sequencer {
             let kf_len = keyframe_state.len();
             self.selected_keyframes.sort();
 
-            if self.selected_keyframes.contains(&(kf_len-1)){
+            if self.selected_keyframes.contains(&(kf_len - 1)) {
                 let x = self.selected_keyframes.pop();
                 keyframes.remove(x.unwrap());
                 keyframe_state.remove(x.unwrap());
             }
             self.selected_keyframes.reverse();
 
-
-            if self.selected_keyframes.contains(&(0)){
+            if self.selected_keyframes.contains(&(0)) {
                 let x = self.selected_keyframes.pop();
                 keyframes.remove(x.unwrap());
                 keyframe_state.remove(x.unwrap());
             }
 
-            if !self.selected_keyframes.is_empty(){
-
+            if !self.selected_keyframes.is_empty() {
                 let mut next = self.selected_keyframes.first().unwrap().clone() + 1;
                 for i in &self.selected_keyframes {
                     if selected_len == kf_len {
@@ -659,25 +658,27 @@ impl Sequencer {
             }
         }
     }
-    fn render_timeline(&self, ui: &mut Ui) {
-        let pos = time_to_rect(0.0, 0.0, 0.0, ui.spacing().item_spacing, ui.max_rect())
+    fn render_timeline(&self, ui: &mut Ui, max_rect: Rect) {
+        let pos = time_to_rect(4.0, 0.0, 0.0, ui.spacing().item_spacing, max_rect)
             .unwrap()
             .min;
-        for i in 0..(ui.max_rect().width() * (1.0 / scale(ui, 1.0, self.scale)) + self.scroll)
-            .ceil() as i32
+        //offset so that the left most digit is fully visible += 4.0;
+        let (_, painter) = ui.appllocate_painter(ui.available_size(), egui::Sense::click());
+        for i in self.scroll as i32
+            ..(max_rect.width() * (1.0 / scale(ui, 1.0, self.scale))).ceil() as i32
         {
             let point = pos + egui::vec2(scale(ui, i as f32 - self.scroll, self.scale), 0.0);
-            ui.painter().text(
+            painter.text(
                 point,
                 egui::Align2::CENTER_TOP,
                 format!("{}", i),
                 egui::FontId::monospace(12.0),
                 egui::Color32::GRAY,
             );
-            ui.painter().line_segment(
+            painter.line_segment(
                 [
-                    pos2(point.x, ui.max_rect().max.y),
-                    pos2(point.x, ui.max_rect().max.y) + egui::vec2(0.0, -6.0),
+                    pos2(point.x, max_rect.max.y),
+                    pos2(point.x, max_rect.max.y) + egui::vec2(0.0, -6.0),
                 ],
                 egui::Stroke::new(1.0, egui::Color32::GRAY),
             );
@@ -685,7 +686,7 @@ impl Sequencer {
     }
     fn render_playhead(&mut self, ui: &mut Ui, rows: i32, rect: Rect) {
         let point = time_to_rect(
-            scale(ui, self.time, self.scale),
+            scale(ui, self.time, self.scale) + 3., //add 3. for offset to allow left most digit to always be visible
             0.0,
             0.0,
             ui.spacing().item_spacing,
@@ -693,12 +694,10 @@ impl Sequencer {
         )
         .unwrap()
         .min;
-
-        // let point = point;
-        let p1 = pos2(point.x + 1., point.y - 5.);
+        let p1 = pos2(point.x + 1., point.y - 2.);
         let p2 = pos2(p1.x, p1.y + ROW_HEIGHT * rows as f32 + (3 * rows) as f32);
         ui.painter().text(
-            p1 - egui::vec2(0.0, 4.0),
+            p1 - egui::vec2(0.0, 3.0),
             egui::Align2::CENTER_TOP,
             "⏷",
             egui::FontId::monospace(10.0),
@@ -710,7 +709,11 @@ impl Sequencer {
     pub fn show(&mut self, ctx: &egui::Context) {
         egui::TopBottomPanel::bottom("Sequencer").show(ctx, |ui| {
             use egui_extras::{Column, TableBuilder};
-            let mut max_rect = Rect::ZERO;
+
+            let mut max_rect = ui.max_rect().translate(vec2(6.5, 0.));
+
+            max_rect.min.x += 60.;
+            // println!("1: {:?}",max_rect.width());
             let mut table = TableBuilder::new(ui)
                 .striped(false)
                 .resizable(false)
@@ -718,7 +721,6 @@ impl Sequencer {
                 .column(Column::initial(60.0).range(60.0..=60.0))
                 .column(Column::remainder())
                 .drag_to_scroll(false)
-                .scroll_bar_visibility(egui::scroll_area::ScrollBarVisibility::VisibleWhenNeeded)
                 .sense(egui::Sense::hover());
             //allow rows to be clicked
             table = table.sense(egui::Sense::click()).resizable(true);
@@ -737,7 +739,14 @@ impl Sequencer {
                         row.set_hovered(true);
                         row.col(|_| {});
                         row.col(|ui| {
-                            self.render_timeline(ui);
+                            let rect = ui.max_rect();
+                            self.render_timeline(
+                                ui,
+                                Rect {
+                                    min: pos2(max_rect.min.x, rect.min.y),
+                                    max: pos2(max_rect.max.x, rect.max.y),
+                                },
+                            );
                         });
                     });
                     body.row(ROW_HEIGHT, |mut row| {
@@ -745,7 +754,8 @@ impl Sequencer {
                             ui.label("Keyboard").on_hover_text("id: 0");
                         });
                         row.col(|ui| {
-                            max_rect = ui.max_rect();
+                            // max_rect = ui.max_rect();
+                            // println!("2: {:?}",ui.max_rect().width());
                             self.sense(ui);
                             self.render_keyframes(ui, vec![0]);
                         });
@@ -772,8 +782,7 @@ impl Sequencer {
                     body.row(ROW_HEIGHT, |mut row| {
                         row.col(|_| {});
                         row.col(|ui| {
-                            let mut max_t =
-                                ui.max_rect().width() * (1.0 / scale(ui, 1.0, self.scale));
+                            let mut max_t = max_rect.width() * (1.0 / scale(ui, 1.0, self.scale));
                             {
                                 let keyframes = self.keyframes.lock().unwrap();
                                 let last = keyframes.last();
@@ -785,7 +794,15 @@ impl Sequencer {
                                     }
                                 }
                             }
-                            self.scroll_bar(ui, max_t);
+                            let rect = ui.max_rect();
+                            self.scroll_bar(
+                                ui,
+                                max_t,
+                                Rect {
+                                    min: pos2(max_rect.min.x, rect.min.y),
+                                    max: pos2(max_rect.max.x, rect.max.y),
+                                },
+                            );
                         });
                     });
                 });
@@ -799,12 +816,19 @@ impl Sequencer {
                     egui::Stroke::new(0.4, egui::Color32::DARK_BLUE),
                 );
             }
+            // Debug
+            // ui.painter().rect(
+            //     max_rect,
+            //     egui::Rounding::same(2.0),
+            //     egui::Color32::from_rgba_unmultiplied(0xAD, 0xD8, 0xE6, 20),
+            //     egui::Stroke::new(0.4, egui::Color32::DARK_BLUE),
+            // );
 
             self.render_playhead(ui, 3, max_rect);
         });
     }
-    fn scroll_bar(&mut self, ui: &mut Ui, max_t: f32) {
-        let t_width = ui.max_rect().width() * (1.0 / scale(ui, 1.0, self.scale));
+    fn scroll_bar(&mut self, ui: &mut Ui, max_t: f32, max_rect: Rect) {
+        let t_width = max_rect.width() * (1.0 / scale(ui, 1.0, self.scale));
         let t_ratio = (t_width / max_t).clamp(0.0, 1.0);
 
         let x = self.scroll.clamp(0.0, t_width - (t_width * t_ratio));
@@ -813,9 +837,10 @@ impl Sequencer {
             scale(ui, t_width * t_ratio - 0.01, self.scale),
             0.0,
             ui.spacing().item_spacing,
-            ui.max_rect(),
+            max_rect,
         )
         .unwrap();
+        // println!("max_t: {}, t_width: {}, t_ratio: {}, width: {}", max_t,t_width,t_ratio, rect.width());
         ui.painter().rect(
             rect,
             egui::Rounding::same(2.0),
@@ -884,19 +909,22 @@ impl Sequencer {
                                 ui.label(format!("delta: {:?}", delta));
                             }
                         }
-
+                        let (tmpx, tmpy) = (keyframe.timestamp, keyframe.duration);
                         ui.label("Timestamp");
                         ui.add(
                             egui::DragValue::new(&mut keyframe.timestamp)
                                 .speed(0.25)
-                                .clamp_range(0.0..=100.0),
+                                .clamp_range(0.0..=1000.0),
                         );
                         ui.label("Duration");
                         ui.add(
                             egui::DragValue::new(&mut keyframe.duration)
                                 .speed(0.1)
-                                .clamp_range(0.00001..=10.0),
+                                .clamp_range(0.00001..=100.0),
                         );
+                        if (tmpx, tmpy) != (keyframe.timestamp, keyframe.duration) {
+                            self.changed.swap(true, Ordering::Relaxed);
+                        }
                     }
                 }
             });
