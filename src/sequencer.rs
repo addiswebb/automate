@@ -481,28 +481,26 @@ impl Sequencer {
                 );
             }
             if keyframe.clicked() {
-                let mut ctrl = false;
-                ui.input(|i| {
-                    ctrl = i.modifiers.ctrl;
+                let ctrl = ui.input(|i|{
+                    return i.modifiers.ctrl;
                 });
-                if self.selected_keyframes.contains(&i) || keyframe_state[i] == 2 {
-                    let index = self.selected_keyframes.binary_search(&i);
-                    println!("{},{:?} {:?}", i, index, self.selected_keyframes);
-                    if let Ok(index) = index {
-                        if !ctrl {
-                            self.selected_keyframes.clear();
-                        } else {
+                let already_selected = self.selected_keyframes.contains(&i);
+                println!("i:{}, ctrl?:{}, selected: {}",i,ctrl,already_selected);
+                if ctrl{
+                    if already_selected {
+                        //deselect only this, keeping everything else
+                        self.selected_keyframes.sort();
+                        let index = self.selected_keyframes.binary_search(&i);
+                        println!("search index: {:?}",index);
+                        if let Ok(index) = index {
                             self.selected_keyframes.remove(index);
                         }
-                    } else {
-                        if !ctrl {
-                            self.selected_keyframes.push(i);
-                        }
+                    }else{
+                        self.selected_keyframes.push(i);
+                        //select, keeping everything else
                     }
-                } else {
-                    if !ctrl {
-                        self.selected_keyframes.clear();
-                    }
+                }else{
+                    self.selected_keyframes.clear();
                     self.selected_keyframes.push(i);
                 }
             }
