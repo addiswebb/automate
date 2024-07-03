@@ -1,901 +1,790 @@
 {
   "keyframes": [
     {
-      "timestamp": 1.3870133,
-      "duration": 0.0859689,
+      "timestamp": 0.0,
+      "duration": 0.1189812,
       "keyframe_type": {
         "MouseBtn": "Left"
       },
       "id": 2
     },
     {
-      "timestamp": 2.3027177,
-      "duration": 0.0671152,
+      "timestamp": 0.5786699,
+      "duration": 0.1,
+      "keyframe_type": {
+        "MouseMove": {
+          "x": 273.0,
+          "y": 246.0
+        }
+      },
+      "id": 1
+    },
+    {
+      "timestamp": 0.59872425,
+      "duration": 0.1,
+      "keyframe_type": {
+        "MouseMove": {
+          "x": 301.0,
+          "y": 243.0
+        }
+      },
+      "id": 1
+    },
+    {
+      "timestamp": 0.6186881,
+      "duration": 0.1,
+      "keyframe_type": {
+        "MouseMove": {
+          "x": 322.0,
+          "y": 243.0
+        }
+      },
+      "id": 1
+    },
+    {
+      "timestamp": 0.6396869,
+      "duration": 0.1,
+      "keyframe_type": {
+        "MouseMove": {
+          "x": 345.0,
+          "y": 243.0
+        }
+      },
+      "id": 1
+    },
+    {
+      "timestamp": 0.6597991,
+      "duration": 0.1,
+      "keyframe_type": {
+        "MouseMove": {
+          "x": 370.0,
+          "y": 243.0
+        }
+      },
+      "id": 1
+    },
+    {
+      "timestamp": 0.6807826,
+      "duration": 0.1,
+      "keyframe_type": {
+        "MouseMove": {
+          "x": 402.0,
+          "y": 241.0
+        }
+      },
+      "id": 1
+    },
+    {
+      "timestamp": 0.70079273,
+      "duration": 0.1,
+      "keyframe_type": {
+        "MouseMove": {
+          "x": 436.0,
+          "y": 241.0
+        }
+      },
+      "id": 1
+    },
+    {
+      "timestamp": 0.7206636,
+      "duration": 0.1,
+      "keyframe_type": {
+        "MouseMove": {
+          "x": 463.0,
+          "y": 240.0
+        }
+      },
+      "id": 1
+    },
+    {
+      "timestamp": 0.7406761,
+      "duration": 0.1,
+      "keyframe_type": {
+        "MouseMove": {
+          "x": 483.0,
+          "y": 240.0
+        }
+      },
+      "id": 1
+    },
+    {
+      "timestamp": 0.7606669,
+      "duration": 0.1,
+      "keyframe_type": {
+        "MouseMove": {
+          "x": 498.0,
+          "y": 240.0
+        }
+      },
+      "id": 1
+    },
+    {
+      "timestamp": 0.7836756,
+      "duration": 0.1,
+      "keyframe_type": {
+        "MouseMove": {
+          "x": 513.0,
+          "y": 240.0
+        }
+      },
+      "id": 1
+    },
+    {
+      "timestamp": 0.8819844,
+      "duration": 0.113802895,
+      "keyframe_type": {
+        "MouseBtn": "Left"
+      },
+      "id": 2
+    },
+    {
+      "timestamp": 1.052701,
+      "duration": 0.1,
+      "keyframe_type": {
+        "MouseMove": {
+          "x": 525.0,
+          "y": 244.0
+        }
+      },
+      "id": 1
+    },
+    {
+      "timestamp": 1.0777875,
+      "duration": 0.1,
+      "keyframe_type": {
+        "MouseMove": {
+          "x": 533.0,
+          "y": 257.0
+        }
+      },
+      "id": 1
+    },
+    {
+      "timestamp": 1.100686,
+      "duration": 0.1,
+      "keyframe_type": {
+        "MouseMove": {
+          "x": 539.0,
+          "y": 272.0
+        }
+      },
+      "id": 1
+    },
+    {
+      "timestamp": 1.1226829,
+      "duration": 0.1,
+      "keyframe_type": {
+        "MouseMove": {
+          "x": 543.0,
+          "y": 289.0
+        }
+      },
+      "id": 1
+    },
+    {
+      "timestamp": 1.1436867,
+      "duration": 0.1,
+      "keyframe_type": {
+        "MouseMove": {
+          "x": 546.0,
+          "y": 307.0
+        }
+      },
+      "id": 1
+    },
+    {
+      "timestamp": 1.1636869,
+      "duration": 0.1,
+      "keyframe_type": {
+        "MouseMove": {
+          "x": 546.0,
+          "y": 323.0
+        }
+      },
+      "id": 1
+    },
+    {
+      "timestamp": 1.184691,
+      "duration": 0.1,
+      "keyframe_type": {
+        "MouseMove": {
+          "x": 546.0,
+          "y": 340.0
+        }
+      },
+      "id": 1
+    },
+    {
+      "timestamp": 1.208808,
+      "duration": 0.1,
+      "keyframe_type": {
+        "MouseMove": {
+          "x": 548.0,
+          "y": 355.0
+        }
+      },
+      "id": 1
+    },
+    {
+      "timestamp": 1.3588111,
+      "duration": 0.1019932,
+      "keyframe_type": {
+        "MouseBtn": "Left"
+      },
+      "id": 2
+    },
+    {
+      "timestamp": 1.5138831,
+      "duration": 0.1,
+      "keyframe_type": {
+        "MouseMove": {
+          "x": 550.0,
+          "y": 367.0
+        }
+      },
+      "id": 1
+    },
+    {
+      "timestamp": 1.5397055,
+      "duration": 0.1,
+      "keyframe_type": {
+        "MouseMove": {
+          "x": 534.0,
+          "y": 370.0
+        }
+      },
+      "id": 1
+    },
+    {
+      "timestamp": 1.559705,
+      "duration": 0.1,
+      "keyframe_type": {
+        "MouseMove": {
+          "x": 510.0,
+          "y": 371.0
+        }
+      },
+      "id": 1
+    },
+    {
+      "timestamp": 1.580703,
+      "duration": 0.1,
+      "keyframe_type": {
+        "MouseMove": {
+          "x": 481.0,
+          "y": 376.0
+        }
+      },
+      "id": 1
+    },
+    {
+      "timestamp": 1.6007078,
+      "duration": 0.1,
+      "keyframe_type": {
+        "MouseMove": {
+          "x": 453.0,
+          "y": 380.0
+        }
+      },
+      "id": 1
+    },
+    {
+      "timestamp": 1.6227105,
+      "duration": 0.1,
+      "keyframe_type": {
+        "MouseMove": {
+          "x": 422.0,
+          "y": 383.0
+        }
+      },
+      "id": 1
+    },
+    {
+      "timestamp": 1.6437097,
+      "duration": 0.1,
+      "keyframe_type": {
+        "MouseMove": {
+          "x": 394.0,
+          "y": 384.0
+        }
+      },
+      "id": 1
+    },
+    {
+      "timestamp": 1.6647161,
+      "duration": 0.1,
+      "keyframe_type": {
+        "MouseMove": {
+          "x": 368.0,
+          "y": 383.0
+        }
+      },
+      "id": 1
+    },
+    {
+      "timestamp": 1.68571,
+      "duration": 0.1,
+      "keyframe_type": {
+        "MouseMove": {
+          "x": 351.0,
+          "y": 382.0
+        }
+      },
+      "id": 1
+    },
+    {
+      "timestamp": 1.8829242,
+      "duration": 0.1310687,
+      "keyframe_type": {
+        "MouseBtn": "Left"
+      },
+      "id": 2
+    },
+    {
+      "timestamp": 2.95875,
+      "duration": 0.1331102,
+      "keyframe_type": {
+        "KeyBtn": "KeyW"
+      },
+      "id": 0
+    },
+    {
+      "timestamp": 3.9331603,
+      "duration": 0.1017613,
       "keyframe_type": {
         "KeyBtn": "KeyH"
       },
       "id": 0
     },
     {
-      "timestamp": 2.5017622,
-      "duration": 0.0087862,
+      "timestamp": 4.0521917,
+      "duration": 0.182646,
       "keyframe_type": {
-        "KeyBtn": "KeyE"
+        "KeyBtn": "KeyA"
       },
       "id": 0
     },
     {
-      "timestamp": 2.556107,
-      "duration": 0.0741614,
+      "timestamp": 4.1662164,
+      "duration": 0.0746292,
       "keyframe_type": {
-        "KeyBtn": "KeyL"
+        "KeyBtn": "KeyT"
       },
       "id": 0
     },
     {
-      "timestamp": 2.7447622,
-      "duration": 0.0669756,
+      "timestamp": 4.47468,
+      "duration": 0.1751824,
       "keyframe_type": {
-        "KeyBtn": "KeyL"
+        "KeyBtn": "Slash"
       },
       "id": 0
     },
     {
-      "timestamp": 3.0131447,
-      "duration": 0.088453904,
+      "timestamp": 4.334535,
+      "duration": 0.4003287,
       "keyframe_type": {
-        "KeyBtn": "KeyO"
+        "KeyBtn": "ShiftRight"
       },
       "id": 0
     },
     {
-      "timestamp": 4.3034377,
-      "duration": 0.1065309,
+      "timestamp": 5.60993,
+      "duration": 0.1,
+      "keyframe_type": {
+        "MouseMove": {
+          "x": 340.0,
+          "y": 378.0
+        }
+      },
+      "id": 1
+    },
+    {
+      "timestamp": 5.6568995,
+      "duration": 0.1,
+      "keyframe_type": {
+        "MouseMove": {
+          "x": 325.0,
+          "y": 380.0
+        }
+      },
+      "id": 1
+    },
+    {
+      "timestamp": 5.681947,
+      "duration": 0.1,
+      "keyframe_type": {
+        "MouseMove": {
+          "x": 311.0,
+          "y": 384.0
+        }
+      },
+      "id": 1
+    },
+    {
+      "timestamp": 5.808976,
+      "duration": 0.1,
+      "keyframe_type": {
+        "Scroll": {
+          "x": 0.0,
+          "y": -1.0
+        }
+      },
+      "id": 3
+    },
+    {
+      "timestamp": 5.834064,
+      "duration": 0.1,
+      "keyframe_type": {
+        "Scroll": {
+          "x": 0.0,
+          "y": -1.0
+        }
+      },
+      "id": 3
+    },
+    {
+      "timestamp": 5.8611135,
+      "duration": 0.1,
+      "keyframe_type": {
+        "Scroll": {
+          "x": 0.0,
+          "y": -1.0
+        }
+      },
+      "id": 3
+    },
+    {
+      "timestamp": 5.910164,
+      "duration": 0.1,
+      "keyframe_type": {
+        "Scroll": {
+          "x": 0.0,
+          "y": -1.0
+        }
+      },
+      "id": 3
+    },
+    {
+      "timestamp": 6.0090003,
+      "duration": 0.1,
+      "keyframe_type": {
+        "Scroll": {
+          "x": 0.0,
+          "y": -1.0
+        }
+      },
+      "id": 3
+    },
+    {
+      "timestamp": 6.098051,
+      "duration": 0.1,
+      "keyframe_type": {
+        "Scroll": {
+          "x": 0.0,
+          "y": 1.0
+        }
+      },
+      "id": 3
+    },
+    {
+      "timestamp": 6.14011,
+      "duration": 0.1,
+      "keyframe_type": {
+        "Scroll": {
+          "x": 0.0,
+          "y": 1.0
+        }
+      },
+      "id": 3
+    },
+    {
+      "timestamp": 6.1779957,
+      "duration": 0.1,
+      "keyframe_type": {
+        "Scroll": {
+          "x": 0.0,
+          "y": 1.0
+        }
+      },
+      "id": 3
+    },
+    {
+      "timestamp": 6.206005,
+      "duration": 0.1,
+      "keyframe_type": {
+        "Scroll": {
+          "x": 0.0,
+          "y": 1.0
+        }
+      },
+      "id": 3
+    },
+    {
+      "timestamp": 6.2420135,
+      "duration": 0.1,
+      "keyframe_type": {
+        "Scroll": {
+          "x": 0.0,
+          "y": 1.0
+        }
+      },
+      "id": 3
+    },
+    {
+      "timestamp": 6.2870584,
+      "duration": 0.1,
+      "keyframe_type": {
+        "Scroll": {
+          "x": 0.0,
+          "y": 1.0
+        }
+      },
+      "id": 3
+    },
+    {
+      "timestamp": 6.3630576,
+      "duration": 0.1,
+      "keyframe_type": {
+        "Scroll": {
+          "x": 0.0,
+          "y": 1.0
+        }
+      },
+      "id": 3
+    },
+    {
+      "timestamp": 6.7760324,
+      "duration": 0.1,
+      "keyframe_type": {
+        "Scroll": {
+          "x": 0.0,
+          "y": 1.0
+        }
+      },
+      "id": 3
+    },
+    {
+      "timestamp": 6.7980328,
+      "duration": 0.1,
+      "keyframe_type": {
+        "Scroll": {
+          "x": 0.0,
+          "y": 1.0
+        }
+      },
+      "id": 3
+    },
+    {
+      "timestamp": 6.8180323,
+      "duration": 0.1,
+      "keyframe_type": {
+        "Scroll": {
+          "x": 0.0,
+          "y": 1.0
+        }
+      },
+      "id": 3
+    },
+    {
+      "timestamp": 6.84302,
+      "duration": 0.1,
+      "keyframe_type": {
+        "Scroll": {
+          "x": 0.0,
+          "y": 1.0
+        }
+      },
+      "id": 3
+    },
+    {
+      "timestamp": 6.8870335,
+      "duration": 0.1,
+      "keyframe_type": {
+        "Scroll": {
+          "x": 0.0,
+          "y": 1.0
+        }
+      },
+      "id": 3
+    },
+    {
+      "timestamp": 7.2950625,
+      "duration": 0.10502169,
       "keyframe_type": {
         "MouseBtn": "Left"
       },
       "id": 2
     },
     {
-      "timestamp": 4.673793,
-      "duration": 0.072039,
+      "timestamp": 7.6830373,
+      "duration": 0.1,
+      "keyframe_type": {
+        "MouseMove": {
+          "x": 312.0,
+          "y": 389.0
+        }
+      },
+      "id": 1
+    },
+    {
+      "timestamp": 7.723144,
+      "duration": 0.1,
+      "keyframe_type": {
+        "MouseMove": {
+          "x": 320.0,
+          "y": 379.0
+        }
+      },
+      "id": 1
+    },
+    {
+      "timestamp": 7.7511444,
+      "duration": 0.1,
+      "keyframe_type": {
+        "MouseMove": {
+          "x": 327.0,
+          "y": 366.0
+        }
+      },
+      "id": 1
+    },
+    {
+      "timestamp": 7.7720356,
+      "duration": 0.1,
+      "keyframe_type": {
+        "MouseMove": {
+          "x": 333.0,
+          "y": 352.0
+        }
+      },
+      "id": 1
+    },
+    {
+      "timestamp": 7.79406,
+      "duration": 0.1,
+      "keyframe_type": {
+        "MouseMove": {
+          "x": 342.0,
+          "y": 337.0
+        }
+      },
+      "id": 1
+    },
+    {
+      "timestamp": 7.8190007,
+      "duration": 0.1,
+      "keyframe_type": {
+        "MouseMove": {
+          "x": 351.0,
+          "y": 321.0
+        }
+      },
+      "id": 1
+    },
+    {
+      "timestamp": 7.8459954,
+      "duration": 0.1,
+      "keyframe_type": {
+        "MouseMove": {
+          "x": 357.0,
+          "y": 307.0
+        }
+      },
+      "id": 1
+    },
+    {
+      "timestamp": 7.8870373,
+      "duration": 0.1,
+      "keyframe_type": {
+        "MouseMove": {
+          "x": 362.0,
+          "y": 296.0
+        }
+      },
+      "id": 1
+    },
+    {
+      "timestamp": 8.122111,
+      "duration": 0.113006,
       "keyframe_type": {
         "MouseBtn": "Left"
       },
       "id": 2
     },
     {
-      "timestamp": 0.0,
+      "timestamp": 8.342041,
       "duration": 0.1,
       "keyframe_type": {
         "MouseMove": {
-          "x": 862.0,
-          "y": 363.0
+          "x": 351.0,
+          "y": 292.0
         }
       },
       "id": 1
     },
     {
-      "timestamp": 5.3690286,
+      "timestamp": 8.364049,
       "duration": 0.1,
       "keyframe_type": {
         "MouseMove": {
-          "x": 895.0,
-          "y": 353.0
+          "x": 333.0,
+          "y": 290.0
         }
       },
       "id": 1
     },
     {
-      "timestamp": 5.703573,
-      "duration": 0.1070258,
+      "timestamp": 8.386027,
+      "duration": 0.1,
+      "keyframe_type": {
+        "MouseMove": {
+          "x": 316.0,
+          "y": 289.0
+        }
+      },
+      "id": 1
+    },
+    {
+      "timestamp": 8.429035,
+      "duration": 0.1,
+      "keyframe_type": {
+        "MouseMove": {
+          "x": 300.0,
+          "y": 287.0
+        }
+      },
+      "id": 1
+    },
+    {
+      "timestamp": 8.453146,
+      "duration": 0.1,
+      "keyframe_type": {
+        "MouseMove": {
+          "x": 285.0,
+          "y": 284.0
+        }
+      },
+      "id": 1
+    },
+    {
+      "timestamp": 8.479034,
+      "duration": 0.1,
+      "keyframe_type": {
+        "MouseMove": {
+          "x": 270.0,
+          "y": 282.0
+        }
+      },
+      "id": 1
+    },
+    {
+      "timestamp": 8.611146,
+      "duration": 0.15100498,
       "keyframe_type": {
         "MouseBtn": "Left"
       },
       "id": 2
-    },
-    {
-      "timestamp": 6.623001,
-      "duration": 0.1,
-      "keyframe_type": {
-        "MouseMove": {
-          "x": 2073.0,
-          "y": 871.0
-        }
-      },
-      "id": 1
-    },
-    {
-      "timestamp": 6.6443267,
-      "duration": 0.1,
-      "keyframe_type": {
-        "MouseMove": {
-          "x": 2093.0,
-          "y": 877.0
-        }
-      },
-      "id": 1
-    },
-    {
-      "timestamp": 6.6639256,
-      "duration": 0.1,
-      "keyframe_type": {
-        "MouseMove": {
-          "x": 2109.0,
-          "y": 880.0
-        }
-      },
-      "id": 1
-    },
-    {
-      "timestamp": 6.6890316,
-      "duration": 0.1,
-      "keyframe_type": {
-        "MouseMove": {
-          "x": 2131.0,
-          "y": 881.0
-        }
-      },
-      "id": 1
-    },
-    {
-      "timestamp": 6.7100277,
-      "duration": 0.1,
-      "keyframe_type": {
-        "MouseMove": {
-          "x": 2146.0,
-          "y": 880.0
-        }
-      },
-      "id": 1
-    },
-    {
-      "timestamp": 6.735287,
-      "duration": 0.1,
-      "keyframe_type": {
-        "MouseMove": {
-          "x": 2159.0,
-          "y": 875.0
-        }
-      },
-      "id": 1
-    },
-    {
-      "timestamp": 6.7643456,
-      "duration": 0.1,
-      "keyframe_type": {
-        "MouseMove": {
-          "x": 2170.0,
-          "y": 865.0
-        }
-      },
-      "id": 1
-    },
-    {
-      "timestamp": 6.7910986,
-      "duration": 0.1,
-      "keyframe_type": {
-        "MouseMove": {
-          "x": 2177.0,
-          "y": 852.0
-        }
-      },
-      "id": 1
-    },
-    {
-      "timestamp": 6.8132906,
-      "duration": 0.1,
-      "keyframe_type": {
-        "MouseMove": {
-          "x": 2178.0,
-          "y": 836.0
-        }
-      },
-      "id": 1
-    },
-    {
-      "timestamp": 6.8329926,
-      "duration": 0.1,
-      "keyframe_type": {
-        "MouseMove": {
-          "x": 2175.0,
-          "y": 819.0
-        }
-      },
-      "id": 1
-    },
-    {
-      "timestamp": 6.857137,
-      "duration": 0.1,
-      "keyframe_type": {
-        "MouseMove": {
-          "x": 2166.0,
-          "y": 807.0
-        }
-      },
-      "id": 1
-    },
-    {
-      "timestamp": 6.9087834,
-      "duration": 0.1,
-      "keyframe_type": {
-        "MouseMove": {
-          "x": 2157.0,
-          "y": 808.0
-        }
-      },
-      "id": 1
-    },
-    {
-      "timestamp": 6.93177,
-      "duration": 0.1,
-      "keyframe_type": {
-        "MouseMove": {
-          "x": 2150.0,
-          "y": 824.0
-        }
-      },
-      "id": 1
-    },
-    {
-      "timestamp": 6.951787,
-      "duration": 0.1,
-      "keyframe_type": {
-        "MouseMove": {
-          "x": 2149.0,
-          "y": 844.0
-        }
-      },
-      "id": 1
-    },
-    {
-      "timestamp": 6.9729323,
-      "duration": 0.1,
-      "keyframe_type": {
-        "MouseMove": {
-          "x": 2156.0,
-          "y": 864.0
-        }
-      },
-      "id": 1
-    },
-    {
-      "timestamp": 6.994193,
-      "duration": 0.1,
-      "keyframe_type": {
-        "MouseMove": {
-          "x": 2167.0,
-          "y": 877.0
-        }
-      },
-      "id": 1
-    },
-    {
-      "timestamp": 7.024002,
-      "duration": 0.1,
-      "keyframe_type": {
-        "MouseMove": {
-          "x": 2179.0,
-          "y": 883.0
-        }
-      },
-      "id": 1
-    },
-    {
-      "timestamp": 7.0559196,
-      "duration": 0.1,
-      "keyframe_type": {
-        "MouseMove": {
-          "x": 2189.0,
-          "y": 875.0
-        }
-      },
-      "id": 1
-    },
-    {
-      "timestamp": 7.076764,
-      "duration": 0.1,
-      "keyframe_type": {
-        "MouseMove": {
-          "x": 2199.0,
-          "y": 859.0
-        }
-      },
-      "id": 1
-    },
-    {
-      "timestamp": 7.0972233,
-      "duration": 0.1,
-      "keyframe_type": {
-        "MouseMove": {
-          "x": 2204.0,
-          "y": 843.0
-        }
-      },
-      "id": 1
-    },
-    {
-      "timestamp": 7.119041,
-      "duration": 0.1,
-      "keyframe_type": {
-        "MouseMove": {
-          "x": 2202.0,
-          "y": 823.0
-        }
-      },
-      "id": 1
-    },
-    {
-      "timestamp": 7.1390953,
-      "duration": 0.1,
-      "keyframe_type": {
-        "MouseMove": {
-          "x": 2191.0,
-          "y": 809.0
-        }
-      },
-      "id": 1
-    },
-    {
-      "timestamp": 7.162016,
-      "duration": 0.1,
-      "keyframe_type": {
-        "MouseMove": {
-          "x": 2178.0,
-          "y": 802.0
-        }
-      },
-      "id": 1
-    },
-    {
-      "timestamp": 7.1990986,
-      "duration": 0.1,
-      "keyframe_type": {
-        "MouseMove": {
-          "x": 2167.0,
-          "y": 805.0
-        }
-      },
-      "id": 1
-    },
-    {
-      "timestamp": 7.2204733,
-      "duration": 0.1,
-      "keyframe_type": {
-        "MouseMove": {
-          "x": 2159.0,
-          "y": 817.0
-        }
-      },
-      "id": 1
-    },
-    {
-      "timestamp": 7.2400055,
-      "duration": 0.1,
-      "keyframe_type": {
-        "MouseMove": {
-          "x": 2157.0,
-          "y": 834.0
-        }
-      },
-      "id": 1
-    },
-    {
-      "timestamp": 7.2612653,
-      "duration": 0.1,
-      "keyframe_type": {
-        "MouseMove": {
-          "x": 2162.0,
-          "y": 850.0
-        }
-      },
-      "id": 1
-    },
-    {
-      "timestamp": 7.2829,
-      "duration": 0.1,
-      "keyframe_type": {
-        "MouseMove": {
-          "x": 2174.0,
-          "y": 859.0
-        }
-      },
-      "id": 1
-    },
-    {
-      "timestamp": 7.3132715,
-      "duration": 0.1,
-      "keyframe_type": {
-        "MouseMove": {
-          "x": 2189.0,
-          "y": 861.0
-        }
-      },
-      "id": 1
-    },
-    {
-      "timestamp": 7.344952,
-      "duration": 0.1,
-      "keyframe_type": {
-        "MouseMove": {
-          "x": 2200.0,
-          "y": 852.0
-        }
-      },
-      "id": 1
-    },
-    {
-      "timestamp": 7.3664904,
-      "duration": 0.1,
-      "keyframe_type": {
-        "MouseMove": {
-          "x": 2204.0,
-          "y": 839.0
-        }
-      },
-      "id": 1
-    },
-    {
-      "timestamp": 7.387272,
-      "duration": 0.1,
-      "keyframe_type": {
-        "MouseMove": {
-          "x": 2203.0,
-          "y": 821.0
-        }
-      },
-      "id": 1
-    },
-    {
-      "timestamp": 7.407946,
-      "duration": 0.1,
-      "keyframe_type": {
-        "MouseMove": {
-          "x": 2192.0,
-          "y": 804.0
-        }
-      },
-      "id": 1
-    },
-    {
-      "timestamp": 7.4284005,
-      "duration": 0.1,
-      "keyframe_type": {
-        "MouseMove": {
-          "x": 2174.0,
-          "y": 791.0
-        }
-      },
-      "id": 1
-    },
-    {
-      "timestamp": 7.4488087,
-      "duration": 0.1,
-      "keyframe_type": {
-        "MouseMove": {
-          "x": 2159.0,
-          "y": 787.0
-        }
-      },
-      "id": 1
-    },
-    {
-      "timestamp": 7.477205,
-      "duration": 0.1,
-      "keyframe_type": {
-        "MouseMove": {
-          "x": 2147.0,
-          "y": 792.0
-        }
-      },
-      "id": 1
-    },
-    {
-      "timestamp": 7.4984803,
-      "duration": 0.1,
-      "keyframe_type": {
-        "MouseMove": {
-          "x": 2142.0,
-          "y": 806.0
-        }
-      },
-      "id": 1
-    },
-    {
-      "timestamp": 7.518279,
-      "duration": 0.1,
-      "keyframe_type": {
-        "MouseMove": {
-          "x": 2141.0,
-          "y": 823.0
-        }
-      },
-      "id": 1
-    },
-    {
-      "timestamp": 7.5420914,
-      "duration": 0.1,
-      "keyframe_type": {
-        "MouseMove": {
-          "x": 2151.0,
-          "y": 839.0
-        }
-      },
-      "id": 1
-    },
-    {
-      "timestamp": 7.567144,
-      "duration": 0.1,
-      "keyframe_type": {
-        "MouseMove": {
-          "x": 2163.0,
-          "y": 845.0
-        }
-      },
-      "id": 1
-    },
-    {
-      "timestamp": 7.5983067,
-      "duration": 0.1,
-      "keyframe_type": {
-        "MouseMove": {
-          "x": 2175.0,
-          "y": 844.0
-        }
-      },
-      "id": 1
-    },
-    {
-      "timestamp": 7.622162,
-      "duration": 0.1,
-      "keyframe_type": {
-        "MouseMove": {
-          "x": 2184.0,
-          "y": 835.0
-        }
-      },
-      "id": 1
-    },
-    {
-      "timestamp": 7.6458817,
-      "duration": 0.1,
-      "keyframe_type": {
-        "MouseMove": {
-          "x": 2187.0,
-          "y": 821.0
-        }
-      },
-      "id": 1
-    },
-    {
-      "timestamp": 7.668798,
-      "duration": 0.1,
-      "keyframe_type": {
-        "MouseMove": {
-          "x": 2182.0,
-          "y": 807.0
-        }
-      },
-      "id": 1
-    },
-    {
-      "timestamp": 7.6898527,
-      "duration": 0.1,
-      "keyframe_type": {
-        "MouseMove": {
-          "x": 2168.0,
-          "y": 796.0
-        }
-      },
-      "id": 1
-    },
-    {
-      "timestamp": 7.71307,
-      "duration": 0.1,
-      "keyframe_type": {
-        "MouseMove": {
-          "x": 2153.0,
-          "y": 791.0
-        }
-      },
-      "id": 1
-    },
-    {
-      "timestamp": 7.740869,
-      "duration": 0.1,
-      "keyframe_type": {
-        "MouseMove": {
-          "x": 2141.0,
-          "y": 793.0
-        }
-      },
-      "id": 1
-    },
-    {
-      "timestamp": 7.7654567,
-      "duration": 0.1,
-      "keyframe_type": {
-        "MouseMove": {
-          "x": 2131.0,
-          "y": 803.0
-        }
-      },
-      "id": 1
-    },
-    {
-      "timestamp": 7.7878275,
-      "duration": 0.1,
-      "keyframe_type": {
-        "MouseMove": {
-          "x": 2127.0,
-          "y": 816.0
-        }
-      },
-      "id": 1
-    },
-    {
-      "timestamp": 7.8118396,
-      "duration": 0.1,
-      "keyframe_type": {
-        "MouseMove": {
-          "x": 2130.0,
-          "y": 829.0
-        }
-      },
-      "id": 1
-    },
-    {
-      "timestamp": 7.8339353,
-      "duration": 0.1,
-      "keyframe_type": {
-        "MouseMove": {
-          "x": 2143.0,
-          "y": 839.0
-        }
-      },
-      "id": 1
-    },
-    {
-      "timestamp": 7.8589244,
-      "duration": 0.1,
-      "keyframe_type": {
-        "MouseMove": {
-          "x": 2160.0,
-          "y": 842.0
-        }
-      },
-      "id": 1
-    },
-    {
-      "timestamp": 7.8800607,
-      "duration": 0.1,
-      "keyframe_type": {
-        "MouseMove": {
-          "x": 2174.0,
-          "y": 841.0
-        }
-      },
-      "id": 1
-    },
-    {
-      "timestamp": 7.9088383,
-      "duration": 0.1,
-      "keyframe_type": {
-        "MouseMove": {
-          "x": 2183.0,
-          "y": 832.0
-        }
-      },
-      "id": 1
-    },
-    {
-      "timestamp": 7.943247,
-      "duration": 0.1,
-      "keyframe_type": {
-        "MouseMove": {
-          "x": 2183.0,
-          "y": 818.0
-        }
-      },
-      "id": 1
-    },
-    {
-      "timestamp": 7.9631763,
-      "duration": 0.1,
-      "keyframe_type": {
-        "MouseMove": {
-          "x": 2174.0,
-          "y": 806.0
-        }
-      },
-      "id": 1
-    },
-    {
-      "timestamp": 7.9834943,
-      "duration": 0.1,
-      "keyframe_type": {
-        "MouseMove": {
-          "x": 2157.0,
-          "y": 797.0
-        }
-      },
-      "id": 1
-    },
-    {
-      "timestamp": 8.008833,
-      "duration": 0.1,
-      "keyframe_type": {
-        "MouseMove": {
-          "x": 2143.0,
-          "y": 795.0
-        }
-      },
-      "id": 1
-    },
-    {
-      "timestamp": 8.036004,
-      "duration": 0.1,
-      "keyframe_type": {
-        "MouseMove": {
-          "x": 2136.0,
-          "y": 806.0
-        }
-      },
-      "id": 1
-    },
-    {
-      "timestamp": 8.0623665,
-      "duration": 0.1,
-      "keyframe_type": {
-        "MouseMove": {
-          "x": 2135.0,
-          "y": 820.0
-        }
-      },
-      "id": 1
-    },
-    {
-      "timestamp": 8.085936,
-      "duration": 0.1,
-      "keyframe_type": {
-        "MouseMove": {
-          "x": 2141.0,
-          "y": 830.0
-        }
-      },
-      "id": 1
-    },
-    {
-      "timestamp": 8.109996,
-      "duration": 0.1,
-      "keyframe_type": {
-        "MouseMove": {
-          "x": 2153.0,
-          "y": 838.0
-        }
-      },
-      "id": 1
-    },
-    {
-      "timestamp": 8.146195,
-      "duration": 0.1,
-      "keyframe_type": {
-        "MouseMove": {
-          "x": 2166.0,
-          "y": 842.0
-        }
-      },
-      "id": 1
-    },
-    {
-      "timestamp": 8.207822,
-      "duration": 0.1,
-      "keyframe_type": {
-        "MouseMove": {
-          "x": 2171.0,
-          "y": 833.0
-        }
-      },
-      "id": 1
-    },
-    {
-      "timestamp": 8.2418995,
-      "duration": 0.1,
-      "keyframe_type": {
-        "MouseMove": {
-          "x": 2162.0,
-          "y": 823.0
-        }
-      },
-      "id": 1
-    },
-    {
-      "timestamp": 8.271914,
-      "duration": 0.1,
-      "keyframe_type": {
-        "MouseMove": {
-          "x": 2149.0,
-          "y": 820.0
-        }
-      },
-      "id": 1
-    },
-    {
-      "timestamp": 8.306141,
-      "duration": 0.1,
-      "keyframe_type": {
-        "MouseMove": {
-          "x": 2135.0,
-          "y": 828.0
-        }
-      },
-      "id": 1
-    },
-    {
-      "timestamp": 8.331834,
-      "duration": 0.1,
-      "keyframe_type": {
-        "MouseMove": {
-          "x": 2130.0,
-          "y": 837.0
-        }
-      },
-      "id": 1
-    },
-    {
-      "timestamp": 8.382907,
-      "duration": 0.1,
-      "keyframe_type": {
-        "MouseMove": {
-          "x": 2125.0,
-          "y": 848.0
-        }
-      },
-      "id": 1
-    },
-    {
-      "timestamp": 8.449485,
-      "duration": 0.1,
-      "keyframe_type": {
-        "MouseMove": {
-          "x": 2114.0,
-          "y": 854.0
-        }
-      },
-      "id": 1
-    },
-    {
-      "timestamp": 8.494269,
-      "duration": 0.1,
-      "keyframe_type": {
-        "MouseMove": {
-          "x": 2101.0,
-          "y": 856.0
-        }
-      },
-      "id": 1
-    },
-    {
-      "timestamp": 8.529966,
-      "duration": 0.1,
-      "keyframe_type": {
-        "MouseMove": {
-          "x": 2089.0,
-          "y": 860.0
-        }
-      },
-      "id": 1
-    },
-    {
-      "timestamp": 8.591868,
-      "duration": 0.1,
-      "keyframe_type": {
-        "MouseMove": {
-          "x": 2077.0,
-          "y": 863.0
-        }
-      },
-      "id": 1
     }
   ],
   "repeats": 1,

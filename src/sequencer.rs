@@ -5,7 +5,7 @@ use std::{thread, time::Instant};
 
 use eframe::egui::{self, pos2, Ui, Vec2};
 use egui::{emath::RectTransform, Pos2, Rect};
-use egui::{vec2, Align2, FontId, NumExt, Widget};
+use egui::{vec2, Align2, FontId};
 use serde::{Deserialize, Serialize};
 
 use crate::keyframe::{Keyframe, KeyframeType};
@@ -361,161 +361,174 @@ impl Sequencer {
             log::info!("Start Recording");
         }
     }
-    fn render_keyframes(&mut self, ui: &mut Ui, ids: Vec<u8>) {
-        let max_rect = ui.max_rect();
+    fn render_keyframes(&mut self, ui: &mut Ui, max_rect: &Rect) {
         let mut keyframes = self.keyframes.lock().unwrap();
         let offset = scale(ui, self.scroll, self.scale);
         let mut delete = false;
         for i in 0..keyframes.len() {
-            if ids.contains(&keyframes[i].id) {
-                let rect = time_to_rect(
-                    scale(ui, keyframes[i].timestamp, self.scale) - offset + 4.0,
-                    // +4 offset to allow for left most digit to always be visible
-                    scale(ui, keyframes[i].duration, self.scale),
-                    scale(
-                        ui,
-                        ui.max_rect().width() * (1.0 / scale(ui, 1.0, self.scale)),
-                        self.scale,
-                    ),
-                    ui.spacing().item_spacing,
-                    max_rect,
-                );
-                if rect.is_none() {
-                    continue;
-                }
-                let rect = rect.unwrap();
+            let offset_y = ui.spacing().item_spacing.y;
+            let y = match keyframes[i].id {
+                0 => offset_y,
+                1 => ROW_HEIGHT * 2. + 9.,
+                2 => ROW_HEIGHT + offset_y * 2.,
+                3 => ROW_HEIGHT + offset_y * 2.,
+                _ => 0.,
+            };
+            let rect = time_to_rect(
+                scale(ui, keyframes[i].timestamp, self.scale) - offset + 4.0,
+                // +4 offset to allow for left most digit to always be visible
+                scale(ui, keyframes[i].duration, self.scale),
+                scale(
+                    ui,
+                    max_rect.width() * (1.0 / scale(ui, 1.0, self.scale)),
+                    self.scale,
+                ),
+                ui.spacing().item_spacing,
+                max_rect.translate(vec2(0.,y)),
+            );
+            if rect.is_none() {
+                continue;
+            }
+            let rect = rect.unwrap();
 
-                {
-                    let mut ctrl = false;
-                    ui.input(|i| {
-                        ctrl = i.modifiers.ctrl;
-                    });
-                    if self.selecting {
-                        if selection_contains_keyframe(self.compute_selection_rect(max_rect), rect)
-                        {
-                            if !self.selected_keyframes.contains(&i) {
-                                self.selected_keyframes.push(i);
-                            }
-                        } else {
-                            if !ctrl {
-                                if !self.selected_keyframes.is_empty() {
-                                    let index = self.selected_keyframes.binary_search(&i);
-                                    if index.is_ok() {
-                                        self.selected_keyframes.remove(index.unwrap());
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-
-                let width = rect.width();
-                let label = format!(
-                    "{}",
-                    match &keyframes[i].keyframe_type {
-                        KeyframeType::KeyBtn(key) => key_to_char(key),
-                        KeyframeType::MouseBtn(btn) => button_to_char(btn),
-                        KeyframeType::MouseMove(_) => "".to_string(),
-                        KeyframeType::Scroll(delta) => scroll_to_char(delta),
-                    }
-                );
-
-                let color = match keyframes[i].id {
-                    0 => egui::Color32::LIGHT_RED,              //Keyboard
-                    1 => egui::Color32::from_rgb(95, 186, 213), //Mouse move
-                    2 => egui::Color32::LIGHT_GREEN,            //Button Click
-                    3 => egui::Color32::LIGHT_YELLOW,           //Scroll
-                    _ => egui::Color32::LIGHT_GRAY,
-                };
-                let stroke = match self.keyframe_state.lock().unwrap()[i] {
-                    1 => egui::Stroke::new(1.5, egui::Color32::LIGHT_RED), //Playing
-                    2 => egui::Stroke::new(1.5, egui::Color32::from_rgb(233, 181, 125)), //Selected
-                    _ => egui::Stroke::new(0.4, egui::Color32::from_rgb(15, 37, 42)), //Not selected
-                };
-
-                let keyframe = ui
-                    .allocate_rect(rect, egui::Sense::click_and_drag())
-                    .on_hover_text(format!("{:?}", keyframes[i].keyframe_type));
-                ui.painter()
-                    .rect(rect, egui::Rounding::same(2.0), color, stroke);
-
-                if width > 10.0 {
-                    ui.painter().text(
-                        rect.center(),
-                        Align2::CENTER_CENTER,
-                        format!("{}", label),
-                        FontId::default(),
-                        egui::Color32::BLACK,
-                    );
-                }
-                if keyframe.clicked() {
-                    let mut ctrl = false;
-                    ui.input(|i| {
-                        ctrl = i.modifiers.ctrl;
-                    });
-                    if self.selected_keyframes.contains(&i)
-                        || self.keyframe_state.lock().unwrap()[i] == 2
-                    {
-                        if !ctrl {
-                            let index = self.selected_keyframes.binary_search(&i).unwrap();
-                            self.selected_keyframes.remove(index);
+            {
+                let mut ctrl = false;
+                ui.input(|i| {
+                    ctrl = i.modifiers.ctrl;
+                });
+                if self.selecting {
+                    if selection_contains_keyframe(&self.compute_selection_rect(&max_rect), rect) {
+                        if !self.selected_keyframes.contains(&i) {
+                            self.selected_keyframes.push(i);
                         }
                     } else {
                         if !ctrl {
-                            self.selected_keyframes.clear();
-                        }
-                        self.selected_keyframes.push(i);
-                    }
-                }
-
-                if keyframe.drag_started() {
-                    if let Some(start) = keyframe.interact_pointer_pos() {
-                        self.drag_start = start;
-                        self.dragging = true;
-                    }
-                }
-                if keyframe.hovered() {
-                    ui.output_mut(|o| o.cursor_icon = egui::CursorIcon::PointingHand);
-                }
-
-                if self.dragging {
-                    if let Some(end) = keyframe.interact_pointer_pos() {
-                        let drag_delta =
-                            (end.x - self.drag_start.x) * (1.0 / scale(ui, 1.0, self.scale));
-                        let t = keyframes[i].timestamp + drag_delta;
-                        if t > 0.0 {
-                            let state = self.keyframe_state.lock().unwrap();
-                            keyframes[i].timestamp = t;
-                            for j in 0..state.len() {
-                                if state[j] == 2 && j != i {
-                                    keyframes[j].timestamp += drag_delta;
+                            if !self.selected_keyframes.is_empty() {
+                                let index = self.selected_keyframes.binary_search(&i);
+                                if index.is_ok() {
+                                    self.selected_keyframes.remove(index.unwrap());
                                 }
                             }
-                            self.drag_start.x = end.x;
-                            self.changed.swap(true, Ordering::Relaxed);
                         }
                     }
                 }
-                if keyframe.drag_stopped() {
-                    self.drag_start = pos2(0., 0.);
-                    self.dragging = false;
-                    self.resizing = false;
-                }
-                ui.input_mut(|input| {
-                    if input.consume_key(egui::Modifiers::NONE, egui::Key::Delete) {
-                        delete = true;
-                    }
-                });
-                keyframe.context_menu(|ui| {
-                    if !self.selected_keyframes.contains(&i) {
-                        self.selected_keyframes.push(i);
-                    }
-                    if ui.button("Delete").clicked() {
-                        delete = true;
-                        ui.close_menu();
-                    }
-                });
             }
+
+            let width = rect.width();
+            let label = format!(
+                "{}",
+                match &keyframes[i].keyframe_type {
+                    KeyframeType::KeyBtn(key) => key_to_char(key),
+                    KeyframeType::MouseBtn(btn) => button_to_char(btn),
+                    KeyframeType::MouseMove(_) => "".to_string(),
+                    KeyframeType::Scroll(delta) => scroll_to_char(delta),
+                }
+            );
+            let color = match keyframes[i].id {
+                0 => egui::Color32::LIGHT_RED,              //Keyboard
+                1 => egui::Color32::from_rgb(95, 186, 213), //Mouse move
+                2 => egui::Color32::LIGHT_GREEN,            //Button Click
+                3 => egui::Color32::LIGHT_YELLOW,           //Scroll
+                _ => egui::Color32::LIGHT_GRAY,
+            };
+            let stroke = match self.keyframe_state.lock().unwrap()[i] {
+                1 => egui::Stroke::new(1.5, egui::Color32::LIGHT_RED), //Playing
+                2 => egui::Stroke::new(1.5, egui::Color32::from_rgb(233, 181, 125)), //Selected
+                _ => egui::Stroke::new(0.4, egui::Color32::from_rgb(15, 37, 42)), //Not selected
+            };
+
+            let keyframe = ui
+                .allocate_rect(rect, egui::Sense::click_and_drag())
+                .on_hover_text(format!("{:?}", keyframes[i].keyframe_type));
+            ui.painter()
+                .rect(rect, egui::Rounding::same(2.0), color, stroke);
+
+            if width > 10.0 {
+                ui.painter().text(
+                    rect.center(),
+                    Align2::CENTER_CENTER,
+                    format!("{}", label),
+                    FontId::default(),
+                    egui::Color32::BLACK,
+                );
+            }
+            if keyframe.clicked() {
+                let mut ctrl = false;
+                ui.input(|i| {
+                    ctrl = i.modifiers.ctrl;
+                });
+                if self.selected_keyframes.contains(&i)
+                    || self.keyframe_state.lock().unwrap()[i] == 2
+                {
+
+                    let index = self.selected_keyframes.binary_search(&i);
+                    println!("{},{:?} {:?}",i,index,self.selected_keyframes);
+                    if index.is_ok(){
+                        if !ctrl{
+                            self.selected_keyframes.clear();
+                        }else{
+                            self.selected_keyframes.remove(index.unwrap());
+                        }
+                    }else{
+                        if !ctrl{
+                            self.selected_keyframes.push(i);
+                        }
+                    }
+                } else {
+                    if !ctrl {
+                        self.selected_keyframes.clear();
+                    }
+                    self.selected_keyframes.push(i);
+                }
+            }
+
+            if keyframe.drag_started() {
+                if let Some(start) = keyframe.interact_pointer_pos() {
+                    self.drag_start = start;
+                    self.dragging = true;
+                }
+            }
+            if keyframe.hovered() {
+                ui.output_mut(|o| o.cursor_icon = egui::CursorIcon::PointingHand);
+            }
+
+            if self.dragging {
+                if let Some(end) = keyframe.interact_pointer_pos() {
+                    let drag_delta =
+                        (end.x - self.drag_start.x) * (1.0 / scale(ui, 1.0, self.scale));
+                    let t = keyframes[i].timestamp + drag_delta;
+                    if t > 0.0 {
+                        let state = self.keyframe_state.lock().unwrap();
+                        keyframes[i].timestamp = t;
+                        for j in 0..state.len() {
+                            if state[j] == 2 && j != i {
+                                keyframes[j].timestamp += drag_delta;
+                            }
+                        }
+                        self.drag_start.x = end.x;
+                        self.changed.swap(true, Ordering::Relaxed);
+                    }
+                }
+            }
+            if keyframe.drag_stopped() {
+                self.drag_start = pos2(0., 0.);
+                self.dragging = false;
+                self.resizing = false;
+            }
+            ui.input_mut(|input| {
+                if input.consume_key(egui::Modifiers::NONE, egui::Key::Delete) {
+                    delete = true;
+                }
+            });
+            keyframe.context_menu(|ui| {
+                if !self.selected_keyframes.contains(&i) {
+                    self.selected_keyframes.push(i);
+                }
+                if ui.button("Delete").clicked() {
+                    delete = true;
+                    ui.close_menu();
+                }
+            });
         }
 
         if delete && !self.selected_keyframes.is_empty() {
@@ -525,18 +538,19 @@ impl Sequencer {
             self.selected_keyframes.sort();
 
             if self.selected_keyframes.contains(&(kf_len - 1)) {
-                let x = self.selected_keyframes.pop();
-                keyframes.remove(x.unwrap());
-                keyframe_state.remove(x.unwrap());
+                let x = self.selected_keyframes.pop().unwrap();
+                keyframes.remove(x);
+                keyframe_state.remove(x);
             }
             self.selected_keyframes.reverse();
 
             if self.selected_keyframes.contains(&(0)) {
-                let x = self.selected_keyframes.pop();
-                keyframes.remove(x.unwrap());
-                keyframe_state.remove(x.unwrap());
+                let x = self.selected_keyframes.pop().unwrap();
+                keyframes.remove(x);
+                keyframe_state.remove(x);
             }
 
+            println!("{}",self.selected_keyframes.len());
             if !self.selected_keyframes.is_empty() {
                 let mut next = self.selected_keyframes.first().unwrap().clone() + 1;
                 for i in &self.selected_keyframes {
@@ -715,8 +729,9 @@ impl Sequencer {
                 .translate(vec2(6.5, 0.))
                 .translate(vec2(0., (ROW_HEIGHT + ui.spacing().item_spacing.y) * 2.));
 
-            max_rect.max.y = max_rect.min.y + (ROW_HEIGHT ) * 4. + ui.spacing().item_spacing.y;
+            max_rect.max.y = max_rect.min.y + (ROW_HEIGHT) * 4. + ui.spacing().item_spacing.y;
             max_rect.min.x += 60.;
+            max_rect.max.y -= ROW_HEIGHT;
             // println!("1: {:?}",max_rect.width());
             let mut table = TableBuilder::new(ui)
                 .striped(false)
@@ -759,7 +774,6 @@ impl Sequencer {
                         });
                         row.col(|ui| {
                             self.sense(ui);
-                            self.render_keyframes(ui, vec![0]);
                         });
                     });
 
@@ -769,7 +783,6 @@ impl Sequencer {
                         });
                         row.col(|ui| {
                             self.sense(ui);
-                            self.render_keyframes(ui, vec![2, 3]);
                         });
                     });
                     body.row(ROW_HEIGHT, |mut row| {
@@ -778,7 +791,6 @@ impl Sequencer {
                         });
                         row.col(|ui| {
                             self.sense(ui);
-                            self.render_keyframes(ui, vec![1]);
                         });
                     });
                     body.row(ROW_HEIGHT, |mut row| {
@@ -809,31 +821,35 @@ impl Sequencer {
                     });
                 });
 
+            self.render_keyframes(ui, &max_rect);
             if self.selecting {
                 ui.painter().rect(
-                    self.compute_selection_rect(max_rect),
+                    self.compute_selection_rect(&max_rect),
                     egui::Rounding::same(2.0),
                     egui::Color32::from_rgba_unmultiplied(0xAD, 0xD8, 0xE6, 20),
-                    egui::Stroke::new(0.4, egui::Color32::DARK_BLUE),
+                    egui::Stroke::new(0.4, egui::Color32::LIGHT_BLUE),
                 );
             }
-            
+
             self.render_playhead(ui, 3, max_rect);
         });
     }
     fn scroll_bar(&mut self, ui: &mut Ui, max_t: f32, max_rect: Rect) {
         let t_width = max_rect.width() * (1.0 / scale(ui, 1.0, self.scale));
         let t_ratio = (t_width / max_t).clamp(0.0, 1.0);
-
-        let x = self.scroll.clamp(0.0, t_width - (t_width * t_ratio));
+        // println!("width: {}, ratio: {}, max_t: {}",t_width, t_ratio,max_t);
+        let d = t_width * t_ratio;
+        let t = self.scroll.clamp(0.0, t_width - d);
+        // println!("width: {}, ratio: {}, max_t: {}, t: {}, d: {}, x: {}",t_width, t_ratio,max_t,t,d, t_width - (t_width * t_ratio));
         let rect = time_to_rect(
-            scale(ui, x, self.scale),
-            scale(ui, t_width * t_ratio - 0.01, self.scale),
+            scale(ui, t, self.scale),
+            scale(ui, d, self.scale),
             0.0,
             ui.spacing().item_spacing,
             max_rect,
         )
-        .unwrap().translate(vec2(0.,2.));
+        .unwrap()
+        .translate(vec2(0., 2.));
         ui.painter().rect(
             rect,
             egui::Rounding::same(2.0),
@@ -918,7 +934,7 @@ impl Sequencer {
                 }
             });
     }
-    fn compute_selection_rect(&self, max_rect: Rect) -> Rect {
+    fn compute_selection_rect(&self, max_rect: &Rect) -> Rect {
         let mut rect = self.selection;
         if self.selection.min.y > self.selection.max.y {
             rect = Rect {
@@ -1124,24 +1140,19 @@ fn time_to_rect(t: f32, d: f32, max_t: f32, spacing: Vec2, res_rect: Rect) -> Op
     })
 }
 
-fn selection_contains_keyframe(selection: Rect, keyframe: Rect) -> bool {
-    if selection_contains_point(selection, keyframe.left_top())
-        || selection_contains_point(selection, keyframe.left_bottom())
-        || selection_contains_point(selection, keyframe.right_top())
-        || selection_contains_point(selection, keyframe.right_bottom())
+fn selection_contains_keyframe(selection: &Rect, keyframe: Rect) -> bool {
+    if selection.min.x + selection.width() >= keyframe.min.x
+        && selection.min.x <= keyframe.min.x + keyframe.width()
+        && selection.min.y + selection.height() >= keyframe.min.y
+        && selection.min.y <= keyframe.min.y + keyframe.height()
     {
         true
     } else {
         false
     }
 }
-fn selection_contains_point(selection: Rect, p: Pos2) -> bool {
-    (selection.min.x <= p.x)
-        & (p.x < selection.max.x)
-        & (selection.min.y <= p.y)
-        & (p.y < selection.max.y)
-}
 
+#[allow(dead_code)]
 fn strings_to_keys(string: &String) -> Vec<rdev::Key> {
     let mut keys = vec![];
     for x in string.split(' ') {
@@ -1269,6 +1280,7 @@ fn string_to_keys(c: &str) -> Option<rdev::Key> {
         _ => None,
     }
 }
+
 fn key_to_char(k: &rdev::Key) -> String {
     match k {
         rdev::Key::KeyA => "a".to_string(),
