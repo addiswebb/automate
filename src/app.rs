@@ -10,9 +10,8 @@ use std::{
 
 use crate::sequencer::{Sequencer, SequencerState};
 
-/// We derive Deserialize/Serialize so we can persist app state on shutdown.
 #[derive(serde::Deserialize, serde::Serialize)]
-#[serde(default)] // if we add new fields, give them default values when deserializing old state
+#[serde(default)] 
 pub struct App {
     #[serde(skip)] //Serializing creates two threads somehow
     sequencer: Sequencer,
@@ -21,7 +20,7 @@ pub struct App {
     offset: Vec2,
     file: String,
     #[serde(skip)]
-    saved_file_uptodate: bool,
+    file_uptodate: bool,
     #[serde(skip)]
     allowed_to_close: bool,
     #[serde(skip)]
@@ -35,7 +34,7 @@ impl Default for App {
             last_instant: Instant::now(),
             offset: Vec2::ZERO,
             file: "untitled.auto".to_string(),
-            saved_file_uptodate: true,
+            file_uptodate: true,
             allowed_to_close: false,
             show_close_dialog: false,
         }
@@ -45,35 +44,41 @@ impl Default for App {
 impl App {
     /// Called once before the first frame.
     pub fn new(cc: &eframe::CreationContext<'_>) -> Self {
-        // This is also where you can customize the look and feel of egui using
-        // `cc.egui_ctx.set_visuals` and `cc.egui_ctx.set_fonts`.
 
-        // Load previous app state (if any).
-        // Note that you must enable the `persistence` feature for this to work.
+        // Load previous app state if any
         if let Some(storage) = cc.storage {
             return eframe::get_value(storage, eframe::APP_KEY).unwrap_or_default();
         }
 
         Default::default()
     }
+    /// Safely creates a new file
+    /// 
+    /// If the current file has not been saved, gives the option to do so.
     fn new_file(&mut self) {
-        if self.file != "untitled.auto" {
+        if self.file_uptodate{
+            //reset the sequencer
             self.sequencer.keyframes.lock().unwrap().clear();
             self.sequencer.keyframe_state.lock().unwrap().clear();
             self.sequencer.reset_time();
             self.file = "untitled.auto".to_string();
             self.sequencer.loaded_file = self.file.clone();
-            self.saved_file_uptodate = true;
+            self.file_uptodate = true;
             self.sequencer.changed.swap(false, Ordering::Relaxed);
             log::info!("New file: {:?}", "untitled.auto");
-        } else {
+        }else{
+            // offer to save the current file before making a new one
             self.show_close_dialog = true;
         }
     }
+    /// Safely saves the current file
+    /// 
+    /// Overwrites the current file if it already exists otherwise allows the creation of a new file.
     fn save_file(&mut self) {
         let state = self.sequencer.save_to_state();
         let json = serde_json::to_string_pretty(&state);
         if json.is_ok() {
+            // if its a new file, save as a new file
             if self.file == "untitled.auto" {
                 self.file = FileDialog::new()
                     .add_filter("automate", &["auto"])
@@ -87,16 +92,18 @@ impl App {
                     .to_string();
             }
 
+            // otherwise save the current file
             let mut file = File::create(self.file.clone()).unwrap();
             file.write_all(json.unwrap().as_bytes()).unwrap();
             self.sequencer.loaded_file = self.file.clone();
-            self.saved_file_uptodate = true;
+            self.file_uptodate = true;
             self.sequencer.changed.swap(false, Ordering::Relaxed);
             log::info!("Save file: {:?}", self.file);
         } else {
             log::error!("Failed to save 'file.auto'");
         }
     }
+    /// Open a file using the native file dialog
     fn open_file(&mut self) {
         FileDialog::new()
             .add_filter("automate", &["auto"])
@@ -106,10 +113,8 @@ impl App {
                 self.load_file(&path);
                 Some(())
             });
-        // if path.is_some(){
-        //     self.load_file(&path.unwrap());
-        // }
     }
+    ///Load an ".auto" file from the given path
     fn load_file(&mut self, path: &PathBuf) {
         let stream = File::open(path.clone());
         if stream.is_ok() {
@@ -120,7 +125,7 @@ impl App {
             self.sequencer.load_from_state(data);
             self.file = path.file_name().unwrap().to_str().unwrap().to_string();
             self.sequencer.loaded_file = self.file.clone();
-            self.saved_file_uptodate = true;
+            self.file_uptodate = true;
             log::info!("Load file: {:?}", path);
         } else {
             self.new_file();
@@ -131,8 +136,11 @@ impl App {
             );
         }
     }
+    /// Set the title of the window dependant on the current file status
+    /// 
+    /// e.g "file.auto" if saved and "file.auto*" if there are changes to be saved.
     fn set_title(&self, ctx: &egui::Context) {
-        let saved = match self.saved_file_uptodate {
+        let saved = match self.file_uptodate {
             true => "",
             false => "*",
         };
@@ -156,8 +164,8 @@ impl eframe::App for App {
             self.load_file(&PathBuf::from(file));
             self.set_title(ctx);
         }
-        if self.sequencer.changed.load(Ordering::Relaxed) || !self.saved_file_uptodate {
-            self.saved_file_uptodate = false;
+        if self.sequencer.changed.load(Ordering::Relaxed) || !self.file_uptodate {
+            self.file_uptodate = false;
         }
         self.set_title(ctx);
         let mut cancel_close = false;
@@ -243,7 +251,7 @@ impl eframe::App for App {
                 println!("{:?}", i.viewport().inner_rect.unwrap().size())
             }
 
-            if i.viewport().close_requested() && !self.saved_file_uptodate {
+            if i.viewport().close_requested() && !self.file_uptodate {
                 if !self.allowed_to_close {
                     log::info!("Close without saving?");
                     self.show_close_dialog = true;

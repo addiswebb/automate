@@ -2,6 +2,7 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")] // hide console window on Windows in release
 
 fn main() -> eframe::Result<()> {
+    // setup logger to log automate events
     env_logger::builder()
         .filter_module("automate", log::LevelFilter::Info)
         .init();

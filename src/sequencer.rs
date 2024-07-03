@@ -67,6 +67,7 @@ pub struct Sequencer {
 }
 
 impl Sequencer {
+    /// Creates a new sequencer
     pub fn new() -> Self {
         let keyframes: Arc<Mutex<Vec<Keyframe>>> = Arc::new(Mutex::new(vec![]));
         let keyframe_state = Arc::new(Mutex::new(vec![]));
@@ -285,6 +286,7 @@ impl Sequencer {
         }
     }
 
+    /// Saves the current state of the sequencer to `SequencerState`
     pub fn save_to_state(&self) -> SequencerState {
         SequencerState {
             keyframes: self.keyframes.lock().unwrap().clone(),
@@ -292,6 +294,7 @@ impl Sequencer {
             speed: self.speed,
         }
     }
+    /// Loads the sequencer with the `SequencerState` 
     pub fn load_from_state(&mut self, state: SequencerState) {
         let mut shared_kfs = self.keyframes.lock().unwrap();
         let mut shared_pkfs = self.keyframe_state.lock().unwrap();
@@ -303,24 +306,35 @@ impl Sequencer {
         self.repeats = state.repeats;
     }
 
+    /// Toggles whether the sequencer is playing or not
     pub fn toggle_play(&mut self) {
         self.play
             .swap(!self.play.load(Ordering::Relaxed), Ordering::Relaxed);
     }
+    /// Reset the time and playhead to 0 seconds
     pub fn reset_time(&mut self) {
         self.time = 0.;
     }
+    /// Increase the current time by 0.1 seconds
     pub fn step_time(&mut self) {
         self.time += 0.1;
     }
+    /// Increases the scale of the keyframes to zoom in
     pub fn zoom(&mut self, delta: f32) {
         let multiplier = 1.0 / 100.0;
         self.scale += delta * multiplier;
     }
+    /// Scrolls through the keyframes
     pub fn scroll(&mut self, delta: f32) {
         let multiplier = 1.0 / 80.0;
         self.scroll += delta * multiplier;
     }
+    /// Toggle whether the sequencer is recording keystrokes or not
+    /// 
+    /// When starting recording: If `clear_before_recording` is `true`, reset the sequencer and record from 0 seconds
+    /// otherwise record from where the sequencer left off
+    /// 
+    /// When stopping recording: Remove the last input if it was used to stop the recording (mouse pressing the stop button)
     pub fn toggle_recording(&mut self) {
         if !self.recording.load(Ordering::Relaxed) {
             let mut keyframes = self.keyframes.lock().unwrap();
@@ -361,6 +375,10 @@ impl Sequencer {
             log::info!("Start Recording");
         }
     }
+    
+    /// Loops through all the sequencer's keyframes and renders them accordingly
+    /// 
+    /// Also handles deleting keyframes due to convenience
     fn render_keyframes(&mut self, ui: &mut Ui, max_rect: &Rect) {
         let mut keyframes = self.keyframes.lock().unwrap();
         let offset = scale(ui, self.scroll, self.scale);
@@ -573,6 +591,8 @@ impl Sequencer {
             self.changed.swap(true, Ordering::Relaxed);
         }
     }
+
+    /// Handles rendering the control bar
     fn render_control_bar(&mut self, ui: &mut Ui) {
         if ui.button("⏪").on_hover_text("Restart").clicked() {
             self.reset_time();
@@ -672,6 +692,8 @@ impl Sequencer {
             }
         }
     }
+
+    /// Render the timeline with numbers and notches
     fn render_timeline(&self, ui: &mut Ui, max_rect: Rect) {
         let pos = time_to_rect(4.0, 0.0, 0.0, ui.spacing().item_spacing, max_rect)
             .unwrap()
@@ -698,6 +720,7 @@ impl Sequencer {
             );
         }
     }
+    /// Render the playhead at whatever time the sequencer is at
     fn render_playhead(&mut self, ui: &mut Ui, rows: i32, rect: Rect) {
         let point = time_to_rect(
             scale(ui, self.time, self.scale) + 3., //add 3. for offset to allow left most digit to always be visible
@@ -720,6 +743,9 @@ impl Sequencer {
         ui.painter()
             .line_segment([p1, p2], egui::Stroke::new(1.0, egui::Color32::LIGHT_RED));
     }
+    /// Render the whole sequencer ui
+    /// 
+    /// Handles the controlbar, timeline, playhead and keyframes
     pub fn show(&mut self, ctx: &egui::Context) {
         egui::TopBottomPanel::bottom("Sequencer").show(ctx, |ui| {
             use egui_extras::{Column, TableBuilder};
@@ -732,7 +758,7 @@ impl Sequencer {
             max_rect.max.y = max_rect.min.y + (ROW_HEIGHT) * 4. + ui.spacing().item_spacing.y;
             max_rect.min.x += 60.;
             max_rect.max.y -= ROW_HEIGHT;
-            // println!("1: {:?}",max_rect.width());
+
             let mut table = TableBuilder::new(ui)
                 .striped(false)
                 .resizable(false)
@@ -809,7 +835,7 @@ impl Sequencer {
                                 }
                             }
                             let rect = ui.max_rect();
-                            self.scroll_bar(
+                            self.render_scroll_bar(
                                 ui,
                                 max_t,
                                 Rect {
@@ -834,7 +860,11 @@ impl Sequencer {
             self.render_playhead(ui, 3, max_rect);
         });
     }
-    fn scroll_bar(&mut self, ui: &mut Ui, max_t: f32, max_rect: Rect) {
+
+
+    /// Render the scroll bar
+    /// Gives a view of how scrolled in the sequencer is
+    fn render_scroll_bar(&mut self, ui: &mut Ui, max_t: f32, max_rect: Rect) {
         let t_width = max_rect.width() * (1.0 / scale(ui, 1.0, self.scale));
         let t_ratio = (t_width / max_t).clamp(0.0, 1.0);
         // println!("width: {}, ratio: {}, max_t: {}",t_width, t_ratio,max_t);
@@ -857,6 +887,8 @@ impl Sequencer {
             egui::Stroke::new(1.0, egui::Color32::DARK_GRAY),
         );
     }
+
+    /// Renders a debug panel with relevant information
     pub fn debug_panel(&mut self, ctx: &egui::Context, offset: &mut Vec2) {
         egui::SidePanel::right("Debug")
             .min_width(200.0)
@@ -885,6 +917,8 @@ impl Sequencer {
                 ui.label(format!("Scale: {}", self.scale));
             });
     }
+
+    /// Renders the editable data of the selected keyframe
     pub fn selected_panel(&mut self, ctx: &egui::Context) {
         egui::SidePanel::left("Selected Keyframe")
             .min_width(115.0)
@@ -934,6 +968,9 @@ impl Sequencer {
                 }
             });
     }
+    /// Calculates the `Rect` created by mouse selection
+    /// 
+    /// Manipulates the rect to draw properly with min being top left and max being bottom right
     fn compute_selection_rect(&self, max_rect: &Rect) -> Rect {
         let mut rect = self.selection;
         if self.selection.min.y > self.selection.max.y {
@@ -953,6 +990,8 @@ impl Sequencer {
             max: rect.max.clamp(max_rect.min, max_rect.max),
         }
     }
+    
+    /// Handles sensing input relevant to the sequencer
     fn sense(&mut self, ui: &mut Ui) {
         let response = ui.allocate_response(
             ui.available_size_before_wrap(),
@@ -996,6 +1035,7 @@ impl Sequencer {
             self.selection = Rect::ZERO;
         }
     }
+    /// Handles keeping state, and replaying keystrokes when playing
     pub fn update(&mut self, last_instant: &mut Instant, ctx: &egui::Context, offset: Vec2) {
         if self.was_recording != self.recording.load(Ordering::Relaxed) {
             self.was_recording = self.recording.load(Ordering::Relaxed);
@@ -1063,6 +1103,9 @@ impl Sequencer {
         *last_instant = now;
     }
 }
+/// Simulates a given keyframe
+/// 
+/// `start` decides whether it is a keypress or release
 fn handle_playing_keyframe(keyframe: &Keyframe, start: bool, offset: Vec2) {
     match &keyframe.keyframe_type {
         KeyframeType::KeyBtn(key) => {
@@ -1410,6 +1453,7 @@ fn scroll_to_char(delta: &Vec2) -> String {
     };
 }
 
+/// Correctly scales a given time `i` to screen position
 fn scale(ui: &Ui, i: f32, scale: f32) -> f32 {
     let width = ui.max_rect().size().x;
     let s = 20.0 + scale * 40.0;
