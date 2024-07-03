@@ -554,48 +554,34 @@ impl Sequencer {
         }
         // if there are keyframes selected to delete
         if delete && !self.selected_keyframes.is_empty() {
-            let selected_len = self.selected_keyframes.len();
-            let kf_len = keyframe_state.len();
+            let number_of_selected_keyframes = self.selected_keyframes.len();
+            let number_of_keyframes = keyframe_state.len();
             // sort the selected list from least the greatest index
             self.selected_keyframes.sort();
-
-            if self.selected_keyframes.contains(&(kf_len - 1)) {
-                let x = self.selected_keyframes.pop();
-                if let Some(x) = x {
-                    keyframes.remove(x);
-                    keyframe_state.remove(x);
-                }
-            }
             self.selected_keyframes.reverse();
-
-            if self.selected_keyframes.contains(&(0)) {
-                let x = self.selected_keyframes.pop();
-                if let Some(x) = x {
-                    keyframes.remove(x);
-                    keyframe_state.remove(x);
-                }
-            }
-
-            let first = self.selected_keyframes.first();
-            if let Some(&first) = first {
-                let mut next = first + 1;
-                for i in &self.selected_keyframes {
-                    if selected_len == kf_len {
-                        keyframes.clear();
-                        keyframe_state.clear();
-                        break;
-                    }
+            // check if we can do a quick delete if every keyframe is selected
+            if number_of_keyframes == number_of_selected_keyframes {
+                keyframes.clear();
+                keyframe_state.clear();
+                self.selected_keyframes.clear();
+            }else{
+                // otherwise loop through keyframes and remove from last to first
+                let mut last = 0;
+                for i in &self.selected_keyframes{
                     keyframes.remove(*i);
                     keyframe_state.remove(*i);
-                    if next != 0 {
-                        next -= 1;
-                    }
+                    last = *i;
                 }
-                self.selected_keyframes.clear();
-                if !keyframes.is_empty() {
-                    self.selected_keyframes.push(next);
+                // if there are still keyframes left, we want to select the last one before the selection
+                if !keyframes.is_empty(){
+                    // if the last keyframe before selection was the very last keyframe then we get the second last
+                    if last == keyframes.len(){
+                        last -=1;
+                    }
+                    self.selected_keyframes = vec![last];
                 }
             }
+
             self.changed.swap(true, Ordering::Relaxed);
         }
     }
