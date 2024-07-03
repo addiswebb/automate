@@ -1030,6 +1030,7 @@ impl Sequencer {
     }
     /// Handles keeping state, and replaying keystrokes when playing
     pub fn update(&mut self, last_instant: &mut Instant, ctx: &egui::Context, offset: Vec2) {
+        // Handle focus of the window when recording and when not
         if self.was_recording != self.recording.load(Ordering::Relaxed) {
             self.was_recording = self.recording.load(Ordering::Relaxed);
             self.toggle_recording();
@@ -1037,17 +1038,23 @@ impl Sequencer {
                 ctx.send_viewport_cmd(egui::ViewportCommand::Focus);
             }
         }
+        
         let keyframes = self.keyframes.lock().unwrap();
         let mut keyframe_state = self.keyframe_state.lock().unwrap();
+
+        // make sure that the keyframes and their respective state are synced correctly (probably are)
         if self.recording.load(Ordering::Relaxed) {
             if keyframes.len() != keyframe_state.len() {
                 panic!("playing vec is out of sync")
             }
         }
+
+        // Compute keyframe state from the selected keyframes
         keyframe_state.fill(0);
         for i in &self.selected_keyframes {
             keyframe_state[*i] = 2;
         }
+
         let now = Instant::now();
         let dt = now - *last_instant;
         let play = self.play.load(Ordering::Relaxed);
@@ -1069,11 +1076,15 @@ impl Sequencer {
                 }
             }
         }
+        // check if the time has changed
         if self.prev_time != self.time {
             //The playhead has moved if the current time is not equal to the previous time
+            // Todo(addis): create a slice of keyframes to come (without already played keyframes), to skip checking needlessly when playing
+            // Todo(addis): or create a current and next keyframe tuple and only check those, then update it if one is handled
             for i in 0..keyframes.len() {
                 let keyframe = &keyframes[i];
                 let current_keyframe_state = keyframe_state[i]; //1 if playing, 0 if not
+                // checks if the playhead is entering or exiting the current keyframe, (far left or far right of keyframe in terms of time)
                 if self.time >= keyframe.timestamp
                     && self.time <= keyframe.timestamp + keyframe.duration
                 {
@@ -1093,7 +1104,7 @@ impl Sequencer {
                 }
             }
         }
-
+        //update previous time to keep track of when time changes
         self.prev_time = self.time;
         *last_instant = now;
     }
