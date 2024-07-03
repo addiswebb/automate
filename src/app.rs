@@ -310,23 +310,23 @@ impl eframe::App for App {
         egui::TopBottomPanel::top("top_panel").show(ctx, |ui| {
             egui::menu::bar(ui, |ui| {
                 ui.menu_button("File", |ui| {
-                    if ui.button("New").clicked() {
+                    if ui.button("New File...").clicked() {
                         self.new_file();
                         self.set_title(ctx);
                         ui.close_menu();
                     }
 
-                    if ui.button("Save").clicked() {
+                    if ui.button("Save File...").clicked() {
                         self.save_file();
                         self.set_title(ctx);
                         ui.close_menu();
                     }
-                    if ui.button("Open").clicked() {
+                    if ui.button("Open File...").clicked() {
                         self.open_file();
                         self.set_title(ctx);
                         ui.close_menu();
                     }
-                    if ui.button("Quit").clicked() {
+                    if ui.button("Exit").clicked() {
                         ctx.send_viewport_cmd(egui::ViewportCommand::Close);
                     }
                 });
