@@ -77,7 +77,7 @@ impl App {
     fn save_file(&mut self) {
         let state = self.sequencer.save_to_state();
         let json = serde_json::to_string_pretty(&state);
-        if json.is_ok() {
+        if let Ok(json) = json {
             // if its a new file, save as a new file
             if self.file == "untitled.auto" {
                 self.file = FileDialog::new()
@@ -91,16 +91,19 @@ impl App {
                     .unwrap()
                     .to_string();
             }
-
-            // otherwise save the current file
-            let mut file = File::create(self.file.clone()).unwrap();
-            file.write_all(json.unwrap().as_bytes()).unwrap();
-            self.sequencer.loaded_file = self.file.clone();
-            self.file_uptodate = true;
-            self.sequencer.changed.swap(false, Ordering::Relaxed);
-            log::info!("Save file: {:?}", self.file);
+            // save the current file (if it was "untitled.auto", it has now been replaced)
+            let file = File::create(self.file.clone());
+            if let Ok(mut file) = file{
+                file.write_all(json.as_bytes()).unwrap();
+                self.sequencer.loaded_file = self.file.clone();
+                self.file_uptodate = true;
+                self.sequencer.changed.swap(false, Ordering::Relaxed);
+                log::info!("Save file: {:?}", self.file);
+            }else{
+                log::error!("Failed to save {:?}",file);
+            }
         } else {
-            log::error!("Failed to save 'file.auto'");
+            log::error!("Failed to save sequencer to json");
         }
     }
     /// Open a file using the native file dialog
@@ -117,8 +120,7 @@ impl App {
     ///Load an ".auto" file from the given path
     fn load_file(&mut self, path: &PathBuf) {
         let stream = File::open(path.clone());
-        if stream.is_ok() {
-            let mut file = stream.unwrap();
+        if let Ok(mut file) = stream {
             let mut contents = String::new();
             file.read_to_string(&mut contents).unwrap();
             let data: SequencerState = serde_json::from_str(&contents.as_str()).unwrap();
@@ -222,8 +224,8 @@ impl eframe::App for App {
                     let keyframe_state = self.sequencer.keyframe_state.lock().unwrap();
                     let mut last = 0;
                     if !keyframe_state.is_empty() {
-                        if !self.sequencer.selected_keyframes.is_empty() {
-                            let next = self.sequencer.selected_keyframes.first().unwrap().clone();
+                        let next = self.sequencer.selected_keyframes.first();
+                        if let Some(&next) = next{
                             if next > last {
                                 last = next - 1;
                             } else {
