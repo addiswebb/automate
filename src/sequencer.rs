@@ -68,6 +68,8 @@ pub struct Sequencer {
 
 impl Sequencer {
     /// Creates a new sequencer
+    /// 
+    /// Also manages creating the keystrokes recording thread
     pub fn new() -> Self {
         let keyframes: Arc<Mutex<Vec<Keyframe>>> = Arc::new(Mutex::new(vec![]));
         let keyframe_state = Arc::new(Mutex::new(vec![]));
