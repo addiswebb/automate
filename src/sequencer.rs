@@ -503,7 +503,8 @@ impl Sequencer {
                     self.selected_keyframes.push(i);
                 }
             }
-
+            // Todo(addis): change sense to drag only,  not click_and_drag
+            // Todo(addis): then sense clicks as a drag without displacement, to remove the small delay between physical and electronic drag start
             if keyframe.drag_started() {
                 if let Some(start) = keyframe.interact_pointer_pos() {
                     self.drag_start = start;
