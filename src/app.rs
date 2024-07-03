@@ -11,7 +11,7 @@ use std::{
 use crate::sequencer::{Sequencer, SequencerState};
 
 #[derive(serde::Deserialize, serde::Serialize)]
-#[serde(default)] 
+#[serde(default)]
 pub struct App {
     #[serde(skip)] //Serializing creates two threads somehow
     sequencer: Sequencer,
@@ -25,6 +25,9 @@ pub struct App {
     allowed_to_close: bool,
     #[serde(skip)]
     show_close_dialog: bool,
+    #[serde(skip)]
+    // weird name, basically determines whether the save before exiting dialog closes the window or creates a new file
+    is_dialog_to_close: bool,
 }
 
 impl Default for App {
@@ -37,6 +40,7 @@ impl Default for App {
             file_uptodate: true,
             allowed_to_close: false,
             show_close_dialog: false,
+            is_dialog_to_close: false,
         }
     }
 }
@@ -44,7 +48,6 @@ impl Default for App {
 impl App {
     /// Called once before the first frame.
     pub fn new(cc: &eframe::CreationContext<'_>) -> Self {
-
         // Load previous app state if any
         if let Some(storage) = cc.storage {
             return eframe::get_value(storage, eframe::APP_KEY).unwrap_or_default();
@@ -53,10 +56,10 @@ impl App {
         Default::default()
     }
     /// Safely creates a new file
-    /// 
+    ///
     /// If the current file has not been saved, gives the option to do so.
     fn new_file(&mut self) {
-        if self.file_uptodate{
+        if self.file_uptodate {
             //reset the sequencer
             self.sequencer.keyframes.lock().unwrap().clear();
             self.sequencer.keyframe_state.lock().unwrap().clear();
@@ -66,13 +69,14 @@ impl App {
             self.file_uptodate = true;
             self.sequencer.changed.swap(false, Ordering::Relaxed);
             log::info!("New file: {:?}", "untitled.auto");
-        }else{
+        } else {
             // offer to save the current file before making a new one
             self.show_close_dialog = true;
+            self.is_dialog_to_close = false;
         }
     }
     /// Safely saves the current file
-    /// 
+    ///
     /// Overwrites the current file if it already exists otherwise allows the creation of a new file.
     fn save_file(&mut self) {
         let state = self.sequencer.save_to_state();
@@ -93,14 +97,14 @@ impl App {
             }
             // save the current file (if it was "untitled.auto", it has now been replaced)
             let file = File::create(self.file.clone());
-            if let Ok(mut file) = file{
+            if let Ok(mut file) = file {
                 file.write_all(json.as_bytes()).unwrap();
                 self.sequencer.loaded_file = self.file.clone();
                 self.file_uptodate = true;
                 self.sequencer.changed.swap(false, Ordering::Relaxed);
                 log::info!("Save file: {:?}", self.file);
-            }else{
-                log::error!("Failed to save {:?}",file);
+            } else {
+                log::error!("Failed to save {:?}", file);
             }
         } else {
             log::error!("Failed to save sequencer to json");
@@ -139,7 +143,7 @@ impl App {
         }
     }
     /// Set the title of the window dependant on the current file status
-    /// 
+    ///
     /// e.g "file.auto" if saved and "file.auto*" if there are changes to be saved.
     fn set_title(&self, ctx: &egui::Context) {
         let saved = match self.file_uptodate {
@@ -172,30 +176,22 @@ impl eframe::App for App {
         self.set_title(ctx);
         let mut cancel_close = false;
         ctx.input(|i| {
-            //Keybinds within app
-            if i.key_released(egui::Key::F8) {
-                self.sequencer.recording.swap(
-                    !self.sequencer.recording.load(Ordering::Relaxed),
-                    Ordering::Relaxed,
-                );
-            }
-            if i.key_pressed(egui::Key::Space) {
-                self.sequencer.toggle_play();
-            }
-            if i.key_pressed(egui::Key::ArrowLeft) {
-                self.sequencer.reset_time();
-            }
+            
 
             self.sequencer.zoom(i.smooth_scroll_delta.x);
             self.sequencer.scroll(i.smooth_scroll_delta.y);
 
+            // Handle keybinds within app with focus
             if i.modifiers.ctrl {
+                // Keybind(ctrl+s): Save file 
                 if i.key_pressed(egui::Key::S) {
                     self.save_file();
                 }
+                // Keybind(ctrl+n): Create a new file
                 if i.key_pressed(egui::Key::N) {
                     self.new_file();
                 }
+                // Keybind(ctrl+right): Select the next keyframe to the right
                 if i.key_pressed(egui::Key::ArrowRight) {
                     self.sequencer.selected_keyframes.sort();
                     let keyframe_state = self.sequencer.keyframe_state.lock().unwrap();
@@ -219,13 +215,14 @@ impl eframe::App for App {
                         }
                     }
                 }
+                // Keybind(ctrl+left): Select the next keyframe to the left
                 if i.key_pressed(egui::Key::ArrowLeft) {
                     self.sequencer.selected_keyframes.sort();
                     let keyframe_state = self.sequencer.keyframe_state.lock().unwrap();
                     let mut last = 0;
                     if !keyframe_state.is_empty() {
                         let next = self.sequencer.selected_keyframes.first();
-                        if let Some(&next) = next{
+                        if let Some(&next) = next {
                             if next > last {
                                 last = next - 1;
                             } else {
@@ -244,19 +241,29 @@ impl eframe::App for App {
                     }
                 }
             } else {
-                //For keybinds that have conflicting keystrokes with a modifier
+                // Keybind(right): Step forward 0.1 seconds in time
                 if i.key_pressed(egui::Key::ArrowRight) {
                     self.sequencer.step_time();
                 }
-            }
-            if i.key_pressed(egui::Key::Tab) {
-                println!("{:?}", i.viewport().inner_rect.unwrap().size())
+                // Keybind(space): Toggle play
+                if i.key_pressed(egui::Key::Space) {
+                    self.sequencer.toggle_play();
+                }
+                // Keybind(left): Reset the playhead/time to 0 seconds
+                if i.key_pressed(egui::Key::ArrowLeft) {
+                    self.sequencer.reset_time();
+                }
+                // Keybind(F8): Toggle recording
+                if i.key_released(egui::Key::F8){
+                    self.sequencer.recording.swap(!self.sequencer.recording.load(Ordering::Relaxed), Ordering::Relaxed,);
+                }
             }
 
             if i.viewport().close_requested() && !self.file_uptodate {
                 if !self.allowed_to_close {
                     log::info!("Close without saving?");
                     self.show_close_dialog = true;
+                    self.is_dialog_to_close = true;
                     cancel_close = true;
                 }
             }
@@ -268,18 +275,28 @@ impl eframe::App for App {
                 .movable(true)
                 .collapsible(false)
                 .show(ctx, |ui| {
-                    ui.heading("Do you want to save changes to Untitled?");
+                    ui.label(format!("Do you want to save changes to {:?}", self.file));
                     ui.horizontal(|ui| {
                         if ui.button("Save").clicked() {
                             self.save_file();
                             self.show_close_dialog = false;
-                            self.allowed_to_close = true;
-                            ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+                            if self.is_dialog_to_close {
+                                self.allowed_to_close = true;
+                                ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+                            } else {
+                                self.new_file();
+                            }
                         }
                         if ui.button("Don't Save").clicked() {
                             self.show_close_dialog = false;
-                            self.allowed_to_close = true;
-                            ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+                            if self.is_dialog_to_close {
+                                self.allowed_to_close = true;
+                                ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+                            } else {
+                                // set file_uptodate to true to force create a new file, avoids infinite loop
+                                self.file_uptodate = true;
+                                self.new_file();
+                            }
                         }
 
                         if ui.button("Cancel").clicked() {

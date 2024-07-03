@@ -110,7 +110,7 @@ impl Sequencer {
                     match &event.event_type {
                         rdev::EventType::KeyRelease(key) => {
                             match key {
-                                // Keybind: Start/stop recording
+                                // Keybind(F8): Toggle recording 
                                 rdev::Key::F8 => {
                                     if is_recording {
                                         shared_rec.swap(false, Ordering::Relaxed);
@@ -122,12 +122,11 @@ impl Sequencer {
                                         previous_mouse_position = Vec2::ZERO;
                                     }
                                 }
-                                // Keybind: Stop play execution
+                                // Keybind(esc): Toggle play execution
                                 rdev::Key::Escape => {
                                     shared_play.swap(false, Ordering::Relaxed);
-                                    //panic!("Stopped execution due to ESCAPE keybind");
                                 }
-                                // Keybind: Manually add a mouse move keyframe
+                                // Keybind(F9): Manually add a mouse move keyframe (can be used for filling in missed movements due to record resolution)
                                 rdev::Key::F9 => {
                                     keyframe = Some(Keyframe {
                                         timestamp: dt.as_secs_f32(),
