@@ -42,7 +42,7 @@ pub struct Sequencer {
     #[serde(skip)]
     pub keyframes: Arc<Mutex<Vec<Keyframe>>>,
     #[serde(skip)]
-    pub selected_keyframes: Vec<usize>,
+    pub selected_keyframes: Vec<Uuid>,
     #[serde(skip)]
     pub keyframe_state: Arc<Mutex<Vec<usize>>>,
     scale: f32, // egui points to seconds scale
@@ -440,16 +440,25 @@ impl Sequencer {
                 });
                 if self.selecting {
                     if selection_contains_keyframe(&self.compute_selection_rect(&max_rect), rect) {
-                        if !self.selected_keyframes.contains(&i) {
-                            self.selected_keyframes.push(i);
+                        // if !self.selected_keyframes.contains(&keyframes[i].uid) {
+                        //     self.selected_keyframes.push(i);
+                        // }
+                        // if keyframe is not already selected, select it (add it to selected keyframes)
+                        match self.selected_keyframes.binary_search(&keyframes[i].uid){
+                            Ok(_) => {},
+                            Err(index) => self.selected_keyframes.insert(index, keyframes[i].uid)
                         }
                     } else {
                         if !ctrl {
-                            if !self.selected_keyframes.is_empty() {
-                                let index = self.selected_keyframes.binary_search(&i);
-                                if let Ok(index) = index {
-                                    self.selected_keyframes.remove(index);
-                                }
+                            // if !self.selected_keyframes.is_empty() {
+                            //     let index = self.selected_keyframes.binary_search(&i);
+                            //     if let Ok(index) = index {
+                            //         self.selected_keyframes.remove(index);
+                            //     }
+                            // }
+                            match self.selected_keyframes.binary_search(&keyframes[i].uid){
+                                Ok(index) => {self.selected_keyframes.remove(index);},
+                                Err(_) => {},
                             }
                         }
                     }
@@ -498,22 +507,36 @@ impl Sequencer {
                 let ctrl = ui.input(|i|{
                     return i.modifiers.ctrl;
                 });
-                let already_selected = self.selected_keyframes.contains(&i);
-                if ctrl{
-                    if already_selected {
-                        //deselect only this, keeping everything else
-                        self.selected_keyframes.sort();
-                        let index = self.selected_keyframes.binary_search(&i);
-                        if let Ok(index) = index {
+                // Check whether there was more than one keyframe selected before clearing the vec, (used for edgecase)
+                let was_empty = self.selected_keyframes.is_empty();
+                // Attempt to find the selected keyframe using its uuid
+                let x = self.selected_keyframes.binary_search(&keyframes[i].uid);
+                // If not ctrl clicked, only a single keyframe can ever be selected so we clear the vec early
+                if !ctrl{
+                    self.selected_keyframes.clear();
+                }
+                match x {
+                    // Already selected
+                    Ok(index) => { 
+                        // If ctrl clicked while already selected, deselect it (note that the vec is not emptied because ctrl was not pressed)
+                        if ctrl{
                             self.selected_keyframes.remove(index);
                         }
-                    }else{
-                        self.selected_keyframes.push(i);
-                        //select, keeping everything else
-                    }
-                }else{
-                    self.selected_keyframes.clear();
-                    self.selected_keyframes.push(i);
+                        // If ctrl was not pressed, and one of several already selected keyframes was clicked, leave only that one selected (note that vec is empty here) 
+                        if !was_empty {
+                            self.selected_keyframes.push(keyframes[i].uid)
+                        }
+                    },
+                    // not already selected
+                    Err(index) => {
+                        if !ctrl{
+                            // If not already selected, select it and push (note we use push instead of insert here because the vec is empty and it will be placed at index 0 by default)
+                            self.selected_keyframes.push(keyframes[i].uid)
+                        }else{
+                            // If ctrl is pressed, then insert the keyframe while keeping order (note we need a sorted vec to allow for binary search later on)
+                            self.selected_keyframes.insert(index, keyframes[i].uid)
+                        }
+                    },
                 }
             }
             // Todo(addis): change sense to drag only,  not click_and_drag
@@ -557,8 +580,9 @@ impl Sequencer {
                 }
             });
             keyframe.context_menu(|ui| {
-                if !self.selected_keyframes.contains(&i) {
-                    self.selected_keyframes.push(i);
+                match self.selected_keyframes.binary_search(&keyframes[i].uid){
+                    Ok(_) => {},
+                    Err(index) => self.selected_keyframes.insert(index, keyframes[i].uid)
                 }
                 if ui.button("Delete").clicked() {
                     delete = true;
@@ -580,19 +604,31 @@ impl Sequencer {
                 self.selected_keyframes.clear();
             }else{
                 // otherwise loop through keyframes and remove from last to first
-                let mut last = 0;
-                for i in &self.selected_keyframes{
-                    keyframes.remove(*i);
-                    keyframe_state.remove(*i);
-                    last = *i;
+                let mut last_index = 0;
+                for uid in &self.selected_keyframes{
+
+                    // match self.selected_keyframes.binary_search(&keyframes[i].uid){
+                    //     Ok(index) => {self.selected_keyframes.remove(index);},
+                    //     Err(index) => self.selected_keyframes.insert(index, keyframes[i].uid),
+                    // }
+                    let mut index = 0;
+                    for i in 0..keyframes.len(){
+                        if keyframes[i].uid == *uid{
+                            index = i;
+                            println!("found when deleting keyframes: {}",index);
+                        }
+                    }
+                    keyframes.remove(index);
+                    keyframe_state.remove(index);
+                    last_index = index;
                 }
                 // if there are still keyframes left, we want to select the last one before the selection
                 if !keyframes.is_empty(){
                     // if the last keyframe before selection was the very last keyframe then we get the second last
-                    if last == keyframes.len(){
-                        last -=1;
+                    if last_index == keyframes.len(){
+                        last_index -=1;
                     }
-                    self.selected_keyframes = vec![last];
+                    self.selected_keyframes = vec![keyframes[last_index].uid];
                 }
             }
 
@@ -928,51 +964,55 @@ impl Sequencer {
             .min_width(115.0)
             .resizable(false)
             .show(ctx, |ui| {
-                if let Some(i) = self.selected_keyframes.last() {
+                if let Some(uid) = self.selected_keyframes.last() {
                     let mut keyframes = self.keyframes.lock().unwrap();
                     // Todo(addis): make selected_keyframes code safe enough to remove this line vvvv
-                    if *i < keyframes.len() {
-                        let keyframe = &mut keyframes[*i];
-
-                        match &keyframe.keyframe_type {
-                            KeyframeType::KeyBtn(key) => {
-                                ui.strong("Keyboard Button press");
-                                ui.label("key stroke");
-                                ui.label(format!("{:?}", key));
-                            }
-                            KeyframeType::MouseBtn(key) => {
-                                ui.strong("Mouse Button press");
-                                ui.label(format!("button: {:?}", key));
-                            }
-                            KeyframeType::MouseMove(pos) => {
-                                ui.strong("Mouse move");
-                                ui.label(format!("position: {:?}", pos));
-                            }
-                            KeyframeType::Scroll(delta) => {
-                                ui.strong("Scroll");
-                                ui.label(format!("delta: {:?}", delta));
-                            }
+                    let mut index = 0;
+                    for i in 0..keyframes.len(){
+                        if keyframes[i].uid == *uid{
+                            index = i;
                         }
-                        let (tmpx, tmpy) = (keyframe.timestamp, keyframe.duration);
-                        ui.label("Timestamp");
-                        ui.add(
-                            egui::DragValue::new(&mut keyframe.timestamp)
-                                .speed(0.25)
-                                .clamp_range(0.0..=1000.0),
-                        );
-                        ui.label("Duration");
-                        ui.add(
-                            egui::DragValue::new(&mut keyframe.duration)
-                                .speed(0.1)
-                                .clamp_range(0.00001..=100.0),
-                        );
+                    }
+                    let keyframe = &mut keyframes[index];
 
-                        ui.label(format!("UUID: {:?}",keyframe.uid));
-                        // Check if the selected keyframe was changed
-                        if (tmpx, tmpy) != (keyframe.timestamp, keyframe.duration) {
-                            self.changed.swap(true, Ordering::Relaxed);
-                            self.should_sort = true;
+                    match &keyframe.keyframe_type {
+                        KeyframeType::KeyBtn(key) => {
+                            ui.strong("Keyboard Button press");
+                            ui.label("key stroke");
+                            ui.label(format!("{:?}", key));
                         }
+                        KeyframeType::MouseBtn(key) => {
+                            ui.strong("Mouse Button press");
+                            ui.label(format!("button: {:?}", key));
+                        }
+                        KeyframeType::MouseMove(pos) => {
+                            ui.strong("Mouse move");
+                            ui.label(format!("position: {:?}", pos));
+                        }
+                        KeyframeType::Scroll(delta) => {
+                            ui.strong("Scroll");
+                            ui.label(format!("delta: {:?}", delta));
+                        }
+                    }
+                    let (tmpx, tmpy) = (keyframe.timestamp, keyframe.duration);
+                    ui.label("Timestamp");
+                    ui.add(
+                        egui::DragValue::new(&mut keyframe.timestamp)
+                            .speed(0.25)
+                            .clamp_range(0.0..=1000.0),
+                    );
+                    ui.label("Duration");
+                    ui.add(
+                        egui::DragValue::new(&mut keyframe.duration)
+                            .speed(0.1)
+                            .clamp_range(0.00001..=100.0),
+                    );
+
+                    ui.label(format!("UUID: {:?}",keyframe.uid));
+                    // Check if the selected keyframe was changed
+                    if (tmpx, tmpy) != (keyframe.timestamp, keyframe.duration) {
+                        self.changed.swap(true, Ordering::Relaxed);
+                        self.should_sort = true;
                     }
                 }
             });
@@ -1008,8 +1048,9 @@ impl Sequencer {
         );
         ui.input(|i| {
             if i.modifiers.ctrl && i.key_pressed(egui::Key::A) {
-                for i in 0..self.keyframe_state.lock().unwrap().len() {
-                    self.selected_keyframes.push(i);
+                let keyframes = self.keyframes.lock().unwrap();
+                for i in 0..keyframes.len() {
+                    self.selected_keyframes.push(keyframes[i].uid);
                 }
             }
         });
@@ -1066,30 +1107,23 @@ impl Sequencer {
         }
 
         if self.should_sort {
-            let mut tmp_selected_keyframes = vec![];
-            for selected_keyframe in self.selected_keyframes.clone(){
-                tmp_selected_keyframes.push(keyframes[selected_keyframe].uid);
-            }
             keyframes.sort_by(|a,b|{
                 a.timestamp.partial_cmp(&b.timestamp).unwrap()
             });
-            self.selected_keyframes.clear();
-            // Todo(addis): change Sequencer.selected_keyframes to use uuids instead of usize (indices)
-            // for uid in tmp_selected_keyframes{
-            //     let x = keyframes.binary_search_by_key(&uid, |kf| kf.uid);
-            //     println!("{:?}",x);
-            //     if let Ok(x) = x{
-            //         // println!("Found: {x}");
-            //         self.selected_keyframes.push(x);
-            //     }
-            // }
             self.should_sort = false;
         }
 
         // Compute keyframe state from the selected keyframes
         keyframe_state.fill(0);
-        for i in &self.selected_keyframes {
-            keyframe_state[*i] = 2;
+        for uid in &self.selected_keyframes {
+            let mut index = 0;
+            for i in 0..keyframes.len(){
+                if keyframes[i].uid == *uid{
+                    index = i;
+                    break;
+                }
+            }
+            keyframe_state[index] = 2; // 2 == selected/highlighted (orange)
         }
 
         let now = Instant::now();
@@ -1368,7 +1402,6 @@ fn string_to_keys(c: &str) -> Option<rdev::Key> {
         _ => None,
     }
 }
-
 fn key_to_char(k: &rdev::Key) -> String {
     match k {
         rdev::Key::KeyA => "a".to_string(),
@@ -1479,7 +1512,6 @@ fn key_to_char(k: &rdev::Key) -> String {
         rdev::Key::ShiftRight => "shiftright".to_string(),
     }
 }
-
 fn button_to_char(b: &rdev::Button) -> String {
     match b {
         rdev::Button::Left => "⏴".to_string(),
