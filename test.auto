@@ -373,18 +373,18 @@
       "kind": 0
     },
     {
-      "timestamp": 4.47468,
-      "duration": 0.1751824,
+      "timestamp": 4.375443,
+      "duration": 0.4003287,
       "keyframe_type": {
-        "KeyBtn": "Slash"
+        "KeyBtn": "ShiftRight"
       },
       "kind": 0
     },
     {
-      "timestamp": 4.334535,
-      "duration": 0.4003287,
+      "timestamp": 4.47468,
+      "duration": 0.1751824,
       "keyframe_type": {
-        "KeyBtn": "ShiftRight"
+        "KeyBtn": "Slash"
       },
       "kind": 0
     },

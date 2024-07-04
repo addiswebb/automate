@@ -440,24 +440,17 @@ impl Sequencer {
                 });
                 if self.selecting {
                     if selection_contains_keyframe(&self.compute_selection_rect(&max_rect), rect) {
-                        // if !self.selected_keyframes.contains(&keyframes[i].uid) {
-                        //     self.selected_keyframes.push(i);
-                        // }
-                        // if keyframe is not already selected, select it (add it to selected keyframes)
                         match self.selected_keyframes.binary_search(&keyframes[i].uid){
                             Ok(_) => {},
                             Err(index) => self.selected_keyframes.insert(index, keyframes[i].uid)
                         }
                     } else {
                         if !ctrl {
-                            // if !self.selected_keyframes.is_empty() {
-                            //     let index = self.selected_keyframes.binary_search(&i);
-                            //     if let Ok(index) = index {
-                            //         self.selected_keyframes.remove(index);
-                            //     }
-                            // }
                             match self.selected_keyframes.binary_search(&keyframes[i].uid){
-                                Ok(index) => {self.selected_keyframes.remove(index);},
+                                Ok(index) => {
+                                    self.selected_keyframes.remove(index);
+                                    panic!("idk if this is necessary");
+                                },
                                 Err(_) => {},
                             }
                         }
@@ -966,7 +959,6 @@ impl Sequencer {
             .show(ctx, |ui| {
                 if let Some(uid) = self.selected_keyframes.last() {
                     let mut keyframes = self.keyframes.lock().unwrap();
-                    // Todo(addis): make selected_keyframes code safe enough to remove this line vvvv
                     let mut index = 0;
                     for i in 0..keyframes.len(){
                         if keyframes[i].uid == *uid{

@@ -176,14 +176,12 @@ impl eframe::App for App {
         self.set_title(ctx);
         let mut cancel_close = false;
         ctx.input(|i| {
-            
-
             self.sequencer.zoom(i.smooth_scroll_delta.x);
             self.sequencer.scroll(i.smooth_scroll_delta.y);
 
             // Handle keybinds within app with focus
             if i.modifiers.ctrl {
-                // Keybind(ctrl+s): Save file 
+                // Keybind(ctrl+s): Save file
                 if i.key_pressed(egui::Key::S) {
                     self.save_file();
                 }
@@ -191,56 +189,68 @@ impl eframe::App for App {
                 if i.key_pressed(egui::Key::N) {
                     self.new_file();
                 }
-                // Todo(addis): make this work with uuids instead of indices
+                let keyframes = self.sequencer.keyframes.lock().unwrap();
                 // Keybind(ctrl+right): Select the next keyframe to the right
-                // if i.key_pressed(egui::Key::ArrowRight) {
-                //     self.sequencer.selected_keyframes.sort();
-                //     let keyframe_state = self.sequencer.keyframe_state.lock().unwrap();
-                //     let mut last = 0;
-                //     if !keyframe_state.is_empty() {
-                //         if !self.sequencer.selected_keyframes.is_empty() {
-                //             let next = self.sequencer.selected_keyframes.last().unwrap().clone();
-                //             if keyframe_state.len() > next + 1{
-                //                 last = next + 1;
-                //             } else {
-                //                 last = next;
-                //             }
-                //         }
-                //         if i.modifiers.shift {
-                //             if !self.sequencer.selected_keyframes.contains(&last) {
-                //                 self.sequencer.selected_keyframes.push(last)
-                //             } else {
-                //             }
-                //         } else {
-                //             self.sequencer.selected_keyframes = [last].into();
-                //         }
-                //     }
-                // }
-                // // Keybind(ctrl+left): Select the next keyframe to the left
-                // if i.key_pressed(egui::Key::ArrowLeft) {
-                //     self.sequencer.selected_keyframes.sort();
-                //     let keyframe_state = self.sequencer.keyframe_state.lock().unwrap();
-                //     let mut last = 0;
-                //     if !keyframe_state.is_empty() {
-                //         let next = self.sequencer.selected_keyframes.first();
-                //         if let Some(&next) = next {
-                //             if next > last {
-                //                 last = next - 1;
-                //             } else {
-                //                 last = 0;
-                //             }
-                //         } else {
-                //             last = 0;
-                //         }
-                //         if i.modifiers.shift {
-                //             if !self.sequencer.selected_keyframes.contains(&last) {
-                //                 self.sequencer.selected_keyframes.push(last)
-                //             }
-                //         } else {
-                //             self.sequencer.selected_keyframes = [last].into();
-                //         }
-                //     }
-                //}
+                if i.key_pressed(egui::Key::ArrowRight) {
+                    let keyframe_state = self.sequencer.keyframe_state.lock().unwrap();
+                    let mut last_index = 0;
+
+                    if !keyframe_state.is_empty() {
+                        if !self.sequencer.selected_keyframes.is_empty() {
+                            let last_uuid = self.sequencer.selected_keyframes.last().unwrap().clone();
+                            let mut next = 0;
+                            for i in 0..keyframes.len() {
+                                if keyframes[i].uid == last_uuid {
+                                    next = i;
+                                    break;
+                                }
+                            }
+                            if keyframe_state.len() > next + 1 {
+                                last_index = next + 1;
+                            } else {
+                                last_index = next;
+                            }
+                        }
+                        let uid = keyframes[last_index].uid;
+                        if i.modifiers.shift {
+                            match self.sequencer.selected_keyframes.binary_search(&uid) {
+                                Ok(_) => {}
+                                Err(index) => self.sequencer.selected_keyframes.insert(index, uid),
+                            }
+                        } else {
+                            self.sequencer.selected_keyframes = vec![uid];
+                        }
+                    }
+                }
+                // Keybind(ctrl+left): Select the next keyframe to the left
+                if i.key_pressed(egui::Key::ArrowLeft) {
+                    let keyframe_state = self.sequencer.keyframe_state.lock().unwrap();
+                    let mut last_index = 0;
+                    if !keyframe_state.is_empty() {
+                        let last_uuid = self.sequencer.selected_keyframes.last().unwrap().clone();
+                        let mut next = 0;
+                        for i in 0..keyframes.len() {
+                            if keyframes[i].uid == last_uuid {
+                                next = i;
+                                break;
+                            }
+                        }
+                        if next > last_index {
+                            last_index = next - 1;
+                        } else {
+                            last_index = 0;
+                        }
+                        let uid = keyframes[last_index].uid;
+                        if i.modifiers.shift {
+                            match self.sequencer.selected_keyframes.binary_search(&uid) {
+                                Ok(_) => {}
+                                Err(index) => self.sequencer.selected_keyframes.insert(index, uid),
+                            }
+                        } else {
+                            self.sequencer.selected_keyframes = vec![uid];
+                        }
+                    }
+                }
             } else {
                 // Keybind(right): Step forward 0.1 seconds in time
                 if i.key_pressed(egui::Key::ArrowRight) {
@@ -255,8 +265,11 @@ impl eframe::App for App {
                     self.sequencer.reset_time();
                 }
                 // Keybind(F8): Toggle recording
-                if i.key_released(egui::Key::F8){
-                    self.sequencer.recording.swap(!self.sequencer.recording.load(Ordering::Relaxed), Ordering::Relaxed,);
+                if i.key_released(egui::Key::F8) {
+                    self.sequencer.recording.swap(
+                        !self.sequencer.recording.load(Ordering::Relaxed),
+                        Ordering::Relaxed,
+                    );
                 }
             }
 
