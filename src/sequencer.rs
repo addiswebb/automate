@@ -7,6 +7,7 @@ use eframe::egui::{self, pos2, Ui, Vec2};
 use egui::{emath::RectTransform, Pos2, Rect};
 use egui::{vec2, Align2, FontId};
 use serde::{Deserialize, Serialize};
+use uuid::Uuid;
 
 use crate::keyframe::{Keyframe, KeyframeType};
 
@@ -24,6 +25,8 @@ pub struct SequencerState {
 pub struct Sequencer {
     #[serde(skip)]
     pub changed: Arc<AtomicBool>,
+    #[serde(skip)]
+    should_sort: bool,
     #[serde(skip)]
     dragging: bool,
     #[serde(skip)]
@@ -134,7 +137,8 @@ impl Sequencer {
                                         keyframe_type: KeyframeType::MouseMove(
                                             previous_mouse_position,
                                         ),
-                                        id: 1,
+                                        kind: 1,
+                                        uid: Uuid::new_v4(),
                                     });
                                 }
                                 _ => {}
@@ -183,7 +187,8 @@ impl Sequencer {
                                         timestamp: pressed_at.as_secs_f32(),
                                         duration: (dt - pressed_at).as_secs_f32(),
                                         keyframe_type: KeyframeType::MouseBtn(*btn),
-                                        id: 2,
+                                        kind: 2,
+                                        uid: Uuid::new_v4(),
                                     }),
                                     false => None,
                                 }
@@ -207,7 +212,6 @@ impl Sequencer {
                                     let index = indices_to_remove[i] - (i * 1);
                                     key_presses.remove(index);
                                     key_pressed_at.remove(index);
-                                    shared_changed.swap(true, Ordering::Relaxed);
                                 }
 
                                 match found_press {
@@ -215,7 +219,8 @@ impl Sequencer {
                                         timestamp: pressed_at.as_secs_f32(),
                                         duration: (dt - pressed_at).as_secs_f32(),
                                         keyframe_type: KeyframeType::KeyBtn(*key),
-                                        id: 0,
+                                        kind: 0,
+                                        uid: Uuid::new_v4(),
                                     }),
                                     false => None,
                                 }
@@ -232,7 +237,8 @@ impl Sequencer {
                                                 timestamp: dt.as_secs_f32(),
                                                 duration: 0.1,
                                                 keyframe_type: KeyframeType::MouseMove(pos),
-                                                id: 1,
+                                                kind: 1,
+                                                uid: Uuid::new_v4(),
                                             })
                                         }
                                         false => None,
@@ -250,13 +256,15 @@ impl Sequencer {
                                             *delta_x as f32,
                                             *delta_y as f32,
                                         )),
-                                        id: 3,
+                                        kind: 3,
+                                        uid: Uuid::new_v4(),
                                     }),
                                 }
                             } //_ => None,
                         };
                         // If a keyframe was created push the necessary data to sequencer
                         if let Some(keyframe) = keyframe {
+                            println!("{:?}",keyframe.uid);
                             shared_kfs.lock().unwrap().push(keyframe);
                             shared_pkfs.lock().unwrap().push(0);
                             shared_changed.swap(true, Ordering::Relaxed);
@@ -269,6 +277,7 @@ impl Sequencer {
         Self {
             keyframes,
             changed,
+            should_sort: false,
             drag_start: pos2(0., 0.),
             dragging: false,
             selection: Rect::ZERO,
@@ -303,9 +312,15 @@ impl Sequencer {
         }
     }
     /// Loads the sequencer with the `SequencerState`
-    pub fn load_from_state(&mut self, state: SequencerState) {
+    pub fn load_from_state(&mut self, mut state: SequencerState) {
         let mut shared_kfs = self.keyframes.lock().unwrap();
         let mut shared_pkfs = self.keyframe_state.lock().unwrap();
+        // Uuid is skipped when serializing so it is necessary to assign uuids now
+        for x in state.keyframes.iter_mut(){
+            if x.uid.is_nil(){
+                x.uid=  Uuid::new_v4();
+            }
+        }
         shared_kfs.clear();
         shared_kfs.extend(state.keyframes.into_iter());
         shared_pkfs.clear();
@@ -394,7 +409,7 @@ impl Sequencer {
         let mut delete = false;
         for i in 0..keyframes.len() {
             let offset_y = ui.spacing().item_spacing.y;
-            let y = match keyframes[i].id {
+            let y = match keyframes[i].kind {
                 0 => offset_y,
                 1 => ROW_HEIGHT * 2. + 9.,
                 2 => ROW_HEIGHT + offset_y * 2.,
@@ -451,7 +466,7 @@ impl Sequencer {
                     KeyframeType::Scroll(delta) => scroll_to_char(delta),
                 }
             );
-            let color = match keyframes[i].id {
+            let color = match keyframes[i].kind {
                 0 => egui::Color32::LIGHT_RED,              //Keyboard
                 1 => egui::Color32::from_rgb(95, 186, 213), //Mouse move
                 2 => egui::Color32::LIGHT_GREEN,            //Button Click
@@ -484,13 +499,11 @@ impl Sequencer {
                     return i.modifiers.ctrl;
                 });
                 let already_selected = self.selected_keyframes.contains(&i);
-                println!("i:{}, ctrl?:{}, selected: {}",i,ctrl,already_selected);
                 if ctrl{
                     if already_selected {
                         //deselect only this, keeping everything else
                         self.selected_keyframes.sort();
                         let index = self.selected_keyframes.binary_search(&i);
-                        println!("search index: {:?}",index);
                         if let Ok(index) = index {
                             self.selected_keyframes.remove(index);
                         }
@@ -536,6 +549,7 @@ impl Sequencer {
                 self.drag_start = pos2(0., 0.);
                 self.dragging = false;
                 self.resizing = false;
+                self.should_sort = true;
             }
             ui.input_mut(|input| {
                 if input.consume_key(egui::Modifiers::NONE, egui::Key::Delete) {
@@ -859,10 +873,8 @@ impl Sequencer {
     fn render_scroll_bar(&mut self, ui: &mut Ui, max_t: f32, max_rect: Rect) {
         let t_width = max_rect.width() * (1.0 / scale(ui, 1.0, self.scale));
         let t_ratio = (t_width / max_t).clamp(0.0, 1.0);
-        // println!("width: {}, ratio: {}, max_t: {}",t_width, t_ratio,max_t);
         let d = t_width * t_ratio;
         let t = self.scroll.clamp(0.0, t_width - d);
-        // println!("width: {}, ratio: {}, max_t: {}, t: {}, d: {}, x: {}",t_width, t_ratio,max_t,t,d, t_width - (t_width * t_ratio));
         let rect = time_to_rect(
             scale(ui, t, self.scale),
             scale(ui, d, self.scale),
@@ -954,8 +966,12 @@ impl Sequencer {
                                 .speed(0.1)
                                 .clamp_range(0.00001..=100.0),
                         );
+
+                        ui.label(format!("UUID: {:?}",keyframe.uid));
+                        // Check if the selected keyframe was changed
                         if (tmpx, tmpy) != (keyframe.timestamp, keyframe.duration) {
                             self.changed.swap(true, Ordering::Relaxed);
+                            self.should_sort = true;
                         }
                     }
                 }
@@ -1039,7 +1055,7 @@ impl Sequencer {
             }
         }
         
-        let keyframes = self.keyframes.lock().unwrap();
+        let mut keyframes = self.keyframes.lock().unwrap();
         let mut keyframe_state = self.keyframe_state.lock().unwrap();
 
         // make sure that the keyframes and their respective state are synced correctly (probably are)
@@ -1047,6 +1063,27 @@ impl Sequencer {
             if keyframes.len() != keyframe_state.len() {
                 panic!("playing vec is out of sync")
             }
+        }
+
+        if self.should_sort {
+            let mut tmp_selected_keyframes = vec![];
+            for selected_keyframe in self.selected_keyframes.clone(){
+                tmp_selected_keyframes.push(keyframes[selected_keyframe].uid);
+            }
+            keyframes.sort_by(|a,b|{
+                a.timestamp.partial_cmp(&b.timestamp).unwrap()
+            });
+            self.selected_keyframes.clear();
+            // Todo(addis): change Sequencer.selected_keyframes to use uuids instead of usize (indices)
+            // for uid in tmp_selected_keyframes{
+            //     let x = keyframes.binary_search_by_key(&uid, |kf| kf.uid);
+            //     println!("{:?}",x);
+            //     if let Ok(x) = x{
+            //         // println!("Found: {x}");
+            //         self.selected_keyframes.push(x);
+            //     }
+            // }
+            self.should_sort = false;
         }
 
         // Compute keyframe state from the selected keyframes

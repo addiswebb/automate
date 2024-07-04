@@ -199,10 +199,10 @@ impl eframe::App for App {
                     if !keyframe_state.is_empty() {
                         if !self.sequencer.selected_keyframes.is_empty() {
                             let next = self.sequencer.selected_keyframes.last().unwrap().clone();
-                            if keyframe_state.len() > last {
+                            if keyframe_state.len() > next + 1{
                                 last = next + 1;
                             } else {
-                                last = next - 2;
+                                last = next;
                             }
                         }
                         if i.modifiers.shift {
