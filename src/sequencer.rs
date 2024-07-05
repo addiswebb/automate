@@ -516,7 +516,6 @@ impl Sequencer {
                             match self.selected_keyframes.binary_search(&keyframes[i].uid) {
                                 Ok(index) => {
                                     self.selected_keyframes.remove(index);
-                                    panic!("idk if this is necessary");
                                 }
                                 Err(_) => {}
                             }
@@ -898,7 +897,7 @@ impl Sequencer {
             let (font_size, y_offset) = match sizing {
                 3 => (8., 4.),
                 2 => (10., 2.),
-                _ => (12.,0.),
+                _ => (12., 0.),
             };
             let point =
                 pos + vec2(scale(ui, i as f32 - self.scroll, self.scale), 0.0) + vec2(0., y_offset);
@@ -922,7 +921,7 @@ impl Sequencer {
     /// Render the playhead at whatever time the sequencer is at
     fn render_playhead(&mut self, ui: &mut Ui, rows: i32, rect: Rect) {
         let point = time_to_rect(
-            scale(ui, self.time, self.scale) + 3., //add 3. for offset to allow left most digit to always be visible
+            scale(ui, self.time-self.scroll, self.scale) + 3., //add 3. for offset to allow left most digit to always be visible
             0.0,
             0.0,
             ui.spacing().item_spacing,
@@ -932,14 +931,53 @@ impl Sequencer {
         .min;
         let p1 = pos2(point.x + 1., point.y - 2.);
         let p2 = pos2(p1.x, p1.y + ROW_HEIGHT * rows as f32 + (3 * rows) as f32);
-        ui.painter().text(
+        let padding = 3.0;
+        let response = ui.allocate_rect(
+            Rect {
+                min: pos2(p1.x - padding, p1.y - padding),
+                max: pos2(p1.x + padding, p2.y + padding),
+            },
+            egui::Sense::click_and_drag(),
+        );
+        if response.hovered() {
+            ui.output_mut(|o| o.cursor_icon = egui::CursorIcon::PointingHand);
+        }
+        if response.drag_started() {
+            if let Some(start) = response.interact_pointer_pos() {
+                self.drag_start = start;
+                self.dragging = true;
+            }
+        }
+        if self.dragging {
+            if let Some(end) = response.interact_pointer_pos() {
+                if end.x > rect.min.x {
+                    let drag_delta =
+                        (end.x - self.drag_start.x) * (1.0 / scale(ui, 1.0, self.scale));
+                    let t = self.time + drag_delta;
+                    if t > 0.0 {
+                        self.time = t;
+                        self.drag_start.x = end.x;
+                        self.changed.swap(true, Ordering::Relaxed);
+                    }
+                }else{
+                    self.time = 0.;
+                }
+            }
+        }
+        if response.drag_stopped() {
+            self.drag_start = pos2(0., 0.);
+            self.dragging = false;
+        }
+        // clip the playhead so it is not visible when off the timeline
+        let painter = ui.painter().with_clip_rect(rect.expand2(vec2(0.,4.0)));
+        painter.text(
             p1 - egui::vec2(0.0, 3.0),
             egui::Align2::CENTER_TOP,
             "⏷",
             egui::FontId::monospace(10.0),
             egui::Color32::LIGHT_RED,
         );
-        ui.painter()
+        painter
             .line_segment([p1, p2], egui::Stroke::new(1.0, egui::Color32::LIGHT_RED));
     }
     /// Render the whole sequencer ui
@@ -1238,7 +1276,7 @@ impl Sequencer {
         });
 
         if response.clicked() {
-            ui.input(|i|{
+            ui.input(|i| {
                 if !i.modifiers.ctrl {
                     self.selected_keyframes.clear();
                 }
