@@ -178,7 +178,8 @@ impl eframe::App for App {
         ctx.input(|i| {
             self.sequencer.zoom(i.smooth_scroll_delta.x);
             self.sequencer.scroll(i.smooth_scroll_delta.y);
-
+            // Todo(addis): check which of the following keybinds should only work when focused on the sequencer, and move them to sequencer.sense() if so
+            // Todo(addis): change necessary keybinds to use consume_key instead of key_pressed, for those that should not repeat
             // Handle keybinds within app with focus
             if i.modifiers.ctrl {
                 // Keybind(ctrl+s): Save file
@@ -186,9 +187,22 @@ impl eframe::App for App {
                     self.save_file();
                 }
                 // Keybind(ctrl+n): Create a new file
-                if i.key_pressed(egui::Key::N) {
+                else if i.key_pressed(egui::Key::N) {
                     self.new_file();
                 }
+                // Keybind(ctrl+o): Open a file
+                else if i.key_pressed(egui::Key::O) {
+                    self.open_file();
+                }
+                // Keybind(ctrl+z): Undo last change
+                else if i.key_pressed(egui::Key::O) {
+                    println!("Undo: to be implemented");
+                }
+                // Keybind(ctrl+y): Redo last change
+                else if i.key_pressed(egui::Key::O) {
+                    println!("Redo: to be implemented");
+                }
+
                 let keyframes = self.sequencer.keyframes.lock().unwrap();
                 // Keybind(ctrl+right): Select the next keyframe to the right
                 if i.key_pressed(egui::Key::ArrowRight) {
@@ -197,7 +211,8 @@ impl eframe::App for App {
 
                     if !keyframe_state.is_empty() {
                         if !self.sequencer.selected_keyframes.is_empty() {
-                            let last_uuid = self.sequencer.selected_keyframes.last().unwrap().clone();
+                            let last_uuid =
+                                self.sequencer.selected_keyframes.last().unwrap().clone();
                             let mut next = 0;
                             for i in 0..keyframes.len() {
                                 if keyframes[i].uid == last_uuid {
@@ -257,15 +272,15 @@ impl eframe::App for App {
                     self.sequencer.step_time();
                 }
                 // Keybind(space): Toggle play
-                if i.key_pressed(egui::Key::Space) {
+                else if i.key_pressed(egui::Key::Space) {
                     self.sequencer.toggle_play();
                 }
                 // Keybind(left): Reset the playhead/time to 0 seconds
-                if i.key_pressed(egui::Key::ArrowLeft) {
+                else if i.key_pressed(egui::Key::ArrowLeft) {
                     self.sequencer.reset_time();
                 }
                 // Keybind(F8): Toggle recording
-                if i.key_released(egui::Key::F8) {
+                else if i.key_released(egui::Key::F8) {
                     self.sequencer.recording.swap(
                         !self.sequencer.recording.load(Ordering::Relaxed),
                         Ordering::Relaxed,
@@ -324,24 +339,61 @@ impl eframe::App for App {
         egui::TopBottomPanel::top("top_panel").show(ctx, |ui| {
             egui::menu::bar(ui, |ui| {
                 ui.menu_button("File", |ui| {
-                    if ui.button("New File...").clicked() {
+                    if ui.add(egui::Button::new("New File...").shortcut_text("Ctrl+N")).clicked() {
                         self.new_file();
                         self.set_title(ctx);
                         ui.close_menu();
                     }
-
-                    if ui.button("Save File...").clicked() {
+                    if ui.add(egui::Button::new("Save File...").shortcut_text("Ctrl+S")).clicked() {
                         self.save_file();
                         self.set_title(ctx);
                         ui.close_menu();
                     }
-                    if ui.button("Open File...").clicked() {
+                    if ui.add(egui::Button::new("Open File...").shortcut_text("Ctrl+O")).clicked() {
                         self.open_file();
                         self.set_title(ctx);
                         ui.close_menu();
                     }
-                    if ui.button("Exit").clicked() {
+                    if ui.add(egui::Button::new("Exit").shortcut_text("Alt+F4")).clicked() {
                         ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+                    }
+                });
+                ui.menu_button("Edit", |ui| {
+                    if ui.button("Undo").clicked() {
+                        println!("undo");
+                        ui.close_menu();
+                    }
+                    if ui.button("Redo").clicked() {
+                        println!("redo");
+                        ui.close_menu();
+                    }
+                    ui.separator();
+                    if ui
+                        .add_enabled(
+                            !self.sequencer.selected_keyframes.is_empty(),
+                            egui::Button::new("Cut").shortcut_text("Ctrl+X"),
+                        )
+                        .clicked()
+                    {
+                        self.sequencer.cut();
+                        ui.close_menu();
+                    }
+                    if ui
+                        .add_enabled(
+                            !self.sequencer.selected_keyframes.is_empty(),
+                            egui::Button::new("Copy").shortcut_text("Ctrl+C"),
+                        )
+                        .clicked()
+                    {
+                        self.sequencer.copy();
+                        ui.close_menu();
+                    }
+                    if ui
+                        .add_enabled(!self.sequencer.clip_board.is_empty(), egui::Button::new("Paste").shortcut_text("Ctrl+V"))
+                        .clicked()
+                    {
+                        self.sequencer.paste();
+                        ui.close_menu();
                     }
                 });
             });
