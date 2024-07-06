@@ -889,7 +889,7 @@ impl Sequencer {
             .unwrap()
             .min;
         //offset so that the left most digit is fully visible += 4.0;
-        let (_, painter) = ui.appllocate_painter(ui.available_size(), egui::Sense::click());
+        let (_, painter) = ui.allocate_painter(ui.available_size(), egui::Sense::click());
         for i in self.scroll as i32
             ..(max_rect.width() * (1.0 / scale(ui, 1.0, self.scale)) + self.scroll).ceil() as i32
         {
@@ -1018,7 +1018,7 @@ impl Sequencer {
                 })
                 .body(|mut body| {
                     body.row(ROW_HEIGHT, |mut row| {
-                        row.set_hovered(true);
+                        // row.set_hovered(true);
                         row.col(|_| {});
                         row.col(|ui| {
                             let rect = ui.max_rect();

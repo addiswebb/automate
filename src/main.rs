@@ -20,6 +20,6 @@ fn main() -> eframe::Result<()> {
     eframe::run_native(
         "untitled - Automate",
         native_options,
-        Box::new(|cc| Box::new(automate::App::new(cc))),
+        Box::new(|cc| Ok(Box::new(automate::App::new(cc)))),
     )
 }
