@@ -1,4 +1,5 @@
-use egui::Vec2;
+use egui::{KeyboardShortcut, Vec2};
+use egui_extras::{Column, TableBuilder};
 use rfd::FileDialog;
 use std::{
     fs::File,
@@ -8,7 +9,145 @@ use std::{
     time::Instant,
 };
 
-use crate::sequencer::{Sequencer, SequencerState};
+use crate::{
+    keyframe::KeyframeType,
+    sequencer::{Sequencer, SequencerState},
+};
+
+#[derive(serde::Deserialize, serde::Serialize)]
+enum KeybindType {
+    SaveFile,
+    NewFile,
+    OpenFile,
+    Undo,
+    Redo,
+    ToggleSettings,
+    NextKeyframe,
+    PreviousKeyframe,
+    TogglePlay,
+    ResetTime,
+    ToggleRecording,
+    ToggleExecution,
+    AddKeyframe,
+    SelectAll,
+}
+
+enum SettingsPage {
+    Preferences,
+    Shortcuts,
+}
+impl Default for SettingsPage {
+    fn default() -> Self {
+        Self::Preferences
+    }
+}
+
+#[derive(serde::Deserialize, serde::Serialize)]
+struct Keybind {
+    text: String,
+    kind: KeybindType,
+    keybind: KeyboardShortcut,
+}
+impl Keybind {
+    pub fn new(text: String, kind: KeybindType, keybind: KeyboardShortcut) -> Self {
+        Self {
+            text,
+            kind,
+            keybind,
+        }
+    }
+}
+
+#[derive(serde::Deserialize, serde::Serialize)]
+struct Settings {
+    #[serde(skip)]
+    keybind_search: String,
+    keybinds: Vec<Keybind>,
+    offset: Vec2,
+    #[serde(skip)]
+    page: SettingsPage,
+}
+impl Default for Settings {
+    fn default() -> Self {
+        Self {
+            keybind_search: "".to_string(),
+            keybinds: vec![
+                Keybind::new(
+                    "Save File".to_string(),
+                    KeybindType::SaveFile,
+                    KeyboardShortcut::new(egui::Modifiers::CTRL, egui::Key::S),
+                ),
+                Keybind::new(
+                    "New File".to_string(),
+                    KeybindType::NewFile,
+                    KeyboardShortcut::new(egui::Modifiers::CTRL, egui::Key::N),
+                ),
+                Keybind::new(
+                    "Open File".to_string(),
+                    KeybindType::OpenFile,
+                    KeyboardShortcut::new(egui::Modifiers::CTRL, egui::Key::O),
+                ),
+                Keybind::new(
+                    "Undo".to_string(),
+                    KeybindType::Undo,
+                    KeyboardShortcut::new(egui::Modifiers::CTRL, egui::Key::Z),
+                ),
+                Keybind::new(
+                    "Redo".to_string(),
+                    KeybindType::Redo,
+                    KeyboardShortcut::new(egui::Modifiers::CTRL, egui::Key::Y),
+                ),
+                Keybind::new(
+                    "Toggle Settings".to_string(),
+                    KeybindType::ToggleSettings,
+                    KeyboardShortcut::new(egui::Modifiers::CTRL, egui::Key::Comma),
+                ),
+                Keybind::new(
+                    "Next Keyframe".to_string(),
+                    KeybindType::NextKeyframe,
+                    KeyboardShortcut::new(egui::Modifiers::CTRL, egui::Key::ArrowRight),
+                ),
+                Keybind::new(
+                    "Previous Keyframe".to_string(),
+                    KeybindType::PreviousKeyframe,
+                    KeyboardShortcut::new(egui::Modifiers::CTRL, egui::Key::ArrowLeft),
+                ),
+                Keybind::new(
+                    "Toggle Play".to_string(),
+                    KeybindType::TogglePlay,
+                    KeyboardShortcut::new(egui::Modifiers::NONE, egui::Key::Space),
+                ),
+                Keybind::new(
+                    "Reset Time".to_string(),
+                    KeybindType::ResetTime,
+                    KeyboardShortcut::new(egui::Modifiers::NONE, egui::Key::ArrowLeft),
+                ),
+                Keybind::new(
+                    "Toggle Recording".to_string(),
+                    KeybindType::ToggleRecording,
+                    KeyboardShortcut::new(egui::Modifiers::NONE, egui::Key::F8),
+                ),
+                Keybind::new(
+                    "Toggle Execution".to_string(),
+                    KeybindType::ToggleExecution,
+                    KeyboardShortcut::new(egui::Modifiers::NONE, egui::Key::Escape),
+                ),
+                Keybind::new(
+                    "Add Keyframe".to_string(),
+                    KeybindType::AddKeyframe,
+                    KeyboardShortcut::new(egui::Modifiers::NONE, egui::Key::F9),
+                ),
+                Keybind::new(
+                    "Select All".to_string(),
+                    KeybindType::SelectAll,
+                    KeyboardShortcut::new(egui::Modifiers::CTRL, egui::Key::A),
+                ),
+            ],
+            offset: Vec2::NAN,
+            page: SettingsPage::Preferences,
+        }
+    }
+}
 
 #[derive(serde::Deserialize, serde::Serialize)]
 #[serde(default)]
@@ -17,7 +156,6 @@ pub struct App {
     sequencer: Sequencer,
     #[serde(skip)]
     last_instant: Instant,
-    offset: Vec2,
     file: String,
     #[serde(skip)]
     file_uptodate: bool,
@@ -28,6 +166,9 @@ pub struct App {
     #[serde(skip)]
     // weird name, basically determines whether the save before exiting dialog closes the window or creates a new file
     is_dialog_to_close: bool,
+    #[serde(skip)]
+    show_settings: bool,
+    settings: Settings,
 }
 
 impl Default for App {
@@ -35,12 +176,13 @@ impl Default for App {
         Self {
             sequencer: Sequencer::new(),
             last_instant: Instant::now(),
-            offset: Vec2::ZERO,
             file: "untitled.auto".to_string(),
             file_uptodate: true,
             allowed_to_close: false,
             show_close_dialog: false,
             is_dialog_to_close: false,
+            show_settings: false,
+            settings: Settings::default(),
         }
     }
 }
@@ -176,8 +318,10 @@ impl eframe::App for App {
         self.set_title(ctx);
         let mut cancel_close = false;
         ctx.input(|i| {
-            self.sequencer.zoom(i.smooth_scroll_delta.x);
-            self.sequencer.scroll(i.smooth_scroll_delta.y);
+            if !self.show_close_dialog && !self.show_settings {
+                self.sequencer.zoom(i.smooth_scroll_delta.x);
+                self.sequencer.scroll(i.smooth_scroll_delta.y);
+            }
             // Todo(addis): check which of the following keybinds should only work when focused on the sequencer, and move them to sequencer.sense() if so
             // Todo(addis): change necessary keybinds to use consume_key instead of key_pressed, for those that should not repeat
             // Handle keybinds within app with focus
@@ -201,6 +345,10 @@ impl eframe::App for App {
                 // Keybind(ctrl+y): Redo last change
                 else if i.key_pressed(egui::Key::O) {
                     println!("Redo: to be implemented");
+                }
+                // Keybind(ctrl+,): Toggle settings window
+                else if i.key_pressed(egui::Key::Comma) {
+                    self.show_settings = !self.show_settings;
                 }
 
                 let keyframes = self.sequencer.keyframes.lock().unwrap();
@@ -339,22 +487,41 @@ impl eframe::App for App {
         egui::TopBottomPanel::top("top_panel").show(ctx, |ui| {
             egui::menu::bar(ui, |ui| {
                 ui.menu_button("File", |ui| {
-                    if ui.add(egui::Button::new("New File...").shortcut_text("Ctrl+N")).clicked() {
+                    if ui
+                        .add(egui::Button::new("New File...").shortcut_text("Ctrl+N"))
+                        .clicked()
+                    {
                         self.new_file();
                         self.set_title(ctx);
                         ui.close_menu();
                     }
-                    if ui.add(egui::Button::new("Save File...").shortcut_text("Ctrl+S")).clicked() {
+                    if ui
+                        .add(egui::Button::new("Save File...").shortcut_text("Ctrl+S"))
+                        .clicked()
+                    {
                         self.save_file();
                         self.set_title(ctx);
                         ui.close_menu();
                     }
-                    if ui.add(egui::Button::new("Open File...").shortcut_text("Ctrl+O")).clicked() {
+                    if ui
+                        .add(egui::Button::new("Open File...").shortcut_text("Ctrl+O"))
+                        .clicked()
+                    {
                         self.open_file();
                         self.set_title(ctx);
                         ui.close_menu();
                     }
-                    if ui.add(egui::Button::new("Exit").shortcut_text("Alt+F4")).clicked() {
+                    if ui
+                        .add(egui::Button::new("Settings").shortcut_text("Ctrl+,"))
+                        .clicked()
+                    {
+                        self.show_settings = true;
+                        ui.close_menu();
+                    }
+                    if ui
+                        .add(egui::Button::new("Exit").shortcut_text("Alt+F4"))
+                        .clicked()
+                    {
                         ctx.send_viewport_cmd(egui::ViewportCommand::Close);
                     }
                 });
@@ -389,7 +556,10 @@ impl eframe::App for App {
                         ui.close_menu();
                     }
                     if ui
-                        .add_enabled(!self.sequencer.clip_board.is_empty(), egui::Button::new("Paste").shortcut_text("Ctrl+V"))
+                        .add_enabled(
+                            !self.sequencer.clip_board.is_empty(),
+                            egui::Button::new("Paste").shortcut_text("Ctrl+V"),
+                        )
                         .clicked()
                     {
                         self.sequencer.paste();
@@ -399,10 +569,182 @@ impl eframe::App for App {
             });
         });
 
+        // if self.show_settings{
+        egui::Window::new("Settings")
+            .resizable(false)
+            .movable(true)
+            .collapsible(false)
+            .open(&mut self.show_settings)
+            .show(ctx, |ui| {
+                ui.horizontal(|ui| {
+                    // Side panel for settings list
+                    ui.vertical(|ui| {
+                        ui.set_width(100.);
+                        ui.set_height(250.);
+                        ui.vertical_centered_justified(|ui| {
+                            if ui
+                                .selectable_label(
+                                    match self.settings.page {
+                                        SettingsPage::Preferences => true,
+                                        _ => false,
+                                    },
+                                    "Preferences",
+                                )
+                                .clicked()
+                            {
+                                self.settings.page = SettingsPage::Preferences;
+                            }
+                            if ui
+                                .selectable_label(
+                                    match self.settings.page {
+                                        SettingsPage::Shortcuts => true,
+                                        _ => false,
+                                    },
+                                    "Shortcuts",
+                                )
+                                .clicked()
+                            {
+                                self.settings.page = SettingsPage::Shortcuts;
+                            }
+                        });
+                    });
+                    ui.separator();
+                    ui.vertical(|ui| {
+                        ui.set_min_width(340.);
+                        ui.set_max_width(340.);
+                        ui.set_width(340.);
+                        ui.set_height(250.);
+                        match self.settings.page {
+                            SettingsPage::Preferences => {
+                                ui.heading(egui::RichText::new("Preferences").strong());
+                                ui.separator();
+                                ui.add_space(4.);
+                                ui.vertical(|ui| {
+                                    ui.horizontal(|ui|{
+                                        ui.strong("Monitor Offset ");
+                                        ui.add(
+                                            egui::DragValue::new(&mut self.settings.offset.x).speed(1),
+                                        )
+                                        .on_hover_text("X");
+                                        ui.add(
+                                            egui::DragValue::new(&mut self.settings.offset.y).speed(1),
+                                        )
+                                        .on_hover_text("Y");
+                                    });
+                                    ui.label("Monitor Offset is used to correctly simulate mouse movements when using multiple monitors");
+                                    ui.add_space(4.);
+                                    ui.horizontal(|ui|{
+                                        if ui.add(egui::Button::new("Calibrate")).on_hover_text("Calibrates the offset necessary to correctly move the mouse when using multiple monitors").clicked() {
+                                            self.sequencer.calibrate.swap(true, Ordering::Relaxed);
+                                            rdev::simulate(&rdev::EventType::MouseMove { x: 0., y: 0. }).unwrap();
+                                            let mut keyframes = self.sequencer.keyframes.lock().unwrap();
+                                            let last = keyframes.last();
+                                            if let Some(last) = last{
+                                                // Keyframe kind of 255 is used only for calibrating monitor offset
+                                                if last.kind == u8::MAX{
+                                                    if let KeyframeType::MouseMove(pos) = last.keyframe_type{
+                                                        self.settings.offset = pos;
+                                                    }
+                                                }
+                                            }
+                                            keyframes.pop();
+                                            self.sequencer.calibrate.swap(false, Ordering::Relaxed);
+                                            log::info!("Calibrated Monitor Offset: {:?}", self.settings.offset);
+                                        }
+                                    });
+                                });
+                                ui.add_space(6.);
+                                ui.separator();
+                                ui.add_space(6.);
+                                ui.vertical(|ui|{
+                                    ui.horizontal(|ui|{
+                                        ui.strong("Recording Resolution");
+
+                                        let mut resolution = self
+                                            .sequencer
+                                            .mouse_movement_record_resolution
+                                            .load(Ordering::Relaxed);
+                                        ui.add(
+                                            egui::DragValue::new(&mut resolution)
+                                                .speed(1)
+                                                .range(0..=100),
+                                        )
+                                        .on_hover_text("Recording Resolution");
+                                        self.sequencer.mouse_movement_record_resolution
+                                            .store(resolution, Ordering::Relaxed);
+                                    });
+                                    ui.label("The resolution at which mouse movement events are captured as keyframes, higher is better for accuracy.");
+                                    ui.small("0 disables mouse recording, use F9 to record manually");
+                                });
+                                // ui.spacing();
+                                // ui.separator();
+                            }
+                            SettingsPage::Shortcuts => {
+                                ui.heading(egui::RichText::new("Shortcuts").strong());
+                                ui.horizontal(|ui| {
+                                    ui.centered_and_justified(|ui| {
+                                        ui.add(
+                                            egui::TextEdit::singleline(
+                                                &mut self.settings.keybind_search,
+                                            )
+                                            .hint_text("Type to search keybindings"),
+                                        );
+                                    });
+                                    if ui.button("X").clicked() {}
+                                });
+                                ui.spacing();
+                                let mut table = TableBuilder::new(ui)
+                                    .striped(false)
+                                    .resizable(false)
+                                    .cell_layout(egui::Layout::left_to_right(egui::Align::Center))
+                                    // Shortcut column
+                                    .column(Column::auto())
+                                    // Keybindings column
+                                    .column(Column::remainder())
+                                    .drag_to_scroll(false)
+                                    .sense(egui::Sense::hover());
+                                //allow rows to be clicked
+                                table = table.sense(egui::Sense::click()).resizable(true);
+
+                                table
+                                    .header(22., |mut header| {
+                                        header.col(|ui| {
+                                            ui.strong("Shortcut");
+                                        });
+                                        header.col(|ui| {
+                                            ui.strong("Keybind");
+                                        });
+                                    })
+                                    .body(|body| {
+                                        body.rows(22., self.settings.keybinds.len(), |mut row| {
+                                            let keybind = &self.settings.keybinds[row.index()];
+                                            row.col(|ui| {
+                                                ui.label(format!("{}", keybind.text));
+                                            });
+                                            row.col(|ui| {
+                                                let keybind = keybind.keybind;
+                                                let ctrl = if keybind.modifiers.ctrl {
+                                                    "Ctrl+".to_string()
+                                                } else {
+                                                    "".to_string()
+                                                };
+                                                ui.label(format!(
+                                                    "{}{:#?}",
+                                                    ctrl, keybind.logical_key,
+                                                ));
+                                            });
+                                        });
+                                    });
+                            }
+                        }
+                    });
+                });
+            });
+
         self.sequencer
-            .update(&mut self.last_instant, ctx, self.offset);
+            .update(&mut self.last_instant, ctx, self.settings.offset);
         self.sequencer.show(ctx);
-        self.sequencer.debug_panel(ctx, &mut self.offset);
+        self.sequencer.debug_panel(ctx);
         self.sequencer.selected_panel(ctx);
 
         if cancel_close {
