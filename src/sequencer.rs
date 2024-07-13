@@ -40,7 +40,7 @@ pub struct Sequencer {
     #[serde(skip)]
     pub keyframes: Arc<Mutex<Vec<Keyframe>>>,
     #[serde(skip)]
-    pub selected_keyframes: Vec<Uuid>,
+    pub selected_keyframes: Vec<uuid::Bytes>,
     #[serde(skip)]
     pub keyframe_state: Arc<Mutex<Vec<usize>>>,
     scale: f32, // egui coord points:seconds
@@ -120,7 +120,7 @@ impl Sequencer {
                                     duration: f32::NAN, 
                                     keyframe_type: KeyframeType::MouseMove(Vec2::new(*x as f32, *y as f32)),
                                     kind: u8::MAX, // This is code to say the keyframe is for calibration only and must be deleted after use
-                                    uid: Uuid::nil(),
+                                    uid: Uuid::nil().to_bytes_le(),
                                 });
                             }
                             _ => {}
@@ -158,7 +158,7 @@ impl Sequencer {
                                                 previous_mouse_position,
                                             ),
                                             kind: 1,
-                                            uid: Uuid::new_v4(),
+                                            uid: Uuid::new_v4().to_bytes_le(),
                                         });
                                     }
                                     _ => {}
@@ -207,7 +207,7 @@ impl Sequencer {
                                             duration: (dt - pressed_at).as_secs_f32(),
                                             keyframe_type: KeyframeType::MouseBtn(*btn),
                                             kind: 2,
-                                            uid: Uuid::new_v4(),
+                                            uid: Uuid::new_v4().to_bytes_le(),
                                         }),
                                         false => None,
                                     }
@@ -239,7 +239,7 @@ impl Sequencer {
                                             duration: (dt - pressed_at).as_secs_f32(),
                                             keyframe_type: KeyframeType::KeyBtn(*key),
                                             kind: 0,
-                                            uid: Uuid::new_v4(),
+                                            uid: Uuid::new_v4().to_bytes_le(),
                                         }),
                                         false => None,
                                     }
@@ -258,7 +258,7 @@ impl Sequencer {
                                                     duration: 0.1,
                                                     keyframe_type: KeyframeType::MouseMove(pos),
                                                     kind: 1,
-                                                    uid: Uuid::new_v4(),
+                                                    uid: Uuid::new_v4().to_bytes_le(),
                                                 })
                                             }
                                             false => None,
@@ -277,7 +277,7 @@ impl Sequencer {
                                                 *delta_y as f32,
                                             )),
                                             kind: 3,
-                                            uid: Uuid::new_v4(),
+                                            uid: Uuid::new_v4().to_bytes_le(),
                                         }),
                                     }
                                 }
@@ -336,12 +336,6 @@ impl Sequencer {
     pub fn load_from_state(&mut self, mut state: SequencerState) {
         let mut shared_kfs = self.keyframes.lock().unwrap();
         let mut shared_pkfs = self.keyframe_state.lock().unwrap();
-        // Uuid is skipped when serializing so it is necessary to assign uuids now
-        for x in state.keyframes.iter_mut() {
-            if x.uid.is_nil() {
-                x.uid = Uuid::new_v4();
-            }
-        }
         shared_kfs.clear();
         shared_kfs.extend(state.keyframes.into_iter());
         shared_pkfs.clear();
@@ -349,7 +343,6 @@ impl Sequencer {
         self.speed = state.speed;
         self.repeats = state.repeats;
     }
-
     /// Toggles whether the sequencer is playing or not
     pub fn toggle_play(&mut self) {
         self.play
@@ -398,11 +391,11 @@ impl Sequencer {
                     // Shift them all forward slightly so its clear what has been copied
                     kf.timestamp += 0.1;
                     // Change the UUIDs for the copied keyframes
-                    kf.uid = uuid::Uuid::new_v4();
+                    kf.uid = uuid::Uuid::new_v4().to_bytes_le();
                     kf
                 })
                 .collect();
-            let uids: Vec<Uuid> = clip_board.clone().into_iter().map(|kf| kf.uid).collect();
+            let uids: Vec<uuid::Bytes> = clip_board.clone().into_iter().map(|kf| kf.uid).collect();
             self.selected_keyframes = uids;
             self.keyframe_state
                 .lock()
@@ -723,11 +716,11 @@ impl Sequencer {
                                 // Shift them all forward slightly so its clear what has been copied
                                 kf.timestamp += 0.1;
                                 // Change the UUIDs for the copied keyframes
-                                kf.uid = uuid::Uuid::new_v4();
+                                kf.uid = uuid::Uuid::new_v4().to_bytes_le();
                                 kf
                             })
                             .collect();
-                        let uids: Vec<Uuid> =
+                        let uids: Vec<uuid::Bytes> =
                             clip_board.clone().into_iter().map(|kf| kf.uid).collect();
                         self.selected_keyframes = uids;
                         self.keyframe_state

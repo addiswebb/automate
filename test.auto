@@ -1,790 +1,305 @@
 {
   "keyframes": [
     {
-      "timestamp": 0.0,
-      "duration": 0.1189812,
+      "timestamp": 0.3026537,
+      "duration": 0.1,
+      "keyframe_type": {
+        "MouseMove": {
+          "x": 1288.0,
+          "y": 580.0
+        }
+      },
+      "kind": 1,
+      "uid": [
+        116,
+        38,
+        30,
+        137,
+        34,
+        23,
+        118,
+        66,
+        183,
+        51,
+        221,
+        112,
+        68,
+        14,
+        149,
+        72
+      ]
+    },
+    {
+      "timestamp": 0.443741,
+      "duration": 0.1,
+      "keyframe_type": {
+        "MouseMove": {
+          "x": 1295.0,
+          "y": 600.0
+        }
+      },
+      "kind": 1,
+      "uid": [
+        37,
+        175,
+        18,
+        43,
+        246,
+        39,
+        193,
+        76,
+        128,
+        47,
+        157,
+        85,
+        163,
+        178,
+        130,
+        177
+      ]
+    },
+    {
+      "timestamp": 0.55714417,
+      "duration": 0.09189209,
       "keyframe_type": {
         "MouseBtn": "Left"
       },
-      "kind": 2
+      "kind": 2,
+      "uid": [
+        101,
+        228,
+        12,
+        228,
+        150,
+        132,
+        59,
+        79,
+        149,
+        117,
+        167,
+        152,
+        17,
+        14,
+        177,
+        166
+      ]
     },
     {
-      "timestamp": 0.5786699,
-      "duration": 0.1,
-      "keyframe_type": {
-        "MouseMove": {
-          "x": 273.0,
-          "y": 246.0
-        }
-      },
-      "kind": 1
-    },
-    {
-      "timestamp": 0.59872425,
-      "duration": 0.1,
-      "keyframe_type": {
-        "MouseMove": {
-          "x": 301.0,
-          "y": 243.0
-        }
-      },
-      "kind": 1
-    },
-    {
-      "timestamp": 0.6186881,
-      "duration": 0.1,
-      "keyframe_type": {
-        "MouseMove": {
-          "x": 322.0,
-          "y": 243.0
-        }
-      },
-      "kind": 1
-    },
-    {
-      "timestamp": 0.6396869,
-      "duration": 0.1,
-      "keyframe_type": {
-        "MouseMove": {
-          "x": 345.0,
-          "y": 243.0
-        }
-      },
-      "kind": 1
-    },
-    {
-      "timestamp": 0.6597991,
-      "duration": 0.1,
-      "keyframe_type": {
-        "MouseMove": {
-          "x": 370.0,
-          "y": 243.0
-        }
-      },
-      "kind": 1
-    },
-    {
-      "timestamp": 0.6807826,
-      "duration": 0.1,
-      "keyframe_type": {
-        "MouseMove": {
-          "x": 402.0,
-          "y": 241.0
-        }
-      },
-      "kind": 1
-    },
-    {
-      "timestamp": 0.70079273,
-      "duration": 0.1,
-      "keyframe_type": {
-        "MouseMove": {
-          "x": 436.0,
-          "y": 241.0
-        }
-      },
-      "kind": 1
-    },
-    {
-      "timestamp": 0.7206636,
-      "duration": 0.1,
-      "keyframe_type": {
-        "MouseMove": {
-          "x": 463.0,
-          "y": 240.0
-        }
-      },
-      "kind": 1
-    },
-    {
-      "timestamp": 0.7406761,
-      "duration": 0.1,
-      "keyframe_type": {
-        "MouseMove": {
-          "x": 483.0,
-          "y": 240.0
-        }
-      },
-      "kind": 1
-    },
-    {
-      "timestamp": 0.7606669,
-      "duration": 0.1,
-      "keyframe_type": {
-        "MouseMove": {
-          "x": 498.0,
-          "y": 240.0
-        }
-      },
-      "kind": 1
-    },
-    {
-      "timestamp": 0.7836756,
-      "duration": 0.1,
-      "keyframe_type": {
-        "MouseMove": {
-          "x": 513.0,
-          "y": 240.0
-        }
-      },
-      "kind": 1
-    },
-    {
-      "timestamp": 0.8819844,
-      "duration": 0.113802895,
+      "timestamp": 1.0372238,
+      "duration": 0.0780881,
       "keyframe_type": {
         "MouseBtn": "Left"
       },
-      "kind": 2
+      "kind": 2,
+      "uid": [
+        77,
+        176,
+        5,
+        124,
+        252,
+        14,
+        130,
+        77,
+        169,
+        11,
+        34,
+        121,
+        193,
+        219,
+        147,
+        115
+      ]
     },
     {
-      "timestamp": 1.052701,
-      "duration": 0.1,
-      "keyframe_type": {
-        "MouseMove": {
-          "x": 525.0,
-          "y": 244.0
-        }
-      },
-      "kind": 1
-    },
-    {
-      "timestamp": 1.0777875,
-      "duration": 0.1,
-      "keyframe_type": {
-        "MouseMove": {
-          "x": 533.0,
-          "y": 257.0
-        }
-      },
-      "kind": 1
-    },
-    {
-      "timestamp": 1.100686,
-      "duration": 0.1,
-      "keyframe_type": {
-        "MouseMove": {
-          "x": 539.0,
-          "y": 272.0
-        }
-      },
-      "kind": 1
-    },
-    {
-      "timestamp": 1.1226829,
-      "duration": 0.1,
-      "keyframe_type": {
-        "MouseMove": {
-          "x": 543.0,
-          "y": 289.0
-        }
-      },
-      "kind": 1
-    },
-    {
-      "timestamp": 1.1436867,
-      "duration": 0.1,
-      "keyframe_type": {
-        "MouseMove": {
-          "x": 546.0,
-          "y": 307.0
-        }
-      },
-      "kind": 1
-    },
-    {
-      "timestamp": 1.1636869,
-      "duration": 0.1,
-      "keyframe_type": {
-        "MouseMove": {
-          "x": 546.0,
-          "y": 323.0
-        }
-      },
-      "kind": 1
-    },
-    {
-      "timestamp": 1.184691,
-      "duration": 0.1,
-      "keyframe_type": {
-        "MouseMove": {
-          "x": 546.0,
-          "y": 340.0
-        }
-      },
-      "kind": 1
-    },
-    {
-      "timestamp": 1.208808,
-      "duration": 0.1,
-      "keyframe_type": {
-        "MouseMove": {
-          "x": 548.0,
-          "y": 355.0
-        }
-      },
-      "kind": 1
-    },
-    {
-      "timestamp": 1.3588111,
-      "duration": 0.1019932,
+      "timestamp": 1.4639648,
+      "duration": 0.105859905,
       "keyframe_type": {
         "MouseBtn": "Left"
       },
-      "kind": 2
+      "kind": 2,
+      "uid": [
+        196,
+        100,
+        62,
+        21,
+        191,
+        87,
+        96,
+        73,
+        181,
+        143,
+        13,
+        137,
+        148,
+        49,
+        53,
+        162
+      ]
     },
     {
-      "timestamp": 1.5138831,
-      "duration": 0.1,
-      "keyframe_type": {
-        "MouseMove": {
-          "x": 550.0,
-          "y": 367.0
-        }
-      },
-      "kind": 1
-    },
-    {
-      "timestamp": 1.5397055,
-      "duration": 0.1,
-      "keyframe_type": {
-        "MouseMove": {
-          "x": 534.0,
-          "y": 370.0
-        }
-      },
-      "kind": 1
-    },
-    {
-      "timestamp": 1.559705,
-      "duration": 0.1,
-      "keyframe_type": {
-        "MouseMove": {
-          "x": 510.0,
-          "y": 371.0
-        }
-      },
-      "kind": 1
-    },
-    {
-      "timestamp": 1.580703,
-      "duration": 0.1,
-      "keyframe_type": {
-        "MouseMove": {
-          "x": 481.0,
-          "y": 376.0
-        }
-      },
-      "kind": 1
-    },
-    {
-      "timestamp": 1.6007078,
-      "duration": 0.1,
-      "keyframe_type": {
-        "MouseMove": {
-          "x": 453.0,
-          "y": 380.0
-        }
-      },
-      "kind": 1
-    },
-    {
-      "timestamp": 1.6227105,
-      "duration": 0.1,
-      "keyframe_type": {
-        "MouseMove": {
-          "x": 422.0,
-          "y": 383.0
-        }
-      },
-      "kind": 1
-    },
-    {
-      "timestamp": 1.6437097,
-      "duration": 0.1,
-      "keyframe_type": {
-        "MouseMove": {
-          "x": 394.0,
-          "y": 384.0
-        }
-      },
-      "kind": 1
-    },
-    {
-      "timestamp": 1.6647161,
-      "duration": 0.1,
-      "keyframe_type": {
-        "MouseMove": {
-          "x": 368.0,
-          "y": 383.0
-        }
-      },
-      "kind": 1
-    },
-    {
-      "timestamp": 1.68571,
-      "duration": 0.1,
-      "keyframe_type": {
-        "MouseMove": {
-          "x": 351.0,
-          "y": 382.0
-        }
-      },
-      "kind": 1
-    },
-    {
-      "timestamp": 1.8829242,
-      "duration": 0.1310687,
+      "timestamp": 1.945512,
+      "duration": 0.0699666,
       "keyframe_type": {
         "MouseBtn": "Left"
       },
-      "kind": 2
+      "kind": 2,
+      "uid": [
+        140,
+        62,
+        155,
+        127,
+        227,
+        180,
+        23,
+        77,
+        189,
+        194,
+        191,
+        213,
+        168,
+        154,
+        25,
+        217
+      ]
     },
     {
-      "timestamp": 2.95875,
-      "duration": 0.1331102,
+      "timestamp": 2.397921,
+      "duration": 0.099796094,
       "keyframe_type": {
-        "KeyBtn": "KeyW"
+        "MouseBtn": "Right"
       },
-      "kind": 0
+      "kind": 2,
+      "uid": [
+        183,
+        170,
+        232,
+        185,
+        152,
+        42,
+        70,
+        78,
+        182,
+        230,
+        13,
+        42,
+        158,
+        155,
+        100,
+        251
+      ]
     },
     {
-      "timestamp": 3.9331603,
-      "duration": 0.1017613,
+      "timestamp": 2.9529328,
+      "duration": 0.0566447,
       "keyframe_type": {
-        "KeyBtn": "KeyH"
+        "MouseBtn": "Right"
       },
-      "kind": 0
+      "kind": 2,
+      "uid": [
+        244,
+        232,
+        54,
+        148,
+        213,
+        178,
+        178,
+        78,
+        174,
+        114,
+        62,
+        90,
+        114,
+        171,
+        33,
+        243
+      ]
     },
     {
-      "timestamp": 4.0521917,
-      "duration": 0.182646,
-      "keyframe_type": {
-        "KeyBtn": "KeyA"
-      },
-      "kind": 0
-    },
-    {
-      "timestamp": 4.1662164,
-      "duration": 0.0746292,
-      "keyframe_type": {
-        "KeyBtn": "KeyT"
-      },
-      "kind": 0
-    },
-    {
-      "timestamp": 4.375443,
-      "duration": 0.4003287,
-      "keyframe_type": {
-        "KeyBtn": "ShiftRight"
-      },
-      "kind": 0
-    },
-    {
-      "timestamp": 4.47468,
-      "duration": 0.1751824,
-      "keyframe_type": {
-        "KeyBtn": "Slash"
-      },
-      "kind": 0
-    },
-    {
-      "timestamp": 5.60993,
+      "timestamp": 4.969193,
       "duration": 0.1,
       "keyframe_type": {
         "MouseMove": {
-          "x": 340.0,
-          "y": 378.0
+          "x": 1296.0,
+          "y": 599.0
         }
       },
-      "kind": 1
+      "kind": 1,
+      "uid": [
+        120,
+        34,
+        103,
+        176,
+        122,
+        157,
+        189,
+        76,
+        141,
+        122,
+        149,
+        127,
+        124,
+        40,
+        18,
+        98
+      ]
     },
     {
-      "timestamp": 5.6568995,
+      "timestamp": 5.1444483,
       "duration": 0.1,
       "keyframe_type": {
         "MouseMove": {
-          "x": 325.0,
-          "y": 380.0
+          "x": 1283.0,
+          "y": 572.0
         }
       },
-      "kind": 1
+      "kind": 1,
+      "uid": [
+        70,
+        51,
+        170,
+        134,
+        86,
+        33,
+        29,
+        64,
+        152,
+        127,
+        77,
+        2,
+        100,
+        29,
+        59,
+        44
+      ]
     },
     {
-      "timestamp": 5.681947,
+      "timestamp": 5.32823,
       "duration": 0.1,
       "keyframe_type": {
         "MouseMove": {
-          "x": 311.0,
-          "y": 384.0
+          "x": 1277.0,
+          "y": 552.0
         }
       },
-      "kind": 1
-    },
-    {
-      "timestamp": 5.808976,
-      "duration": 0.1,
-      "keyframe_type": {
-        "Scroll": {
-          "x": 0.0,
-          "y": -1.0
-        }
-      },
-      "kind": 3
-    },
-    {
-      "timestamp": 5.834064,
-      "duration": 0.1,
-      "keyframe_type": {
-        "Scroll": {
-          "x": 0.0,
-          "y": -1.0
-        }
-      },
-      "kind": 3
-    },
-    {
-      "timestamp": 5.8611135,
-      "duration": 0.1,
-      "keyframe_type": {
-        "Scroll": {
-          "x": 0.0,
-          "y": -1.0
-        }
-      },
-      "kind": 3
-    },
-    {
-      "timestamp": 5.910164,
-      "duration": 0.1,
-      "keyframe_type": {
-        "Scroll": {
-          "x": 0.0,
-          "y": -1.0
-        }
-      },
-      "kind": 3
-    },
-    {
-      "timestamp": 6.0090003,
-      "duration": 0.1,
-      "keyframe_type": {
-        "Scroll": {
-          "x": 0.0,
-          "y": -1.0
-        }
-      },
-      "kind": 3
-    },
-    {
-      "timestamp": 6.098051,
-      "duration": 0.1,
-      "keyframe_type": {
-        "Scroll": {
-          "x": 0.0,
-          "y": 1.0
-        }
-      },
-      "kind": 3
-    },
-    {
-      "timestamp": 6.14011,
-      "duration": 0.1,
-      "keyframe_type": {
-        "Scroll": {
-          "x": 0.0,
-          "y": 1.0
-        }
-      },
-      "kind": 3
-    },
-    {
-      "timestamp": 6.1779957,
-      "duration": 0.1,
-      "keyframe_type": {
-        "Scroll": {
-          "x": 0.0,
-          "y": 1.0
-        }
-      },
-      "kind": 3
-    },
-    {
-      "timestamp": 6.206005,
-      "duration": 0.1,
-      "keyframe_type": {
-        "Scroll": {
-          "x": 0.0,
-          "y": 1.0
-        }
-      },
-      "kind": 3
-    },
-    {
-      "timestamp": 6.2420135,
-      "duration": 0.1,
-      "keyframe_type": {
-        "Scroll": {
-          "x": 0.0,
-          "y": 1.0
-        }
-      },
-      "kind": 3
-    },
-    {
-      "timestamp": 6.2870584,
-      "duration": 0.1,
-      "keyframe_type": {
-        "Scroll": {
-          "x": 0.0,
-          "y": 1.0
-        }
-      },
-      "kind": 3
-    },
-    {
-      "timestamp": 6.3630576,
-      "duration": 0.1,
-      "keyframe_type": {
-        "Scroll": {
-          "x": 0.0,
-          "y": 1.0
-        }
-      },
-      "kind": 3
-    },
-    {
-      "timestamp": 6.7760324,
-      "duration": 0.1,
-      "keyframe_type": {
-        "Scroll": {
-          "x": 0.0,
-          "y": 1.0
-        }
-      },
-      "kind": 3
-    },
-    {
-      "timestamp": 6.7980328,
-      "duration": 0.1,
-      "keyframe_type": {
-        "Scroll": {
-          "x": 0.0,
-          "y": 1.0
-        }
-      },
-      "kind": 3
-    },
-    {
-      "timestamp": 6.8180323,
-      "duration": 0.1,
-      "keyframe_type": {
-        "Scroll": {
-          "x": 0.0,
-          "y": 1.0
-        }
-      },
-      "kind": 3
-    },
-    {
-      "timestamp": 6.84302,
-      "duration": 0.1,
-      "keyframe_type": {
-        "Scroll": {
-          "x": 0.0,
-          "y": 1.0
-        }
-      },
-      "kind": 3
-    },
-    {
-      "timestamp": 6.8870335,
-      "duration": 0.1,
-      "keyframe_type": {
-        "Scroll": {
-          "x": 0.0,
-          "y": 1.0
-        }
-      },
-      "kind": 3
-    },
-    {
-      "timestamp": 7.2950625,
-      "duration": 0.10502169,
-      "keyframe_type": {
-        "MouseBtn": "Left"
-      },
-      "kind": 2
-    },
-    {
-      "timestamp": 7.6830373,
-      "duration": 0.1,
-      "keyframe_type": {
-        "MouseMove": {
-          "x": 312.0,
-          "y": 389.0
-        }
-      },
-      "kind": 1
-    },
-    {
-      "timestamp": 7.723144,
-      "duration": 0.1,
-      "keyframe_type": {
-        "MouseMove": {
-          "x": 320.0,
-          "y": 379.0
-        }
-      },
-      "kind": 1
-    },
-    {
-      "timestamp": 7.7511444,
-      "duration": 0.1,
-      "keyframe_type": {
-        "MouseMove": {
-          "x": 327.0,
-          "y": 366.0
-        }
-      },
-      "kind": 1
-    },
-    {
-      "timestamp": 7.7720356,
-      "duration": 0.1,
-      "keyframe_type": {
-        "MouseMove": {
-          "x": 333.0,
-          "y": 352.0
-        }
-      },
-      "kind": 1
-    },
-    {
-      "timestamp": 7.79406,
-      "duration": 0.1,
-      "keyframe_type": {
-        "MouseMove": {
-          "x": 342.0,
-          "y": 337.0
-        }
-      },
-      "kind": 1
-    },
-    {
-      "timestamp": 7.8190007,
-      "duration": 0.1,
-      "keyframe_type": {
-        "MouseMove": {
-          "x": 351.0,
-          "y": 321.0
-        }
-      },
-      "kind": 1
-    },
-    {
-      "timestamp": 7.8459954,
-      "duration": 0.1,
-      "keyframe_type": {
-        "MouseMove": {
-          "x": 357.0,
-          "y": 307.0
-        }
-      },
-      "kind": 1
-    },
-    {
-      "timestamp": 7.8870373,
-      "duration": 0.1,
-      "keyframe_type": {
-        "MouseMove": {
-          "x": 362.0,
-          "y": 296.0
-        }
-      },
-      "kind": 1
-    },
-    {
-      "timestamp": 8.122111,
-      "duration": 0.113006,
-      "keyframe_type": {
-        "MouseBtn": "Left"
-      },
-      "kind": 2
-    },
-    {
-      "timestamp": 8.342041,
-      "duration": 0.1,
-      "keyframe_type": {
-        "MouseMove": {
-          "x": 351.0,
-          "y": 292.0
-        }
-      },
-      "kind": 1
-    },
-    {
-      "timestamp": 8.364049,
-      "duration": 0.1,
-      "keyframe_type": {
-        "MouseMove": {
-          "x": 333.0,
-          "y": 290.0
-        }
-      },
-      "kind": 1
-    },
-    {
-      "timestamp": 8.386027,
-      "duration": 0.1,
-      "keyframe_type": {
-        "MouseMove": {
-          "x": 316.0,
-          "y": 289.0
-        }
-      },
-      "kind": 1
-    },
-    {
-      "timestamp": 8.429035,
-      "duration": 0.1,
-      "keyframe_type": {
-        "MouseMove": {
-          "x": 300.0,
-          "y": 287.0
-        }
-      },
-      "kind": 1
-    },
-    {
-      "timestamp": 8.453146,
-      "duration": 0.1,
-      "keyframe_type": {
-        "MouseMove": {
-          "x": 285.0,
-          "y": 284.0
-        }
-      },
-      "kind": 1
-    },
-    {
-      "timestamp": 8.479034,
-      "duration": 0.1,
-      "keyframe_type": {
-        "MouseMove": {
-          "x": 270.0,
-          "y": 282.0
-        }
-      },
-      "kind": 1
-    },
-    {
-      "timestamp": 8.954281,
-      "duration": 0.15100498,
-      "keyframe_type": {
-        "MouseBtn": "Left"
-      },
-      "kind": 2
+      "kind": 1,
+      "uid": [
+        87,
+        169,
+        105,
+        203,
+        187,
+        255,
+        223,
+        79,
+        154,
+        143,
+        39,
+        182,
+        158,
+        134,
+        187,
+        220
+      ]
     }
   ],
   "repeats": 1,
