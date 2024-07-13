@@ -1014,7 +1014,6 @@ impl Sequencer {
                 .body(|mut body| {
                     body.row(ROW_HEIGHT, |mut row| {
                         // row.set_hovered(true);
-                        row.set_selected(true);
                         row.col(|_| {});
                         row.col(|ui| {
                             let rect = ui.max_rect();
