@@ -11,7 +11,7 @@ use std::{
 };
 
 use crate::{
-    keyframe::KeyframeType,
+    keyframe::{Keyframe, KeyframeType},
     sequencer::{Sequencer, SequencerState},
 };
 
@@ -536,6 +536,26 @@ impl eframe::App for App {
                         ui.close_menu();
                     }
                     ui.separator();
+                    ui.menu_button("Add", |ui|{
+                        if ui.button("Wait").clicked() {
+                            println!("add wait");
+                            let mut keyframes = self.sequencer.keyframes.lock().unwrap();
+                            keyframes.push(Keyframe{
+                                timestamp: self.sequencer.get_time(),
+                                duration: 1.,
+                                keyframe_type: KeyframeType::Wait(1.),
+                                kind: 4,
+                                uid: Uuid::new_v4().to_bytes_le(),
+                            });
+                            self.sequencer.keyframe_state.lock().unwrap().push(0);
+                            ui.close_menu();
+                        }
+                        if ui.button("Key").clicked() {
+                            println!("add key keyframe");
+                            ui.close_menu();
+                        }
+                    });
+                    ui.separator();
                     if ui
                         .add_enabled(
                             !self.sequencer.selected_keyframes.is_empty(),
@@ -767,11 +787,12 @@ impl eframe::App for App {
                     KeyframeType::MouseBtn(_)=> true,
                     _ => false,
                 };
-                if would_have_image{
-                    // ui.vertical_centered_justified(|ui|{
+                ui.vertical_centered_justified(|ui|{
+                    // Todo(addis): Make keyframes guarrenteed to have an image
+                    if would_have_image{ // Could still not have an image for now
                         ui.image(format!("file://screenshots/{}.png",Uuid::from_bytes_le(uid.clone()).to_string()));
-                    // });
-                }
+                    }
+                });
             }
         });
         if cancel_close {

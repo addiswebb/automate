@@ -1,4 +1,3 @@
-use std::fs::File;
 use std::sync::atomic::{AtomicBool, AtomicI32, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
@@ -348,6 +347,10 @@ impl Sequencer {
         }
     }
 
+    /// Returns the current time where the playhead is
+    pub fn get_time(&self) -> f32{
+        self.time
+    }
     /// Saves the current state of the sequencer to `SequencerState`
     pub fn save_to_state(&self) -> SequencerState {
         SequencerState {
@@ -357,7 +360,7 @@ impl Sequencer {
         }
     }
     /// Loads the sequencer with the `SequencerState`
-    pub fn load_from_state(&mut self, mut state: SequencerState) {
+    pub fn load_from_state(&mut self, state: SequencerState) {
         let mut shared_kfs = self.keyframes.lock().unwrap();
         let mut shared_pkfs = self.keyframe_state.lock().unwrap();
         shared_kfs.clear();
@@ -569,6 +572,7 @@ impl Sequencer {
                     KeyframeType::MouseBtn(btn) => button_to_char(btn),
                     KeyframeType::MouseMove(_) => "".to_string(),
                     KeyframeType::Scroll(delta) => scroll_to_char(delta),
+                    KeyframeType::Wait(secs) => format!("{}s",secs).to_string(),
                 }
             );
             let color = match keyframes[i].kind {
@@ -1187,6 +1191,10 @@ impl Sequencer {
                             ui.strong("Scroll");
                             ui.label(format!("delta: {:?}", delta));
                         }
+                        KeyframeType::Wait(secs) => {
+                            ui.strong("Wait");
+                            ui.label(format!("{:?}s",secs));
+                        }
                     }
                     let (tmpx, tmpy) = (keyframe.timestamp, keyframe.duration);
                     ui.label("Timestamp");
@@ -1458,6 +1466,13 @@ fn handle_playing_keyframe(keyframe: &Keyframe, start: bool, offset: Vec2) {
                     delta_y: (delta.y) as i64,
                 })
                 .expect("Failed to simulate Mouse Scroll (Possibly due to anticheat)");
+            }
+        }
+        KeyframeType::Wait(secs) => {
+            if start{
+                // Todo(addis): multiply dt so that it takes *secs* seconds to traverse 1 second of sequecer time
+                // This will remove the need to block the thread and freeze the application, and keep the playhead moving in a slow but satisfying way
+                thread::sleep(Duration::from_secs_f32(secs.clone()));
             }
         }
     }

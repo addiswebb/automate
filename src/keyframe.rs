@@ -7,7 +7,8 @@ pub enum KeyframeType {
     KeyBtn(rdev::Key),      //0
     MouseBtn(rdev::Button), //1
     MouseMove(Vec2),        //2
-    Scroll(Vec2)            //3
+    Scroll(Vec2),           //3
+    Wait(f32),              //4
 }
 
 #[derive(Clone, Copy, Debug, Serialize, Deserialize)]
@@ -18,8 +19,6 @@ pub struct Keyframe {
     pub kind: u8,
     pub uid: Bytes,
 }
-
-
 
 impl Default for Keyframe {
     fn default() -> Self {
