@@ -1,3 +1,4 @@
+use std::fs::File;
 use std::sync::atomic::{AtomicBool, AtomicI32, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
@@ -8,6 +9,7 @@ use egui::{emath::RectTransform, Pos2, Rect};
 use egui::{vec2, Align2, FontId};
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
+use xcap::Monitor;
 
 use crate::keyframe::{Keyframe, KeyframeType};
 
@@ -97,9 +99,11 @@ impl Sequencer {
 
         let mut mouse_presses = vec![];
         let mut mouse_pressed_at = vec![];
+        let mut mouse_uids: Vec<uuid::Bytes> = Vec::new();
 
         let mut key_presses = vec![];
         let mut key_pressed_at = vec![];
+        let mut key_uids: Vec<uuid::Bytes> = Vec::new();
 
         let mut previous_mouse_position = Vec2::ZERO;
         // this needs to get reset every time recording starts
@@ -117,8 +121,10 @@ impl Sequencer {
                             rdev::EventType::MouseMove { x, y } => {
                                 shared_kfs.lock().unwrap().push(Keyframe {
                                     timestamp: f32::NAN,
-                                    duration: f32::NAN, 
-                                    keyframe_type: KeyframeType::MouseMove(Vec2::new(*x as f32, *y as f32)),
+                                    duration: f32::NAN,
+                                    keyframe_type: KeyframeType::MouseMove(Vec2::new(
+                                        *x as f32, *y as f32,
+                                    )),
                                     kind: u8::MAX, // This is code to say the keyframe is for calibration only and must be deleted after use
                                     uid: Uuid::nil().to_bytes_le(),
                                 });
@@ -172,11 +178,20 @@ impl Sequencer {
                                 rdev::EventType::ButtonPress(btn) => {
                                     mouse_presses.push(btn.clone());
                                     mouse_pressed_at.push(dt);
+                                    mouse_uids.push(Uuid::new_v4().to_bytes_le());
+                                    if let Some(last) = mouse_uids.last(){
+                                        screenshot(*last);
+                                    }
                                     None
                                 }
                                 rdev::EventType::KeyPress(key) => {
                                     key_presses.push(key.clone());
                                     key_pressed_at.push(dt);
+                                    key_uids.push(Uuid::new_v4().to_bytes_le());
+                                    if let Some(last) = key_uids.last(){
+                                        screenshot(last.clone());
+                                    }
+                                    // Todo(addis): create and save a screenshot here
                                     None
                                 }
                                 // Button & Key Release events search for the matching keypress event to create a full keyframe
@@ -184,21 +199,25 @@ impl Sequencer {
                                     let mut found_press = false;
                                     let mut indices_to_remove = vec![];
                                     let mut pressed_at = Duration::from_secs(0);
+                                    let mut uid = Uuid::nil().to_bytes_le();
                                     if mouse_presses.contains(btn) {
                                         for i in 0..mouse_presses.len() {
                                             if mouse_presses[i] == *btn {
                                                 if !found_press {
                                                     pressed_at = mouse_pressed_at[i];
+                                                    uid = mouse_uids[i];
                                                     found_press = true;
                                                 }
                                                 indices_to_remove.push(i);
                                             }
                                         }
                                     }
+                                    // Clean up the mouse_press tmp vec
                                     for i in 0..indices_to_remove.len() {
                                         let index = indices_to_remove[i] - (i * 1);
                                         mouse_presses.remove(index);
                                         mouse_pressed_at.remove(index);
+                                        mouse_uids.remove(index);
                                     }
 
                                     match found_press {
@@ -207,7 +226,7 @@ impl Sequencer {
                                             duration: (dt - pressed_at).as_secs_f32(),
                                             keyframe_type: KeyframeType::MouseBtn(*btn),
                                             kind: 2,
-                                            uid: Uuid::new_v4().to_bytes_le(),
+                                            uid,
                                         }),
                                         false => None,
                                     }
@@ -216,11 +235,13 @@ impl Sequencer {
                                     let mut found_press = false;
                                     let mut indices_to_remove = vec![];
                                     let mut pressed_at = Duration::from_secs(0);
+                                    let mut uid = Uuid::nil().to_bytes_le();
                                     if key_presses.contains(key) {
                                         for i in 0..key_presses.len() {
                                             if key_presses[i] == *key {
                                                 if !found_press {
                                                     pressed_at = key_pressed_at[i];
+                                                    uid = key_uids[i];
                                                     found_press = true;
                                                 }
                                                 indices_to_remove.push(i);
@@ -231,6 +252,7 @@ impl Sequencer {
                                         let index = indices_to_remove[i] - (i * 1);
                                         key_presses.remove(index);
                                         key_pressed_at.remove(index);
+                                        key_uids.remove(index);
                                     }
 
                                     match found_press {
@@ -239,7 +261,7 @@ impl Sequencer {
                                             duration: (dt - pressed_at).as_secs_f32(),
                                             keyframe_type: KeyframeType::KeyBtn(*key),
                                             kind: 0,
-                                            uid: Uuid::new_v4().to_bytes_le(),
+                                            uid,
                                         }),
                                         false => None,
                                     }
@@ -280,6 +302,8 @@ impl Sequencer {
                                             uid: Uuid::new_v4().to_bytes_le(),
                                         }),
                                     }
+
+                                    // Todo(addis): create and save a screenshot here
                                 }
                             };
                             // If a keyframe was created push the necessary data to sequencer
@@ -359,12 +383,12 @@ impl Sequencer {
     /// Increases the scale of the keyframes to zoom in
     pub fn zoom(&mut self, delta: f32) {
         let multiplier = 1.0 / 100.0;
-        self.scale += delta * multiplier;
+        self.scale = (self.scale + delta * multiplier).clamp(0.01,10.0);
     }
     /// Scrolls through the keyframes
     pub fn scroll(&mut self, delta: f32) {
         let multiplier = 1.0 / 80.0;
-        self.scroll += delta * multiplier / self.scale.clamp(0.1, f32::INFINITY);
+        self.scroll = (self.scroll + delta * multiplier / self.scale).clamp(0., f32::INFINITY);
     }
     /// Copy the selected keyframes to clipboard
     pub fn copy(&mut self) {
@@ -1084,7 +1108,6 @@ impl Sequencer {
             self.render_playhead(ui, 3, max_rect);
         });
     }
-
     /// Render the scroll bar
     /// Gives a view of how scrolled in the sequencer is
     fn render_scroll_bar(&mut self, ui: &mut Ui, max_t: f32, max_rect: Rect) {
@@ -1108,12 +1131,11 @@ impl Sequencer {
             egui::Stroke::new(1.0, egui::Color32::DARK_GRAY),
         );
     }
-
     /// Renders a debug panel with relevant information
     pub fn debug_panel(&mut self, ctx: &egui::Context) {
         egui::SidePanel::right("Debug")
             .min_width(200.0)
-            .resizable(true)
+            .resizable(false)
             .show(ctx, |ui| {
                 ui.heading("Debug");
                 let (w, h) = rdev::display_size().unwrap();
@@ -1131,7 +1153,6 @@ impl Sequencer {
                 ui.label(format!("Scale: {}", self.scale));
             });
     }
-
     /// Renders the editable data of the selected keyframe
     pub fn selected_panel(&mut self, ctx: &egui::Context) {
         egui::SidePanel::left("Selected Keyframe")
@@ -1181,7 +1202,7 @@ impl Sequencer {
                             .range(0.00001..=100.0),
                     );
 
-                    ui.label(format!("UUID: {:?}", keyframe.uid));
+                    ui.label(format!("UUID: {:?}", Uuid::from_bytes_le(keyframe.uid).to_string()));
                     // Check if the selected keyframe was changed
                     if (tmpx, tmpy) != (keyframe.timestamp, keyframe.duration) {
                         self.changed.swap(true, Ordering::Relaxed);
@@ -1212,7 +1233,6 @@ impl Sequencer {
             max: rect.max.clamp(max_rect.min, max_rect.max),
         }
     }
-
     /// Handles sensing input relevant to the sequencer
     fn sense(&mut self, ui: &mut Ui) {
         let response = ui.allocate_response(
@@ -1754,4 +1774,21 @@ fn scale(ui: &Ui, i: f32, scale: f32) -> f32 {
     let num_of_digits = width / s;
     let spacing = width / (num_of_digits);
     i * spacing
+}
+
+fn screenshot(uid: uuid::Bytes) {
+    thread::spawn(move ||{
+        let start = Instant::now();
+        let monitors = Monitor::all().unwrap();
+
+        for monitor in monitors {
+            let image = monitor.capture_image().unwrap();
+
+            image
+                .save(format!("screenshots/{}.png",Uuid::from_bytes_le(uid).to_string()))
+                .unwrap();
+        }
+
+        println!("saved: {:?}", start.elapsed());
+    });
 }
