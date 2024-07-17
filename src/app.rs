@@ -4,7 +4,7 @@ use rfd::FileDialog;
 use uuid::Uuid;
 use std::{
     fs::File,
-    io::{Read, Write},
+    io::{BufReader, BufWriter, Read, Write},
     path::PathBuf,
     sync::atomic::Ordering,
     time::Instant,
@@ -224,9 +224,6 @@ impl App {
     fn save_file(&mut self) {
         let state = self.sequencer.save_to_state();
         let data = bincode::serialize(&state).unwrap();
-        // let json = serde_json::to_string_pretty(&state);
-        // if let Ok(json) = json {
-            // if its a new file, save as a new file
             if self.file == "untitled.auto" {
                 self.file = FileDialog::new()
                     .add_filter("automate", &["auto"])
@@ -240,19 +237,18 @@ impl App {
                     .to_string();
             }
             // save the current file (if it was "untitled.auto", it has now been replaced)
+
+            let now = Instant::now();
             let file = File::create(self.file.clone());
             if let Ok(mut file) = file {
                 file.write_all(&data).unwrap();
                 self.sequencer.loaded_file = self.file.clone();
                 self.file_uptodate = true;
                 self.sequencer.changed.swap(false, Ordering::Relaxed);
-                log::info!("Save file: {:?}", self.file);
+                log::info!("Save file: {:?}- {:?}", self.file,now.elapsed());
             } else {
                 log::error!("Failed to save {:?}", file);
             }
-        // } else {
-        //     log::error!("Failed to save sequencer to json");
-        // }
     }
     /// Open a file using the native file dialog
     fn open_file(&mut self) {
@@ -267,16 +263,16 @@ impl App {
     }
     ///Load an ".auto" file from the given path
     fn load_file(&mut self, path: &PathBuf) {
+        let now = Instant::now();
         let stream = File::open(path.clone());
-        if let Ok(mut file) = stream {
-            let mut contents = Vec::new();
-            file.read(&mut contents).unwrap();
-            let data: SequencerState =bincode::deserialize_from(file).unwrap();
+        if let Ok(file) = stream {
+            let reader = BufReader::new(file);
+            let data: SequencerState =bincode::deserialize_from(reader).unwrap();
             self.sequencer.load_from_state(data);
             self.file = path.file_name().unwrap().to_str().unwrap().to_string();
             self.sequencer.loaded_file = self.file.clone();
             self.file_uptodate = true;
-            log::info!("Load file: {:?}", path);
+            log::info!("Load file: {:?} - {:?}", path,now.elapsed() );
         } else {
             self.new_file();
             log::info!(
