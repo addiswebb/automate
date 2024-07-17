@@ -1,4 +1,3 @@
-use std::io::Read;
 use std::sync::atomic::{AtomicBool, AtomicI32, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
@@ -22,7 +21,7 @@ pub struct SequencerState {
     pub speed: f32,
 }
 /// We derive Deserialize/Serialize so we can persist app state on shutdown.
-#[derive(serde::Deserialize, serde::Serialize)]
+#[derive(Deserialize, Serialize)]
 #[serde(default)] // if we add new fields, give them default values when deserializing old state
 pub struct Sequencer {
     #[serde(skip)]
@@ -183,7 +182,7 @@ impl Sequencer {
                             // Checks if there are no keyframes (Would only be the case if a new recording has started and there is no start screenshot)
                             if !was_recording {
                                 // START
-                                if let Some(screenshot) = screenshot() {}
+                                // Todo(addis): record start keyframe and save it somewhere
                             }
                             tmp_keyframe = match &event.event_type {
                                 // Button & Key Press events just push info
