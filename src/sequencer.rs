@@ -1219,6 +1219,18 @@ impl Sequencer {
                 }
             });
     }
+    /// Renders the central panel used to display images and video
+    pub fn central_panel(&self, ctx: &egui::Context){
+        egui::CentralPanel::default().show(ctx, |ui|{
+            // Todo(addis): Keep specific 16/9 ratio so images are displayed properly
+                egui_extras::install_image_loaders(ctx);
+                if !self.current_image.is_empty(){
+                    ui.vertical_centered_justified(|ui|{
+                        ui.image(format!("file://screenshots/{}.png",self.current_image));
+                    });
+                }
+
+        });
     /// Calculates the `Rect` created by mouse selection
     ///
     /// Manipulates the rect to draw properly with min being top left and max being bottom right

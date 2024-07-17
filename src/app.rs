@@ -768,33 +768,9 @@ impl eframe::App for App {
         self.sequencer.show(ctx);
         self.sequencer.debug_panel(ctx);
         self.sequencer.selected_panel(ctx);
+        self.sequencer.central_panel(ctx);
 
-        egui::CentralPanel::default().show(ctx, |ui|{
-            // Todo(addis): Keep specific 16/9 ratio so images are displayed properly
-            if let Some(uid) =  self.sequencer.selected_keyframes.first(){
-                egui_extras::install_image_loaders(ctx);
-
-                let mut keyframes = self.sequencer.keyframes.lock().unwrap();
-                let mut index = 0;
-                for i in 0..keyframes.len() {
-                    if keyframes[i].uid == *uid {
-                        index = i;
-                    }
-                }
-                let keyframe = &mut keyframes[index];
-                let would_have_image = match keyframe.keyframe_type{
-                    KeyframeType::KeyBtn(_)=> true,
-                    KeyframeType::MouseBtn(_)=> true,
-                    _ => false,
-                };
-                ui.vertical_centered_justified(|ui|{
-                    // Todo(addis): Make keyframes guarrenteed to have an image
-                    if would_have_image{ // Could still not have an image for now
-                        ui.image(format!("file://screenshots/{}.png",Uuid::from_bytes_le(uid.clone()).to_string()));
-                    }
-                });
-            }
-        });
+        
         if cancel_close {
             ctx.send_viewport_cmd(egui::ViewportCommand::CancelClose);
         }
