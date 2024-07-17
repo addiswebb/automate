@@ -1,3 +1,4 @@
+use std::io::Read;
 use std::sync::atomic::{AtomicBool, AtomicI32, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
@@ -5,9 +6,9 @@ use std::{thread, time::Instant};
 
 use eframe::egui::{self, pos2, Ui, Vec2};
 use egui::{emath::RectTransform, Pos2, Rect};
-use egui::{vec2, Align2, FontId};
+use egui::{vec2, Align2, ColorImage, FontId, TextureHandle};
 use serde::{Deserialize, Serialize};
-use uuid::Uuid;
+use uuid::{Bytes, Uuid};
 use xcap::Monitor;
 
 use crate::keyframe::{Keyframe, KeyframeType};
@@ -21,7 +22,7 @@ pub struct SequencerState {
     pub speed: f32,
 }
 /// We derive Deserialize/Serialize so we can persist app state on shutdown.
-#[derive(Debug, serde::Deserialize, serde::Serialize)]
+#[derive(serde::Deserialize, serde::Serialize)]
 #[serde(default)] // if we add new fields, give them default values when deserializing old state
 pub struct Sequencer {
     #[serde(skip)]
@@ -72,11 +73,13 @@ pub struct Sequencer {
     #[serde(skip)]
     pub calibrate: Arc<AtomicBool>,
     #[serde(skip)]
-    current_image: String,
+    current_image: Option<TextureHandle>,
+    #[serde(skip)]
+    current_image_uid: Bytes,
     #[serde(skip)]
     // Currently used to store starting and ending images before saving
     // Maybe use a ghost keyframe to store the images on
-    images: Vec<Vec<u8>>, // Todo(addis): Make this nicer somehow
+    images: [Vec<u8>; 2], // Todo(addis): Make this nicer somehow
 }
 
 impl Sequencer {
@@ -180,7 +183,7 @@ impl Sequencer {
                             // Checks if there are no keyframes (Would only be the case if a new recording has started and there is no start screenshot)
                             if !was_recording {
                                 // START
-                                screenshot();
+                                if let Some(screenshot) = screenshot() {}
                             }
                             tmp_keyframe = match &event.event_type {
                                 // Button & Key Press events just push info
@@ -319,8 +322,9 @@ impl Sequencer {
             clip_board: vec![],
             once_bool: false,
             calibrate,
-            current_image: "".to_string(),
-            images: Vec::new(),
+            current_image: None,
+            current_image_uid: Uuid::nil().to_bytes_le(),
+            images: [Vec::new(), Vec::new()],
         }
     }
 
@@ -1208,11 +1212,12 @@ impl Sequencer {
         egui::CentralPanel::default().show(ctx, |ui| {
             // Todo(addis): Keep specific 16/9 ratio so images are displayed properly
             egui_extras::install_image_loaders(ctx);
-            if !self.current_image.is_empty() {
-                ui.vertical_centered_justified(|ui| {
-                    ui.image(format!("file://screenshots/{}.png", self.current_image));
-                });
-            }
+            ui.vertical_centered_justified(|ui| {
+                if let Some(texture) = &self.current_image {
+                    let size = Vec2::new(ui.available_height() * (16. / 9.), ui.available_height());
+                    ui.image((texture.id(), size));
+                }
+            });
         });
     }
     /// Calculates the `Rect` created by mouse selection
@@ -1373,9 +1378,9 @@ impl Sequencer {
         }
 
         // Code to get the mose recently selected keyframe and display it's image if possible, otherwise show start/end image
-        if self.current_image == "".to_string() && !keyframes.is_empty() {
-            self.current_image = "start".to_string();
-        }
+        // if self.current_image == "".to_string() && !keyframes.is_empty() {
+        //     self.current_image = "start".to_string();
+        // }
         let mut tmp = keyframe_state.clone();
         tmp.reverse();
         for i in 0..tmp.len() {
@@ -1387,8 +1392,17 @@ impl Sequencer {
                     _ => false,
                 };
                 if has_image {
-                    self.current_image = Uuid::from_bytes_le(keyframes[index].uid).to_string();
-                    break;
+                    if self.current_image_uid != keyframes[index].uid {
+                        if let Some(screenshot) = &keyframes[index].screenshot {
+                            let data = screenshot.clone();
+                            let x =
+                                ColorImage::from_rgba_unmultiplied([1920, 1080], data.as_slice());
+                            self.current_image =
+                                Some(ctx.load_texture("screenshot", x, Default::default()));
+                            self.current_image_uid = keyframes[index].uid.clone();
+                            break;
+                        }
+                    }
                 }
             }
         }
@@ -1408,7 +1422,7 @@ impl Sequencer {
                         self.time = 0.0;
                         self.repeats -= 1;
                     } else {
-                        self.current_image = "end".to_string();
+                        // self.current_image = "end".to_string();
                         self.play.swap(false, Ordering::Relaxed);
                         ctx.send_viewport_cmd(egui::ViewportCommand::Focus);
                     }
@@ -1434,7 +1448,18 @@ impl Sequencer {
                         _ => false,
                     };
                     if has_image {
-                        self.current_image = Uuid::from_bytes_le(keyframe.uid).to_string();
+                        if self.current_image_uid != keyframe.uid {
+                            if let Some(screenshot) = &keyframe.screenshot {
+                                let data = screenshot.clone();
+                                let x = ColorImage::from_rgba_unmultiplied(
+                                    [1920, 1080],
+                                    data.as_slice(),
+                                );
+                                self.current_image =
+                                    Some(ctx.load_texture("screenshot", x, Default::default()));
+                                self.current_image_uid = keyframe.uid.clone();
+                            }
+                        }
                     }
                     if current_keyframe_state != keyframe_state[i] {
                         if play {

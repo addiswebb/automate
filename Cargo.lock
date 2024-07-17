@@ -395,6 +395,7 @@ dependencies = [
  "egui",
  "egui_extras",
  "env_logger",
+ "image",
  "log",
  "rdev",
  "rfd",
