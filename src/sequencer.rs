@@ -73,6 +73,10 @@ pub struct Sequencer {
     pub calibrate: Arc<AtomicBool>,
     #[serde(skip)]
     current_image: String,
+    #[serde(skip)]
+    // Currently used to store starting and ending images before saving
+    // Maybe use a ghost keyframe to store the images on
+    images: Vec<Vec<u8>>, // Todo(addis): Make this nicer somehow
 }
 
 impl Sequencer {
@@ -98,16 +102,11 @@ impl Sequencer {
         let shared_changed = Arc::clone(&changed);
         let shared_calibrate = Arc::clone(&calibrate);
 
-
         let mut was_recording = false;
 
-        let mut mouse_presses = vec![];
-        let mut mouse_pressed_at = vec![];
-        let mut mouse_uids: Vec<uuid::Bytes> = Vec::new();
-
-        let mut key_presses = vec![];
-        let mut key_pressed_at = vec![];
-        let mut key_uids: Vec<uuid::Bytes> = Vec::new();
+        // Todo(addis): combine key and mouse vecs into one
+        let mut mouse_keyframes = vec![];
+        let mut key_keyframes = vec![];
 
         let mut previous_mouse_position = Vec2::ZERO;
         // this needs to get reset every time recording starts
@@ -131,13 +130,14 @@ impl Sequencer {
                                     )),
                                     kind: u8::MAX, // This is code to say the keyframe is for calibration only and must be deleted after use
                                     uid: Uuid::nil().to_bytes_le(),
+                                    screenshot: None,
                                 });
                             }
                             _ => {}
                         }
                     } else {
                         let is_recording = shared_rec.load(Ordering::Relaxed);
-                        let mut keyframe = None;
+                        let mut tmp_keyframe = None;
                         let dt = Instant::now().duration_since(*shared_instant.lock().unwrap());
                         // Handle global keybinds without focus
                         match &event.event_type {
@@ -149,8 +149,7 @@ impl Sequencer {
                                             shared_rec.swap(false, Ordering::Relaxed);
                                         } else {
                                             shared_rec.swap(true, Ordering::Relaxed);
-                                            key_presses = vec![];
-                                            key_pressed_at = vec![];
+                                            key_keyframes = vec![];
                                             mouse_move_count = 20;
                                             previous_mouse_position = Vec2::ZERO;
                                         }
@@ -161,7 +160,7 @@ impl Sequencer {
                                     }
                                     // Keybind(F9): Manually add a mouse move keyframe (can be used for filling in missed movements due to record resolution)
                                     rdev::Key::F9 => {
-                                        keyframe = Some(Keyframe {
+                                        tmp_keyframe = Some(Keyframe {
                                             timestamp: dt.as_secs_f32(),
                                             duration: 0.1,
                                             keyframe_type: KeyframeType::MouseMove(
@@ -169,6 +168,7 @@ impl Sequencer {
                                             ),
                                             kind: 1,
                                             uid: Uuid::new_v4().to_bytes_le(),
+                                            screenshot: None,
                                         });
                                     }
                                     _ => {}
@@ -176,102 +176,76 @@ impl Sequencer {
                             }
                             _ => {}
                         }
-                        if is_recording && keyframe.is_none() {
+                        if is_recording && tmp_keyframe.is_none() {
                             // Checks if there are no keyframes (Would only be the case if a new recording has started and there is no start screenshot)
-                            if !was_recording{
-                                screenshot("start".to_string());
+                            if !was_recording {
+                                // START
+                                screenshot();
                             }
-                            keyframe = match &event.event_type {
+                            tmp_keyframe = match &event.event_type {
                                 // Button & Key Press events just push info
                                 rdev::EventType::ButtonPress(btn) => {
-                                    mouse_presses.push(btn.clone());
-                                    mouse_pressed_at.push(dt);
-                                    mouse_uids.push(Uuid::new_v4().to_bytes_le());
-                                    if let Some(uid) = mouse_uids.last(){
-                                        screenshot(Uuid::from_bytes_le(*uid).to_string());
+                                    let mut keyframe = Keyframe::new_mouse_button(
+                                        dt.as_secs_f32(),
+                                        0.,
+                                        btn.clone(),
+                                    );
+                                    if let Some(screenshot) = screenshot() {
+                                        keyframe.add_screenshot(&screenshot);
                                     }
+                                    mouse_keyframes.push(keyframe);
                                     None
                                 }
                                 rdev::EventType::KeyPress(key) => {
-                                    key_presses.push(key.clone());
-                                    key_pressed_at.push(dt);
-                                    key_uids.push(Uuid::new_v4().to_bytes_le());
-                                    if let Some(uid) = key_uids.last(){
-                                        screenshot(Uuid::from_bytes_le(*uid).to_string());
+                                    let mut keyframe =
+                                        Keyframe::new_key_btn(dt.as_secs_f32(), 0., key.clone());
+                                    if let Some(screenshot) = screenshot() {
+                                        keyframe.add_screenshot(&screenshot);
                                     }
-                                    // Todo(addis): create and save a screenshot here
+                                    key_keyframes.push(keyframe);
                                     None
                                 }
                                 // Button & Key Release events search for the matching keypress event to create a full keyframe
                                 rdev::EventType::ButtonRelease(btn) => {
-                                    let mut found_press = false;
-                                    let mut indices_to_remove = vec![];
-                                    let mut pressed_at = Duration::from_secs(0);
-                                    let mut uid = Uuid::nil().to_bytes_le();
-                                    if mouse_presses.contains(btn) {
-                                        for i in 0..mouse_presses.len() {
-                                            if mouse_presses[i] == *btn {
-                                                if !found_press {
-                                                    pressed_at = mouse_pressed_at[i];
-                                                    uid = mouse_uids[i];
-                                                    found_press = true;
-                                                }
-                                                indices_to_remove.push(i);
-                                            }
+                                    let index = mouse_keyframes.iter().position(|kf| {
+                                        if let KeyframeType::MouseBtn(b) = kf.keyframe_type {
+                                            b == *btn
+                                        } else {
+                                            false
                                         }
-                                    }
-                                    // Clean up the mouse_press tmp vec
-                                    for i in 0..indices_to_remove.len() {
-                                        let index = indices_to_remove[i] - (i * 1);
-                                        mouse_presses.remove(index);
-                                        mouse_pressed_at.remove(index);
-                                        mouse_uids.remove(index);
-                                    }
-
-                                    match found_press {
-                                        true => Some(Keyframe {
-                                            timestamp: pressed_at.as_secs_f32(),
-                                            duration: (dt - pressed_at).as_secs_f32(),
-                                            keyframe_type: KeyframeType::MouseBtn(*btn),
-                                            kind: 2,
-                                            uid,
-                                        }),
-                                        false => None,
+                                    });
+                                    match index {
+                                        Some(index) => {
+                                            let mut keyframe = mouse_keyframes[index].clone();
+                                            mouse_keyframes.remove(index);
+                                            keyframe.calculate_duration(dt.as_secs_f32());
+                                            Some(keyframe)
+                                        }
+                                        None => {
+                                            println!("Failed to find button release");
+                                            None
+                                        }
                                     }
                                 }
                                 rdev::EventType::KeyRelease(key) => {
-                                    let mut found_press = false;
-                                    let mut indices_to_remove = vec![];
-                                    let mut pressed_at = Duration::from_secs(0);
-                                    let mut uid = Uuid::nil().to_bytes_le();
-                                    if key_presses.contains(key) {
-                                        for i in 0..key_presses.len() {
-                                            if key_presses[i] == *key {
-                                                if !found_press {
-                                                    pressed_at = key_pressed_at[i];
-                                                    uid = key_uids[i];
-                                                    found_press = true;
-                                                }
-                                                indices_to_remove.push(i);
-                                            }
+                                    let index = key_keyframes.iter().position(|kf| {
+                                        if let KeyframeType::KeyBtn(k) = kf.keyframe_type {
+                                            k == *key
+                                        } else {
+                                            false
                                         }
-                                    }
-                                    for i in 0..indices_to_remove.len() {
-                                        let index = indices_to_remove[i] - (i * 1);
-                                        key_presses.remove(index);
-                                        key_pressed_at.remove(index);
-                                        key_uids.remove(index);
-                                    }
-
-                                    match found_press {
-                                        true => Some(Keyframe {
-                                            timestamp: pressed_at.as_secs_f32(),
-                                            duration: (dt - pressed_at).as_secs_f32(),
-                                            keyframe_type: KeyframeType::KeyBtn(*key),
-                                            kind: 0,
-                                            uid,
-                                        }),
-                                        false => None,
+                                    });
+                                    match index {
+                                        Some(index) => {
+                                            let mut keyframe = key_keyframes[index].clone();
+                                            key_keyframes.remove(index);
+                                            keyframe.calculate_duration(dt.as_secs_f32());
+                                            Some(keyframe)
+                                        }
+                                        None => {
+                                            println!("Failed to find key release");
+                                            None
+                                        }
                                     }
                                 }
                                 rdev::EventType::MouseMove { x, y } => {
@@ -283,13 +257,10 @@ impl Sequencer {
                                                 previous_mouse_position = pos;
                                                 mouse_move_count =
                                                     shared_count.load(Ordering::Relaxed);
-                                                Some(Keyframe {
-                                                    timestamp: dt.as_secs_f32(),
-                                                    duration: 0.1,
-                                                    keyframe_type: KeyframeType::MouseMove(pos),
-                                                    kind: 1,
-                                                    uid: Uuid::new_v4().to_bytes_le(),
-                                                })
+                                                Some(Keyframe::new_mouse_move(
+                                                    dt.as_secs_f32(),
+                                                    pos,
+                                                ))
                                             }
                                             false => None,
                                         },
@@ -299,23 +270,17 @@ impl Sequencer {
                                 rdev::EventType::Wheel { delta_x, delta_y } => {
                                     match *delta_x == 0 && *delta_y == 0 {
                                         true => None,
-                                        false => Some(Keyframe {
-                                            timestamp: dt.as_secs_f32(),
-                                            duration: 0.1,
-                                            keyframe_type: KeyframeType::Scroll(Vec2::new(
-                                                *delta_x as f32,
-                                                *delta_y as f32,
-                                            )),
-                                            kind: 3,
-                                            uid: Uuid::new_v4().to_bytes_le(),
-                                        }),
+                                        false => Some(Keyframe::new_scroll(
+                                            dt.as_secs_f32(),
+                                            Vec2::new(*delta_x as f32, *delta_y as f32),
+                                        )),
                                     }
 
                                     // Todo(addis): create and save a screenshot here
                                 }
                             };
                             // If a keyframe was created push the necessary data to sequencer
-                            if let Some(keyframe) = keyframe {
+                            if let Some(keyframe) = tmp_keyframe {
                                 shared_kfs.lock().unwrap().push(keyframe);
                                 shared_pkfs.lock().unwrap().push(0);
                                 shared_changed.swap(true, Ordering::Relaxed);
@@ -355,11 +320,12 @@ impl Sequencer {
             once_bool: false,
             calibrate,
             current_image: "".to_string(),
+            images: Vec::new(),
         }
     }
 
     /// Returns the current time where the playhead is
-    pub fn get_time(&self) -> f32{
+    pub fn get_time(&self) -> f32 {
         self.time
     }
     /// Saves the current state of the sequencer to `SequencerState`
@@ -397,7 +363,7 @@ impl Sequencer {
     /// Increases the scale of the keyframes to zoom in
     pub fn zoom(&mut self, delta: f32) {
         let multiplier = 1.0 / 100.0;
-        self.scale = (self.scale + delta * multiplier).clamp(0.01,10.0);
+        self.scale = (self.scale + delta * multiplier).clamp(0.01, 10.0);
     }
     /// Scrolls through the keyframes
     pub fn scroll(&mut self, delta: f32) {
@@ -410,7 +376,7 @@ impl Sequencer {
         if !self.selected_keyframes.is_empty() {
             self.clip_board.clear();
             for i in 0..keyframes.len() {
-                let keyframe = keyframes[i];
+                let keyframe = keyframes[i].clone();
                 let x = self.selected_keyframes.binary_search(&keyframe.uid);
                 if x.is_ok() {
                     self.clip_board.push(keyframe);
@@ -453,7 +419,7 @@ impl Sequencer {
             for i in 0..keyframes.len() {
                 if keyframes[i].uid == *uid {
                     index = i;
-                    self.clip_board.push(keyframes[i]);
+                    self.clip_board.push(keyframes[i].clone());
                     break;
                 }
             }
@@ -490,7 +456,8 @@ impl Sequencer {
                     if is_record_stop_keyframe {
                         keyframes.pop();
                         keyframe_state.pop();
-                        screenshot("end".to_string());
+                        // END
+                        screenshot();
                     }
                 }
                 std::mem::drop(keyframes);
@@ -563,7 +530,7 @@ impl Sequencer {
                             Ok(_) => {}
                             Err(index) => {
                                 self.selected_keyframes.insert(index, keyframes[i].uid);
-                            },
+                            }
                         }
                     } else {
                         if !ctrl {
@@ -586,7 +553,7 @@ impl Sequencer {
                     KeyframeType::MouseBtn(btn) => button_to_char(btn),
                     KeyframeType::MouseMove(_) => "".to_string(),
                     KeyframeType::Scroll(delta) => scroll_to_char(delta),
-                    KeyframeType::Wait(secs) => format!("{}s",secs).to_string(),
+                    KeyframeType::Wait(secs) => format!("{}s", secs).to_string(),
                 }
             );
             let color = match keyframes[i].kind {
@@ -736,7 +703,7 @@ impl Sequencer {
                     if !self.selected_keyframes.is_empty() {
                         self.clip_board.clear();
                         for i in 0..keyframes.len() {
-                            let keyframe = keyframes[i];
+                            let keyframe = keyframes[i].clone();
                             let x = self.selected_keyframes.binary_search(&keyframe.uid);
                             if x.is_ok() {
                                 self.clip_board.push(keyframe);
@@ -787,7 +754,7 @@ impl Sequencer {
                 for i in 0..keyframes.len() {
                     if keyframes[i].uid == *uid {
                         index = i;
-                        self.clip_board.push(keyframes[i]);
+                        self.clip_board.push(keyframes[i].clone());
                         break;
                     }
                 }
@@ -1168,14 +1135,11 @@ impl Sequencer {
                 ui.label(format!("Time: {}s", self.time));
                 ui.label(format!("Previous Time: {}s", self.prev_time));
                 ui.label(format!("Scale: {}", self.scale));
-                if ui.button("Which monitor?").clicked(){
-                    
-                }
+                if ui.button("Which monitor?").clicked() {}
             });
     }
     /// Renders the editable data of the selected keyframe
     pub fn selected_panel(&mut self, ctx: &egui::Context) {
-
         egui::SidePanel::left("Selected Keyframe")
             .min_width(115.0)
             .resizable(false)
@@ -1210,7 +1174,7 @@ impl Sequencer {
                         }
                         KeyframeType::Wait(secs) => {
                             ui.strong("Wait");
-                            ui.label(format!("{:?}s",secs));
+                            ui.label(format!("{:?}s", secs));
                         }
                     }
                     let (tmpx, tmpy) = (keyframe.timestamp, keyframe.duration);
@@ -1227,7 +1191,10 @@ impl Sequencer {
                             .range(0.00001..=100.0),
                     );
 
-                    ui.label(format!("UUID: {:?}", Uuid::from_bytes_le(keyframe.uid).to_string()));
+                    ui.label(format!(
+                        "UUID: {:?}",
+                        Uuid::from_bytes_le(keyframe.uid).to_string()
+                    ));
                     // Check if the selected keyframe was changed
                     if (tmpx, tmpy) != (keyframe.timestamp, keyframe.duration) {
                         self.changed.swap(true, Ordering::Relaxed);
@@ -1237,16 +1204,15 @@ impl Sequencer {
             });
     }
     /// Renders the central panel used to display images and video
-    pub fn central_panel(&self, ctx: &egui::Context){
-        egui::CentralPanel::default().show(ctx, |ui|{
+    pub fn central_panel(&self, ctx: &egui::Context) {
+        egui::CentralPanel::default().show(ctx, |ui| {
             // Todo(addis): Keep specific 16/9 ratio so images are displayed properly
-                egui_extras::install_image_loaders(ctx);
-                if !self.current_image.is_empty(){
-                    ui.vertical_centered_justified(|ui|{
-                        ui.image(format!("file://screenshots/{}.png",self.current_image));
-                    });
-                }
-
+            egui_extras::install_image_loaders(ctx);
+            if !self.current_image.is_empty() {
+                ui.vertical_centered_justified(|ui| {
+                    ui.image(format!("file://screenshots/{}.png", self.current_image));
+                });
+            }
         });
     }
     /// Calculates the `Rect` created by mouse selection
@@ -1387,7 +1353,7 @@ impl Sequencer {
             self.should_sort = false;
         }
 
-        keyframe_state.iter_mut().for_each(|state|{
+        keyframe_state.iter_mut().for_each(|state| {
             // Reset the selected keyframes to be recomputed below
             if state == &2 {
                 *state = 0;
@@ -1407,20 +1373,20 @@ impl Sequencer {
         }
 
         // Code to get the mose recently selected keyframe and display it's image if possible, otherwise show start/end image
-        if self.current_image == "".to_string() && !keyframes.is_empty(){
+        if self.current_image == "".to_string() && !keyframes.is_empty() {
             self.current_image = "start".to_string();
         }
         let mut tmp = keyframe_state.clone();
         tmp.reverse();
-        for i in 0..tmp.len(){
-            if tmp[i] == 2{
-                let index = tmp.len()-1-i;
-                let has_image = match keyframes[index].keyframe_type{
+        for i in 0..tmp.len() {
+            if tmp[i] == 2 {
+                let index = tmp.len() - 1 - i;
+                let has_image = match keyframes[index].keyframe_type {
                     KeyframeType::KeyBtn(_) => true,
                     KeyframeType::MouseBtn(_) => true,
                     _ => false,
                 };
-                if has_image{
+                if has_image {
                     self.current_image = Uuid::from_bytes_le(keyframes[index].uid).to_string();
                     break;
                 }
@@ -1462,12 +1428,12 @@ impl Sequencer {
                     && self.time <= keyframe.timestamp + keyframe.duration
                 {
                     keyframe_state[i] = 1; //change keyframe state to playing, highlight
-                    let has_image = match keyframe.keyframe_type{
+                    let has_image = match keyframe.keyframe_type {
                         KeyframeType::KeyBtn(_) => true,
                         KeyframeType::MouseBtn(_) => true,
                         _ => false,
                     };
-                    if has_image{
+                    if has_image {
                         self.current_image = Uuid::from_bytes_le(keyframe.uid).to_string();
                     }
                     if current_keyframe_state != keyframe_state[i] {
@@ -1535,7 +1501,7 @@ fn handle_playing_keyframe(keyframe: &Keyframe, start: bool, offset: Vec2) {
             }
         }
         KeyframeType::Wait(secs) => {
-            if start{
+            if start {
                 // Todo(addis): multiply dt so that it takes *secs* seconds to traverse 1 second of sequecer time
                 // This will remove the need to block the thread and freeze the application, and keep the playhead moving in a slow but satisfying way
                 thread::sleep(Duration::from_secs_f32(secs.clone()));
@@ -1857,18 +1823,17 @@ fn scale(ui: &Ui, i: f32, scale: f32) -> f32 {
     i * spacing
 }
 
-fn screenshot(name: String) {
+fn screenshot() -> Option<Vec<u8>> {
     // thread::spawn(move ||{
-        let monitors = Monitor::all().unwrap();
-        
-        let monitor = monitors.iter().find(|m|{
-            m.is_primary()
-        });
+    let monitors = Monitor::all().unwrap();
 
-        if let Some(monitor) = monitor{
-            let image = monitor.capture_image().unwrap();
-            image
-                .save(format!("screenshots/{}.png",name))
-                .unwrap();
-        }
+    let monitor = monitors.iter().find(|m| m.is_primary());
+
+    if let Some(monitor) = monitor {
+        let image: xcap::image::ImageBuffer<xcap::image::Rgba<u8>, Vec<u8>> =
+            monitor.capture_image().unwrap();
+        Some(image.into_raw())
+    } else {
+        None
+    }
 }

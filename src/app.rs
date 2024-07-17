@@ -1,6 +1,7 @@
 use egui::{KeyboardShortcut, Vec2};
 use egui_extras::{Column, TableBuilder};
 use rfd::FileDialog;
+use serde::Serialize;
 use uuid::Uuid;
 use std::{
     fs::File,
@@ -546,6 +547,7 @@ impl eframe::App for App {
                                 keyframe_type: KeyframeType::Wait(1.),
                                 kind: 4,
                                 uid: Uuid::new_v4().to_bytes_le(),
+                                screenshot: None,
                             });
                             self.sequencer.keyframe_state.lock().unwrap().push(0);
                             ui.close_menu();

@@ -11,13 +11,64 @@ pub enum KeyframeType {
     Wait(f32),              //4
 }
 
-#[derive(Clone, Copy, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct Keyframe {
     pub timestamp: f32,
     pub duration: f32,
     pub keyframe_type: KeyframeType,
     pub kind: u8,
     pub uid: Bytes,
+    pub screenshot: Option<Vec<u8>>,
+}
+impl Keyframe{
+    pub fn new_mouse_move(timestamp: f32, pos: Vec2) -> Self{
+        Self { 
+            timestamp,
+            duration: 0.1,
+            keyframe_type: KeyframeType::MouseMove(pos),
+            kind: 1,
+            uid: Uuid::new_v4().to_bytes_le(),
+            screenshot: None,
+        }
+    }
+    pub fn new_mouse_button(timestamp: f32, duration: f32, button: rdev::Button) -> Self{
+        Self { 
+            timestamp,
+            duration,
+            keyframe_type: KeyframeType::MouseBtn(button),
+            kind: 2,
+            uid: Uuid::new_v4().to_bytes_le(),
+            screenshot: None,
+        }
+    }
+    pub fn new_key_btn(timestamp: f32, duration: f32, key: rdev::Key) -> Self{
+        Self { 
+            timestamp,
+            duration,
+            keyframe_type: KeyframeType::KeyBtn(key),
+            kind: 0,
+            uid: Uuid::new_v4().to_bytes_le(),
+            screenshot: None,
+        }
+    }
+    pub fn new_scroll(timestamp: f32, delta: Vec2) -> Self{
+        Self { 
+            timestamp,
+            duration: 0.1,
+            keyframe_type: KeyframeType::Scroll(delta),
+            kind: 3,
+            uid: Uuid::new_v4().to_bytes_le(),
+            screenshot: None,
+        }
+    }
+    pub fn add_screenshot(&mut self, screenshot: &Vec<u8>) -> &mut Self{
+        self.screenshot = Some(screenshot.clone());
+        self
+    }
+    pub fn calculate_duration(&mut self, dt: f32) -> &mut Self{
+        self.duration = dt - self.timestamp;
+        self
+    }
 }
 
 impl Default for Keyframe {
@@ -28,6 +79,7 @@ impl Default for Keyframe {
             keyframe_type: KeyframeType::KeyBtn(rdev::Key::Space),
             kind: 0,
             uid: Uuid::new_v4().to_bytes_le(),
+            screenshot: None,
         }
     }
 }
