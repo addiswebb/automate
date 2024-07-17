@@ -223,8 +223,9 @@ impl App {
     /// Overwrites the current file if it already exists otherwise allows the creation of a new file.
     fn save_file(&mut self) {
         let state = self.sequencer.save_to_state();
-        let json = serde_json::to_string_pretty(&state);
-        if let Ok(json) = json {
+        let data = bincode::serialize(&state).unwrap();
+        // let json = serde_json::to_string_pretty(&state);
+        // if let Ok(json) = json {
             // if its a new file, save as a new file
             if self.file == "untitled.auto" {
                 self.file = FileDialog::new()
@@ -241,7 +242,7 @@ impl App {
             // save the current file (if it was "untitled.auto", it has now been replaced)
             let file = File::create(self.file.clone());
             if let Ok(mut file) = file {
-                file.write_all(json.as_bytes()).unwrap();
+                file.write_all(&data).unwrap();
                 self.sequencer.loaded_file = self.file.clone();
                 self.file_uptodate = true;
                 self.sequencer.changed.swap(false, Ordering::Relaxed);
@@ -249,9 +250,9 @@ impl App {
             } else {
                 log::error!("Failed to save {:?}", file);
             }
-        } else {
-            log::error!("Failed to save sequencer to json");
-        }
+        // } else {
+        //     log::error!("Failed to save sequencer to json");
+        // }
     }
     /// Open a file using the native file dialog
     fn open_file(&mut self) {
@@ -268,9 +269,9 @@ impl App {
     fn load_file(&mut self, path: &PathBuf) {
         let stream = File::open(path.clone());
         if let Ok(mut file) = stream {
-            let mut contents = String::new();
-            file.read_to_string(&mut contents).unwrap();
-            let data: SequencerState = serde_json::from_str(&contents.as_str()).unwrap();
+            let mut contents = Vec::new();
+            file.read(&mut contents).unwrap();
+            let data: SequencerState =bincode::deserialize_from(file).unwrap();
             self.sequencer.load_from_state(data);
             self.file = path.file_name().unwrap().to_str().unwrap().to_string();
             self.sequencer.loaded_file = self.file.clone();
