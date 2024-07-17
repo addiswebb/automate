@@ -71,6 +71,8 @@ pub struct Sequencer {
     once_bool: bool,
     #[serde(skip)]
     pub calibrate: Arc<AtomicBool>,
+    #[serde(skip)]
+    current_image: String,
 }
 
 impl Sequencer {
@@ -95,6 +97,9 @@ impl Sequencer {
         let shared_instant = Arc::clone(&recording_instant);
         let shared_changed = Arc::clone(&changed);
         let shared_calibrate = Arc::clone(&calibrate);
+
+
+        let mut was_recording = false;
 
         let mut mouse_presses = vec![];
         let mut mouse_pressed_at = vec![];
@@ -172,14 +177,18 @@ impl Sequencer {
                             _ => {}
                         }
                         if is_recording && keyframe.is_none() {
+                            // Checks if there are no keyframes (Would only be the case if a new recording has started and there is no start screenshot)
+                            if !was_recording{
+                                screenshot("start".to_string());
+                            }
                             keyframe = match &event.event_type {
                                 // Button & Key Press events just push info
                                 rdev::EventType::ButtonPress(btn) => {
                                     mouse_presses.push(btn.clone());
                                     mouse_pressed_at.push(dt);
                                     mouse_uids.push(Uuid::new_v4().to_bytes_le());
-                                    if let Some(last) = mouse_uids.last(){
-                                        screenshot(*last);
+                                    if let Some(uid) = mouse_uids.last(){
+                                        screenshot(Uuid::from_bytes_le(*uid).to_string());
                                     }
                                     None
                                 }
@@ -187,8 +196,8 @@ impl Sequencer {
                                     key_presses.push(key.clone());
                                     key_pressed_at.push(dt);
                                     key_uids.push(Uuid::new_v4().to_bytes_le());
-                                    if let Some(last) = key_uids.last(){
-                                        screenshot(last.clone());
+                                    if let Some(uid) = key_uids.last(){
+                                        screenshot(Uuid::from_bytes_le(*uid).to_string());
                                     }
                                     // Todo(addis): create and save a screenshot here
                                     None
@@ -312,6 +321,7 @@ impl Sequencer {
                                 shared_changed.swap(true, Ordering::Relaxed);
                             }
                         }
+                        was_recording = is_recording;
                     }
                 }) {
                     log::error!("Error: {:?}", error)
@@ -344,6 +354,7 @@ impl Sequencer {
             clip_board: vec![],
             once_bool: false,
             calibrate,
+            current_image: "".to_string(),
         }
     }
 
@@ -479,6 +490,7 @@ impl Sequencer {
                     if is_record_stop_keyframe {
                         keyframes.pop();
                         keyframe_state.pop();
+                        screenshot("end".to_string());
                     }
                 }
                 std::mem::drop(keyframes);
@@ -549,7 +561,9 @@ impl Sequencer {
                     if selection_contains_keyframe(&self.compute_selection_rect(&max_rect), rect) {
                         match self.selected_keyframes.binary_search(&keyframes[i].uid) {
                             Ok(_) => {}
-                            Err(index) => self.selected_keyframes.insert(index, keyframes[i].uid),
+                            Err(index) => {
+                                self.selected_keyframes.insert(index, keyframes[i].uid);
+                            },
                         }
                     } else {
                         if !ctrl {
@@ -949,24 +963,24 @@ impl Sequencer {
         let p1 = pos2(point.x + 1., point.y - 2.);
         let p2 = pos2(p1.x, p1.y + ROW_HEIGHT * rows as f32 + (3 * rows) as f32);
         let padding = 3.0;
-        let response = ui.allocate_rect(
+        let playhead = ui.allocate_rect(
             Rect {
                 min: pos2(p1.x - padding, p1.y - padding),
                 max: pos2(p1.x + padding, p2.y + padding),
             },
             egui::Sense::click_and_drag(),
         );
-        if response.hovered() {
+        if playhead.hovered() {
             ui.output_mut(|o| o.cursor_icon = egui::CursorIcon::PointingHand);
         }
-        if response.drag_started() {
-            if let Some(start) = response.interact_pointer_pos() {
+        if playhead.drag_started() {
+            if let Some(start) = playhead.interact_pointer_pos() {
                 self.drag_start = start;
                 self.dragging = true;
             }
         }
         if self.dragging {
-            if let Some(end) = response.interact_pointer_pos() {
+            if let Some(end) = playhead.interact_pointer_pos() {
                 if end.x > rect.min.x {
                     let drag_delta =
                         (end.x - self.drag_start.x) * (1.0 / scale(ui, 1.0, self.scale));
@@ -974,14 +988,13 @@ impl Sequencer {
                     if t > 0.0 {
                         self.time = t;
                         self.drag_start.x = end.x;
-                        self.changed.swap(true, Ordering::Relaxed);
                     }
                 } else {
                     self.time = 0.;
                 }
             }
         }
-        if response.drag_stopped() {
+        if playhead.drag_stopped() {
             self.drag_start = pos2(0., 0.);
             self.dragging = false;
         }
@@ -1034,7 +1047,7 @@ impl Sequencer {
                 })
                 .body(|mut body| {
                     body.row(ROW_HEIGHT, |mut row| {
-                        // row.set_hovered(true);
+                        row.set_hovered(true);
                         row.col(|_| {});
                         row.col(|ui| {
                             let rect = ui.max_rect();
@@ -1155,10 +1168,14 @@ impl Sequencer {
                 ui.label(format!("Time: {}s", self.time));
                 ui.label(format!("Previous Time: {}s", self.prev_time));
                 ui.label(format!("Scale: {}", self.scale));
+                if ui.button("Which monitor?").clicked(){
+                    
+                }
             });
     }
     /// Renders the editable data of the selected keyframe
     pub fn selected_panel(&mut self, ctx: &egui::Context) {
+
         egui::SidePanel::left("Selected Keyframe")
             .min_width(115.0)
             .resizable(false)
@@ -1231,6 +1248,7 @@ impl Sequencer {
                 }
 
         });
+    }
     /// Calculates the `Rect` created by mouse selection
     ///
     /// Manipulates the rect to draw properly with min being top left and max being bottom right
@@ -1255,7 +1273,7 @@ impl Sequencer {
     }
     /// Handles sensing input relevant to the sequencer
     fn sense(&mut self, ui: &mut Ui) {
-        let response = ui.allocate_response(
+        let sequencer = ui.allocate_response(
             ui.available_size_before_wrap(),
             egui::Sense::click_and_drag(),
         );
@@ -1282,13 +1300,13 @@ impl Sequencer {
                     _ => false,
                 });
             }
-            if response.hovered() {
+            if sequencer.hovered() {
                 if i.pointer.any_pressed() {
-                    self.selection.min = response.interact_pointer_pos().unwrap();
+                    self.selection.min = sequencer.interact_pointer_pos().unwrap();
                     self.selection.max = self.selection.min;
                 }
             }
-            if response.drag_started() {
+            if sequencer.drag_started() {
                 if !i.modifiers.ctrl {
                     self.selected_keyframes.clear();
                 }
@@ -1296,7 +1314,7 @@ impl Sequencer {
             }
         });
 
-        if response.clicked() {
+        if sequencer.clicked() {
             ui.input(|i| {
                 if !i.modifiers.ctrl {
                     self.selected_keyframes.clear();
@@ -1304,13 +1322,13 @@ impl Sequencer {
             });
         }
         if self.selecting {
-            self.selection.max += response.drag_delta();
+            self.selection.max += sequencer.drag_delta();
         }
-        if response.drag_stopped() {
+        if sequencer.drag_stopped() {
             self.selecting = false;
             self.selection = Rect::ZERO;
         }
-        response.context_menu(|ui| {
+        sequencer.context_menu(|ui| {
             if ui
                 .add_enabled(
                     !self.selected_keyframes.is_empty(),
@@ -1369,8 +1387,14 @@ impl Sequencer {
             self.should_sort = false;
         }
 
+        keyframe_state.iter_mut().for_each(|state|{
+            // Reset the selected keyframes to be recomputed below
+            if state == &2 {
+                *state = 0;
+            }
+        });
         // Compute keyframe state from the selected keyframes
-        keyframe_state.fill(0);
+        // Todo(addis): Make sure that selected keyframes dont get deselected when highlighted by playhead
         for uid in &self.selected_keyframes {
             let mut index = 0;
             for i in 0..keyframes.len() {
@@ -1380,6 +1404,27 @@ impl Sequencer {
                 }
             }
             keyframe_state[index] = 2; // 2 == selected/highlighted (orange)
+        }
+
+        // Code to get the mose recently selected keyframe and display it's image if possible, otherwise show start/end image
+        if self.current_image == "".to_string() && !keyframes.is_empty(){
+            self.current_image = "start".to_string();
+        }
+        let mut tmp = keyframe_state.clone();
+        tmp.reverse();
+        for i in 0..tmp.len(){
+            if tmp[i] == 2{
+                let index = tmp.len()-1-i;
+                let has_image = match keyframes[index].keyframe_type{
+                    KeyframeType::KeyBtn(_) => true,
+                    KeyframeType::MouseBtn(_) => true,
+                    _ => false,
+                };
+                if has_image{
+                    self.current_image = Uuid::from_bytes_le(keyframes[index].uid).to_string();
+                    break;
+                }
+            }
         }
 
         let now = Instant::now();
@@ -1397,6 +1442,7 @@ impl Sequencer {
                         self.time = 0.0;
                         self.repeats -= 1;
                     } else {
+                        self.current_image = "end".to_string();
                         self.play.swap(false, Ordering::Relaxed);
                         ctx.send_viewport_cmd(egui::ViewportCommand::Focus);
                     }
@@ -1416,6 +1462,14 @@ impl Sequencer {
                     && self.time <= keyframe.timestamp + keyframe.duration
                 {
                     keyframe_state[i] = 1; //change keyframe state to playing, highlight
+                    let has_image = match keyframe.keyframe_type{
+                        KeyframeType::KeyBtn(_) => true,
+                        KeyframeType::MouseBtn(_) => true,
+                        _ => false,
+                    };
+                    if has_image{
+                        self.current_image = Uuid::from_bytes_le(keyframe.uid).to_string();
+                    }
                     if current_keyframe_state != keyframe_state[i] {
                         if play {
                             handle_playing_keyframe(keyframe, true, offset);
@@ -1803,19 +1857,18 @@ fn scale(ui: &Ui, i: f32, scale: f32) -> f32 {
     i * spacing
 }
 
-fn screenshot(uid: uuid::Bytes) {
-    thread::spawn(move ||{
-        let start = Instant::now();
+fn screenshot(name: String) {
+    // thread::spawn(move ||{
         let monitors = Monitor::all().unwrap();
+        
+        let monitor = monitors.iter().find(|m|{
+            m.is_primary()
+        });
 
-        for monitor in monitors {
+        if let Some(monitor) = monitor{
             let image = monitor.capture_image().unwrap();
-
             image
-                .save(format!("screenshots/{}.png",Uuid::from_bytes_le(uid).to_string()))
+                .save(format!("screenshots/{}.png",name))
                 .unwrap();
         }
-
-        println!("saved: {:?}", start.elapsed());
-    });
 }
