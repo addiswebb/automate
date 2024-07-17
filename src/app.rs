@@ -4,7 +4,7 @@ use rfd::FileDialog;
 use uuid::Uuid;
 use std::{
     fs::File,
-    io::{BufReader, BufWriter, Read, Write},
+    io::{BufReader, Write},
     path::PathBuf,
     sync::atomic::Ordering,
     time::Instant,

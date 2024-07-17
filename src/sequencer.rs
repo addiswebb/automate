@@ -187,7 +187,7 @@ impl Sequencer {
                             tmp_keyframe = match &event.event_type {
                                 // Button & Key Press events just push info
                                 rdev::EventType::ButtonPress(btn) => {
-                                    let mut keyframe = Keyframe::new_mouse_button(
+                                    let mut keyframe = Keyframe::mouse_button(
                                         dt.as_secs_f32(),
                                         0.,
                                         btn.clone(),
@@ -200,7 +200,7 @@ impl Sequencer {
                                 }
                                 rdev::EventType::KeyPress(key) => {
                                     let mut keyframe =
-                                        Keyframe::new_key_btn(dt.as_secs_f32(), 0., key.clone());
+                                        Keyframe::key_btn(dt.as_secs_f32(), 0., key.clone());
                                     if let Some(screenshot) = screenshot() {
                                         keyframe.add_screenshot(&screenshot);
                                     }
@@ -259,7 +259,7 @@ impl Sequencer {
                                                 previous_mouse_position = pos;
                                                 mouse_move_count =
                                                     shared_count.load(Ordering::Relaxed);
-                                                Some(Keyframe::new_mouse_move(
+                                                Some(Keyframe::mouse_move(
                                                     dt.as_secs_f32(),
                                                     pos,
                                                 ))
@@ -272,7 +272,7 @@ impl Sequencer {
                                 rdev::EventType::Wheel { delta_x, delta_y } => {
                                     match *delta_x == 0 && *delta_y == 0 {
                                         true => None,
-                                        false => Some(Keyframe::new_scroll(
+                                        false => Some(Keyframe::scroll(
                                             dt.as_secs_f32(),
                                             Vec2::new(*delta_x as f32, *delta_y as f32),
                                         )),

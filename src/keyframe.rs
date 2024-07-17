@@ -21,7 +21,7 @@ pub struct Keyframe {
     pub screenshot: Option<Vec<u8>>,
 }
 impl Keyframe{
-    pub fn new_mouse_move(timestamp: f32, pos: Vec2) -> Self{
+    pub fn mouse_move(timestamp: f32, pos: Vec2) -> Self{
         Self { 
             timestamp,
             duration: 0.1,
@@ -31,17 +31,17 @@ impl Keyframe{
             screenshot: None,
         }
     }
-    pub fn new_mouse_button(timestamp: f32, duration: f32, button: rdev::Button) -> Self{
+    pub fn mouse_button(timestamp: f32, duration: f32, btn: rdev::Button) -> Self{
         Self { 
             timestamp,
             duration,
-            keyframe_type: KeyframeType::MouseBtn(button),
+            keyframe_type: KeyframeType::MouseBtn(btn),
             kind: 2,
             uid: Uuid::new_v4().to_bytes_le(),
             screenshot: None,
         }
     }
-    pub fn new_key_btn(timestamp: f32, duration: f32, key: rdev::Key) -> Self{
+    pub fn key_btn(timestamp: f32, duration: f32, key: rdev::Key) -> Self{
         Self { 
             timestamp,
             duration,
@@ -51,7 +51,7 @@ impl Keyframe{
             screenshot: None,
         }
     }
-    pub fn new_scroll(timestamp: f32, delta: Vec2) -> Self{
+    pub fn scroll(timestamp: f32, delta: Vec2) -> Self{
         Self { 
             timestamp,
             duration: 0.1,
