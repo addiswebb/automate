@@ -1,7 +1,6 @@
 use egui::{KeyboardShortcut, Vec2};
 use egui_extras::{Column, TableBuilder};
 use rfd::FileDialog;
-use serde::Serialize;
 use uuid::Uuid;
 use std::{
     fs::File,
@@ -529,17 +528,16 @@ impl eframe::App for App {
                 });
                 ui.menu_button("Edit", |ui| {
                     if ui.button("Undo").clicked() {
-                        println!("undo");
+                        println!("Undo: to be implemented");
                         ui.close_menu();
                     }
                     if ui.button("Redo").clicked() {
-                        println!("redo");
+                        println!("Redo: to be implemented");
                         ui.close_menu();
                     }
                     ui.separator();
                     ui.menu_button("Add", |ui|{
                         if ui.button("Wait").clicked() {
-                            println!("add wait");
                             let mut keyframes = self.sequencer.keyframes.lock().unwrap();
                             keyframes.push(Keyframe{
                                 timestamp: self.sequencer.get_time(),
@@ -553,7 +551,6 @@ impl eframe::App for App {
                             ui.close_menu();
                         }
                         if ui.button("Key").clicked() {
-                            println!("add key keyframe");
                             ui.close_menu();
                         }
                     });
