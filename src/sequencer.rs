@@ -1378,33 +1378,25 @@ impl Sequencer {
         }
 
         // Code to get the mose recently selected keyframe and display it's image if possible, otherwise show start/end image
-        // if self.current_image == "".to_string() && !keyframes.is_empty() {
-        //     self.current_image = "start".to_string();
-        // }
         let mut tmp = keyframe_state.clone();
         tmp.reverse();
-        for i in 0..tmp.len() {
-            if tmp[i] == 2 {
-                let index = tmp.len() - 1 - i;
-                let has_image = match keyframes[index].keyframe_type {
-                    KeyframeType::KeyBtn(_) => true,
-                    KeyframeType::MouseBtn(_) => true,
-                    _ => false,
-                };
-                if has_image {
-                    if self.current_image_uid != keyframes[index].uid {
-                        if let Some(screenshot) = &keyframes[index].screenshot {
-                            let data = screenshot.clone();
-                            let x =
-                                ColorImage::from_rgba_unmultiplied([1920, 1080], data.as_slice());
-                            self.current_image =
-                                Some(ctx.load_texture("screenshot", x, Default::default()));
-                            self.current_image_uid = keyframes[index].uid.clone();
-                            break;
-                        }
-                    }
+        // Finds the first selected keyframe state in the list (effectivly the last keyframe)
+        let x = tmp.iter().position(|&state| state == 2);
+        if let Some(index) = x {
+            // Since the tmp vec is reversed we need to invert it below
+            let tmp_keyframe = &keyframes[keyframes.len() - index - 1];
+            if self.current_image_uid != tmp_keyframe.uid {
+                if let Some(screenshot) = &tmp_keyframe.screenshot {
+                    let data = screenshot.clone();
+                    let x = ColorImage::from_rgba_unmultiplied([1920, 1080], data.as_slice());
+                    // Todo(addis): stop this from being called several times per image
+                    // Maybe load all of them with URIs then draw image using that instead
+                    self.current_image =
+                        Some(ctx.load_texture("screenshot", x, Default::default()));
+                    self.current_image_uid = tmp_keyframe.uid;
                 }
             }
+        } else {
         }
 
         let now = Instant::now();
@@ -1442,23 +1434,14 @@ impl Sequencer {
                     && self.time <= keyframe.timestamp + keyframe.duration
                 {
                     keyframe_state[i] = 1; //change keyframe state to playing, highlight
-                    let has_image = match keyframe.keyframe_type {
-                        KeyframeType::KeyBtn(_) => true,
-                        KeyframeType::MouseBtn(_) => true,
-                        _ => false,
-                    };
-                    if has_image {
-                        if self.current_image_uid != keyframe.uid {
-                            if let Some(screenshot) = &keyframe.screenshot {
-                                let data = screenshot.clone();
-                                let x = ColorImage::from_rgba_unmultiplied(
-                                    [1920, 1080],
-                                    data.as_slice(),
-                                );
-                                self.current_image =
-                                    Some(ctx.load_texture("screenshot", x, Default::default()));
-                                self.current_image_uid = keyframe.uid.clone();
-                            }
+                    if self.current_image_uid != keyframe.uid {
+                        if let Some(screenshot) = &keyframe.screenshot {
+                            let data = screenshot.clone();
+                            let x =
+                                ColorImage::from_rgba_unmultiplied([1920, 1080], data.as_slice());
+                            self.current_image =
+                                Some(ctx.load_texture("screenshot", x, Default::default()));
+                            self.current_image_uid = keyframe.uid.clone();
                         }
                     }
                     if current_keyframe_state != keyframe_state[i] {
