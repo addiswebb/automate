@@ -1118,30 +1118,19 @@ impl Sequencer {
     /// Renders a debug panel with relevant information
     pub fn debug_panel(&mut self, ctx: &egui::Context) {
         egui::SidePanel::right("Debug")
-            .min_width(200.0)
+            .max_width(200.0)
             .resizable(false)
             .show(ctx, |ui| {
                 ui.heading("Debug");
-                let (w, h) = rdev::display_size().unwrap();
-                ui.label(format!("Display: ({},{})", w, h));
-
-                ui.label(format!("selected: {:?}", self.selected_keyframes));
+                ui.separator();
                 //todo: add mouse position
-                ui.label(format!(
-                    "Rec: {}",
-                    self.was_recording == self.recording.load(Ordering::Relaxed)
-                ));
-                ui.checkbox(&mut self.clear_before_recording, "Clear Before Recording");
-                ui.label(format!("Time: {}s", self.time));
-                ui.label(format!("Previous Time: {}s", self.prev_time));
-                ui.label(format!("Scale: {}", self.scale));
-                if ui.button("Which monitor?").clicked() {}
+                ui.checkbox(&mut self.clear_before_recording, "Overwrite Recording");
             });
     }
     /// Renders the editable data of the selected keyframe
     pub fn selected_panel(&mut self, ctx: &egui::Context) {
         egui::SidePanel::left("Selected Keyframe")
-            .min_width(115.0)
+            .min_width(155.0)
             .resizable(false)
             .show(ctx, |ui| {
                 if let Some(uid) = self.selected_keyframes.last() {
@@ -1177,22 +1166,29 @@ impl Sequencer {
                             ui.label(format!("{:?}s", secs));
                         }
                     }
+                    // Used later to check if the keyframe was edited
                     let (tmpx, tmpy) = (keyframe.timestamp, keyframe.duration);
-                    ui.label("Timestamp");
-                    ui.add(
-                        egui::DragValue::new(&mut keyframe.timestamp)
-                            .speed(0.25)
-                            .range(0.0..=1000.0),
-                    );
-                    ui.label("Duration");
-                    ui.add(
-                        egui::DragValue::new(&mut keyframe.duration)
-                            .speed(0.1)
-                            .range(0.00001..=100.0),
-                    );
 
-                    ui.label(format!(
-                        "UUID: {:?}",
+                    ui.horizontal(|ui| {
+                        ui.label("Timestamp");
+                        ui.add(
+                            egui::DragValue::new(&mut keyframe.timestamp)
+                                .speed(0.2)
+                                .range(0.0..=3600.0),
+                        );
+                    });
+
+                    ui.horizontal(|ui| {
+                        ui.label("Duration");
+                        ui.add(
+                            egui::DragValue::new(&mut keyframe.duration)
+                                .speed(0.1)
+                                .range(0.00001..=100.0),
+                        );
+                    });
+
+                    ui.small(format!(
+                        "UUID: {}",
                         Uuid::from_bytes_le(keyframe.uid).to_string()
                     ));
                     // Check if the selected keyframe was changed

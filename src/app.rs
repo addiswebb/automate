@@ -1,4 +1,3 @@
-use egui::{KeyboardShortcut, Vec2};
 use egui_extras::{Column, TableBuilder};
 use rfd::FileDialog;
 use uuid::Uuid;
