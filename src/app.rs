@@ -12,143 +12,9 @@ use std::{
 
 use crate::{
     keyframe::{Keyframe, KeyframeType},
-    sequencer::{Sequencer, SequencerState},
+    sequencer::{Sequencer, SequencerState}, settings::{Settings, SettingsPage},
 };
 
-#[derive(serde::Deserialize, serde::Serialize)]
-enum KeybindType {
-    SaveFile,
-    NewFile,
-    OpenFile,
-    Undo,
-    Redo,
-    ToggleSettings,
-    NextKeyframe,
-    PreviousKeyframe,
-    TogglePlay,
-    ResetTime,
-    ToggleRecording,
-    ToggleExecution,
-    AddKeyframe,
-    SelectAll,
-}
-
-enum SettingsPage {
-    Preferences,
-    Shortcuts,
-}
-impl Default for SettingsPage {
-    fn default() -> Self {
-        Self::Preferences
-    }
-}
-
-#[derive(serde::Deserialize, serde::Serialize)]
-struct Keybind {
-    text: String,
-    kind: KeybindType,
-    keybind: KeyboardShortcut,
-}
-impl Keybind {
-    pub fn new(text: String, kind: KeybindType, keybind: KeyboardShortcut) -> Self {
-        Self {
-            text,
-            kind,
-            keybind,
-        }
-    }
-}
-
-#[derive(serde::Deserialize, serde::Serialize)]
-struct Settings {
-    #[serde(skip)]
-    keybind_search: String,
-    keybinds: Vec<Keybind>,
-    offset: Vec2,
-    #[serde(skip)]
-    page: SettingsPage,
-}
-impl Default for Settings {
-    fn default() -> Self {
-        Self {
-            keybind_search: "".to_string(),
-            keybinds: vec![
-                Keybind::new(
-                    "Save File".to_string(),
-                    KeybindType::SaveFile,
-                    KeyboardShortcut::new(egui::Modifiers::CTRL, egui::Key::S),
-                ),
-                Keybind::new(
-                    "New File".to_string(),
-                    KeybindType::NewFile,
-                    KeyboardShortcut::new(egui::Modifiers::CTRL, egui::Key::N),
-                ),
-                Keybind::new(
-                    "Open File".to_string(),
-                    KeybindType::OpenFile,
-                    KeyboardShortcut::new(egui::Modifiers::CTRL, egui::Key::O),
-                ),
-                Keybind::new(
-                    "Undo".to_string(),
-                    KeybindType::Undo,
-                    KeyboardShortcut::new(egui::Modifiers::CTRL, egui::Key::Z),
-                ),
-                Keybind::new(
-                    "Redo".to_string(),
-                    KeybindType::Redo,
-                    KeyboardShortcut::new(egui::Modifiers::CTRL, egui::Key::Y),
-                ),
-                Keybind::new(
-                    "Toggle Settings".to_string(),
-                    KeybindType::ToggleSettings,
-                    KeyboardShortcut::new(egui::Modifiers::CTRL, egui::Key::Comma),
-                ),
-                Keybind::new(
-                    "Next Keyframe".to_string(),
-                    KeybindType::NextKeyframe,
-                    KeyboardShortcut::new(egui::Modifiers::CTRL, egui::Key::ArrowRight),
-                ),
-                Keybind::new(
-                    "Previous Keyframe".to_string(),
-                    KeybindType::PreviousKeyframe,
-                    KeyboardShortcut::new(egui::Modifiers::CTRL, egui::Key::ArrowLeft),
-                ),
-                Keybind::new(
-                    "Toggle Play".to_string(),
-                    KeybindType::TogglePlay,
-                    KeyboardShortcut::new(egui::Modifiers::NONE, egui::Key::Space),
-                ),
-                Keybind::new(
-                    "Reset Time".to_string(),
-                    KeybindType::ResetTime,
-                    KeyboardShortcut::new(egui::Modifiers::NONE, egui::Key::ArrowLeft),
-                ),
-                Keybind::new(
-                    "Toggle Recording".to_string(),
-                    KeybindType::ToggleRecording,
-                    KeyboardShortcut::new(egui::Modifiers::NONE, egui::Key::F8),
-                ),
-                Keybind::new(
-                    "Toggle Execution".to_string(),
-                    KeybindType::ToggleExecution,
-                    KeyboardShortcut::new(egui::Modifiers::NONE, egui::Key::Escape),
-                ),
-                Keybind::new(
-                    "Add Keyframe".to_string(),
-                    KeybindType::AddKeyframe,
-                    KeyboardShortcut::new(egui::Modifiers::NONE, egui::Key::F9),
-                ),
-                Keybind::new(
-                    "Select All".to_string(),
-                    KeybindType::SelectAll,
-                    KeyboardShortcut::new(egui::Modifiers::CTRL, egui::Key::A),
-                ),
-            ],
-            offset: Vec2::NAN,
-            page: SettingsPage::Preferences,
-        }
-    }
-}
 
 #[derive(serde::Deserialize, serde::Serialize)]
 #[serde(default)]
@@ -167,8 +33,6 @@ pub struct App {
     #[serde(skip)]
     // weird name, basically determines whether the save before exiting dialog closes the window or creates a new file
     is_dialog_to_close: bool,
-    #[serde(skip)]
-    show_settings: bool,
     settings: Settings,
 }
 
@@ -182,7 +46,6 @@ impl Default for App {
             allowed_to_close: false,
             show_close_dialog: false,
             is_dialog_to_close: false,
-            show_settings: false,
             settings: Settings::default(),
         }
     }
@@ -316,7 +179,8 @@ impl eframe::App for App {
         self.set_title(ctx);
         let mut cancel_close = false;
         ctx.input(|i| {
-            if !self.show_close_dialog && !self.show_settings {
+            // Make sure that mouse scrolling only zooms/scrolls when sequencer is in focus
+            if !self.show_close_dialog && !self.settings.show {
                 self.sequencer.zoom(i.smooth_scroll_delta.x);
                 self.sequencer.scroll(i.smooth_scroll_delta.y);
             }
@@ -346,7 +210,7 @@ impl eframe::App for App {
                 }
                 // Keybind(ctrl+,): Toggle settings window
                 else if i.key_pressed(egui::Key::Comma) {
-                    self.show_settings = !self.show_settings;
+                    self.settings.show = !self.settings.show;
                 }
 
                 let keyframes = self.sequencer.keyframes.lock().unwrap();
@@ -513,7 +377,7 @@ impl eframe::App for App {
                         .add(egui::Button::new("Settings").shortcut_text("Ctrl+,"))
                         .clicked()
                     {
-                        self.show_settings = true;
+                        self.settings.show = true;
                         ui.close_menu();
                     }
                     if ui
@@ -586,13 +450,12 @@ impl eframe::App for App {
             });
         });
 
-
         // if self.show_settings{
         egui::Window::new("Settings")
             .resizable(false)
             .movable(true)
             .collapsible(false)
-            .open(&mut self.show_settings)
+            .open(&mut self.settings.show)
             .show(ctx, |ui| {
                 ui.horizontal(|ui| {
                     // Side panel for settings list

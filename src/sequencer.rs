@@ -3,16 +3,13 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 use std::{thread, time::Instant};
 
+use crate::keyframe::{Keyframe, KeyframeType};
+use crate::util::*;
 use eframe::egui::{self, pos2, Ui, Vec2};
-use egui::{emath::RectTransform, Pos2, Rect};
 use egui::{vec2, Align2, ColorImage, FontId, TextureHandle};
+use egui::{Pos2, Rect};
 use serde::{Deserialize, Serialize};
 use uuid::{Bytes, Uuid};
-use xcap::Monitor;
-
-use crate::keyframe::{Keyframe, KeyframeType};
-
-const ROW_HEIGHT: f32 = 24.0;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct SequencerState {
@@ -75,10 +72,10 @@ pub struct Sequencer {
     current_image: Option<TextureHandle>,
     #[serde(skip)]
     current_image_uid: Bytes,
-    #[serde(skip)]
+    // #[serde(skip)]
     // Currently used to store starting and ending images before saving
     // Maybe use a ghost keyframe to store the images on
-    images: [Vec<u8>; 2], // Todo(addis): Make this nicer somehow
+    // images: [Vec<u8>; 2], // Todo(addis): Make this nicer somehow
 }
 
 impl Sequencer {
@@ -187,11 +184,8 @@ impl Sequencer {
                             tmp_keyframe = match &event.event_type {
                                 // Button & Key Press events just push info
                                 rdev::EventType::ButtonPress(btn) => {
-                                    let mut keyframe = Keyframe::mouse_button(
-                                        dt.as_secs_f32(),
-                                        0.,
-                                        btn.clone(),
-                                    );
+                                    let mut keyframe =
+                                        Keyframe::mouse_button(dt.as_secs_f32(), 0., btn.clone());
                                     if let Some(screenshot) = screenshot() {
                                         keyframe.add_screenshot(&screenshot);
                                     }
@@ -259,10 +253,7 @@ impl Sequencer {
                                                 previous_mouse_position = pos;
                                                 mouse_move_count =
                                                     shared_count.load(Ordering::Relaxed);
-                                                Some(Keyframe::mouse_move(
-                                                    dt.as_secs_f32(),
-                                                    pos,
-                                                ))
+                                                Some(Keyframe::mouse_move(dt.as_secs_f32(), pos))
                                             }
                                             false => None,
                                         },
@@ -323,7 +314,7 @@ impl Sequencer {
             calibrate,
             current_image: None,
             current_image_uid: Uuid::nil().to_bytes_le(),
-            images: [Vec::new(), Vec::new()],
+            // images: [Vec::new(), Vec::new()],
         }
     }
 
@@ -493,11 +484,11 @@ impl Sequencer {
     fn render_keyframes(&mut self, ui: &mut Ui, max_rect: &Rect) {
         let mut keyframes = self.keyframes.lock().unwrap();
         let mut keyframe_state = self.keyframe_state.lock().unwrap();
-        let offset = scale(ui, self.scroll, self.scale);
         let mut delete = false;
         let mut cut = false;
         for i in 0..keyframes.len() {
             let offset_y = ui.spacing().item_spacing.y;
+            // Determine which row to draw the keframe on depending on its type
             let y = match keyframes[i].kind {
                 0 => offset_y,
                 1 => ROW_HEIGHT * 2. + 9.,
@@ -505,9 +496,10 @@ impl Sequencer {
                 3 => ROW_HEIGHT + offset_y * 2.,
                 _ => 0.,
             };
+            // Calculate the rect for the keyframe
             let rect = time_to_rect(
-                scale(ui, keyframes[i].timestamp, self.scale) - offset + 4.0,
-                // +4 offset to allow for left most digit to always be visible
+                scale(ui, keyframes[i].timestamp, self.scale) - scale(ui, self.scroll, self.scale)
+                    + 4.0,
                 scale(ui, keyframes[i].duration, self.scale),
                 scale(
                     ui,
@@ -517,16 +509,11 @@ impl Sequencer {
                 ui.spacing().item_spacing,
                 max_rect.translate(vec2(0., y)),
             );
-            if rect.is_none() {
-                continue;
-            }
-            let rect = rect.unwrap();
-
-            {
-                let mut ctrl = false;
-                ui.input(|i| {
-                    ctrl = i.modifiers.ctrl;
-                });
+            // Time_to_rect clips all keyframes that are not visible for performance, this skips them
+            if let Some(rect) = rect {
+                // Used to determine different interactions with keyframes
+                let ctrl = ui.input(|i| i.modifiers.ctrl);
+                // Handle when the user is drag selecting over keyframes
                 if self.selecting {
                     if selection_contains_keyframe(&self.compute_selection_rect(&max_rect), rect) {
                         match self.selected_keyframes.binary_search(&keyframes[i].uid) {
@@ -546,210 +533,220 @@ impl Sequencer {
                         }
                     }
                 }
-            }
 
-            let width = rect.width();
-            let label = format!(
-                "{}",
-                match &keyframes[i].keyframe_type {
-                    KeyframeType::KeyBtn(key) => key_to_char(key),
-                    KeyframeType::MouseBtn(btn) => button_to_char(btn),
-                    KeyframeType::MouseMove(_) => "".to_string(),
-                    KeyframeType::Scroll(delta) => scroll_to_char(delta),
-                    KeyframeType::Wait(secs) => format!("{}s", secs).to_string(),
-                }
-            );
-            let color = match keyframes[i].kind {
-                0 => egui::Color32::LIGHT_RED,              //Keyboard
-                1 => egui::Color32::from_rgb(95, 186, 213), //Mouse move
-                2 => egui::Color32::LIGHT_GREEN,            //Button Click
-                3 => egui::Color32::LIGHT_YELLOW,           //Scroll
-                _ => egui::Color32::LIGHT_GRAY,
-            };
-            let stroke = match keyframe_state[i] {
-                1 => egui::Stroke::new(1.5, egui::Color32::LIGHT_RED), //Playing
-                2 => egui::Stroke::new(1.5, egui::Color32::from_rgb(233, 181, 125)), //Selected
-                _ => egui::Stroke::new(0.4, egui::Color32::from_rgb(15, 37, 42)), //Not selected
-            };
+                let color = match keyframes[i].kind {
+                    0 => egui::Color32::LIGHT_RED,              //Keyboard
+                    1 => egui::Color32::from_rgb(95, 186, 213), //Mouse move
+                    2 => egui::Color32::LIGHT_GREEN,            //Button Click
+                    3 => egui::Color32::LIGHT_YELLOW,           //Scroll
+                    _ => egui::Color32::LIGHT_GRAY,
+                };
+                let stroke = match keyframe_state[i] {
+                    1 => egui::Stroke::new(1.5, egui::Color32::LIGHT_RED), //Playing
+                    2 => egui::Stroke::new(1.5, egui::Color32::from_rgb(233, 181, 125)), //Selected
+                    _ => egui::Stroke::new(0.4, egui::Color32::from_rgb(15, 37, 42)), //Not selected
+                };
 
-            let keyframe = ui
-                .allocate_rect(rect, egui::Sense::click_and_drag())
-                .on_hover_text(format!("{:?}", keyframes[i].keyframe_type));
-            ui.painter()
-                .rect(rect, egui::Rounding::same(2.0), color, stroke);
+                let keyframe = ui
+                    .allocate_rect(rect, egui::Sense::click_and_drag())
+                    .on_hover_text(format!("{:?}", keyframes[i].keyframe_type));
+                ui.painter()
+                    .rect(rect, egui::Rounding::same(2.0), color, stroke);
 
-            if width > 10.0 {
-                ui.painter().text(
-                    rect.center(),
-                    Align2::CENTER_CENTER,
-                    format!("{}", label),
-                    FontId::default(),
-                    egui::Color32::BLACK,
-                );
-            }
-            if keyframe.clicked() {
-                let ctrl = ui.input(|i| {
-                    return i.modifiers.ctrl;
-                });
-                // Check whether there was more than one keyframe selected before clearing the vec, (used for edgecase)
-                let was_empty = self.selected_keyframes.is_empty();
-                // Attempt to find the selected keyframe using its uuid
-                let x = self.selected_keyframes.binary_search(&keyframes[i].uid);
-                // If not ctrl clicked, only a single keyframe can ever be selected so we clear the vec early
-                if !ctrl {
-                    self.selected_keyframes.clear();
+                // Checks if it is worth displaying a label for the keyframe based of its width
+                if rect.width() > 10.0 {
+                    let label = format!(
+                        "{}",
+                        match &keyframes[i].keyframe_type {
+                            KeyframeType::KeyBtn(key) => key_to_char(key),
+                            KeyframeType::MouseBtn(btn) => button_to_char(btn),
+                            KeyframeType::MouseMove(_) => "".to_string(),
+                            KeyframeType::Scroll(delta) => scroll_to_char(delta),
+                            KeyframeType::Wait(secs) => format!("{}s", secs).to_string(),
+                        }
+                    );
+                    ui.painter().text(
+                        rect.center(),
+                        Align2::CENTER_CENTER,
+                        format!("{}", label),
+                        FontId::default(),
+                        egui::Color32::BLACK,
+                    );
                 }
-                match x {
-                    // Already selected
-                    Ok(index) => {
-                        // If ctrl clicked while already selected, deselect it (note that the vec is not emptied because ctrl was not pressed)
-                        if ctrl {
-                            self.selected_keyframes.remove(index);
-                        }
-                        // If ctrl was not pressed, and one of several already selected keyframes was clicked, leave only that one selected (note that vec is empty here)
-                        if !was_empty {
-                            self.selected_keyframes.push(keyframes[i].uid)
-                        }
-                    }
-                    // not already selected
-                    Err(index) => {
-                        if !ctrl {
-                            // If not already selected, select it and push (note we use push instead of insert here because the vec is empty and it will be placed at index 0 by default)
-                            self.selected_keyframes.push(keyframes[i].uid)
-                        } else {
-                            // If ctrl is pressed, then insert the keyframe while keeping order (note we need a sorted vec to allow for binary search later on)
-                            self.selected_keyframes.insert(index, keyframes[i].uid)
-                        }
-                    }
-                }
-            }
-            // Todo(addis): change sense to drag only,  not click_and_drag
-            // Todo(addis): then sense clicks as a drag without displacement, to remove the small delay between physical and electronic drag start
-            // Todo(addis): maybe not, since it will interfere with the different actions taken when selecting keyframes dependant on if its a click or drag event
-            if keyframe.drag_started() {
-                if let Some(start) = keyframe.interact_pointer_pos() {
-                    self.drag_start = start;
-                    self.dragging = true;
-                    let ctrl = ui.input(|i| {
-                        return i.modifiers.ctrl;
-                    });
+                // Handles the user clicking a keyframe
+                if keyframe.clicked() {
+                    // Check whether there was more than one keyframe selected before clearing the vec, (used for edgecase)
+                    let was_empty = self.selected_keyframes.is_empty();
                     // Attempt to find the selected keyframe using its uuid
-                    match self.selected_keyframes.binary_search(&keyframes[i].uid) {
+                    let x = self.selected_keyframes.binary_search(&keyframes[i].uid);
+                    // If not ctrl clicked, only a single keyframe can ever be selected so we clear the vec early
+                    if !ctrl {
+                        self.selected_keyframes.clear();
+                    }
+                    match x {
                         // Already selected
-                        Ok(_) => { /* Do nothing */ }
-                        // Not already selected
+                        Ok(index) => {
+                            // If ctrl clicked while already selected, deselect it (note that the vec is not emptied because ctrl was not pressed)
+                            if ctrl {
+                                self.selected_keyframes.remove(index);
+                            }
+                            // If ctrl was not pressed, and one of several already selected keyframes was clicked, leave only that one selected (note that vec is empty here)
+                            if was_empty {
+                                println!("test");
+                                self.selected_keyframes.push(keyframes[i].uid)
+                            }
+                        }
+                        // not already selected
                         Err(index) => {
                             if !ctrl {
-                                // If not already selected, drag only this keyframe
-                                self.selected_keyframes = vec![keyframes[i].uid]
+                                // If not already selected, select it and push (note we use push instead of insert here because the vec is empty and it will be placed at index 0 by default)
+                                self.selected_keyframes.push(keyframes[i].uid)
                             } else {
-                                // If ctrl is pressed, then add it to the selected keyframes and drag them all
+                                // If ctrl is pressed, then insert the keyframe while keeping order (note we need a sorted vec to allow for binary search later on)
                                 self.selected_keyframes.insert(index, keyframes[i].uid)
                             }
                         }
                     }
-                } else {
-                    panic!("failed to get interact pos when dragging, just trying to see if this ever happens");
                 }
-            }
-            if keyframe.hovered() {
-                ui.output_mut(|o| o.cursor_icon = egui::CursorIcon::PointingHand);
-            }
+                // Todo(addis): change sense to drag only,  not click_and_drag
+                // Todo(addis): then sense clicks as a drag without displacement, to remove the small delay between physical and electronic drag start
+                // Todo(addis): maybe not, since it will interfere with the different actions taken when selecting keyframes dependant on if its a click or drag event
+                // Handles the user starting to drag a keyframe
+                if keyframe.drag_started() {
+                    if let Some(start) = keyframe.interact_pointer_pos() {
+                        self.drag_start = start;
+                        self.dragging = true;
+                        let ctrl = ui.input(|i| {
+                            return i.modifiers.ctrl;
+                        });
+                        // Attempt to find the selected keyframe using its uuid
+                        match self.selected_keyframes.binary_search(&keyframes[i].uid) {
+                            // Already selected
+                            Ok(_) => { /* Do nothing */ }
+                            // Not already selected
+                            Err(index) => {
+                                if !ctrl {
+                                    // If not already selected, drag only this keyframe
+                                    self.selected_keyframes = vec![keyframes[i].uid]
+                                } else {
+                                    // If ctrl is pressed, then add it to the selected keyframes and drag them all
+                                    self.selected_keyframes.insert(index, keyframes[i].uid)
+                                }
+                            }
+                        }
+                    }
+                }
+                // Handles the user hovering a keyframe
+                if keyframe.hovered() {
+                    ui.output_mut(|o| o.cursor_icon = egui::CursorIcon::PointingHand);
+                }
+                // Handles the user dragging a keyframe
+                if self.dragging {
+                    if let Some(end) = keyframe.interact_pointer_pos() {
+                        let drag_delta =
+                            (end.x - self.drag_start.x) * (1.0 / scale(ui, 1.0, self.scale));
+                        let t = keyframes[i].timestamp + drag_delta;
+                        if t > 0.0 {
+                            for j in 0..keyframe_state.len() {
+                                if keyframe_state[j] == 2 {
+                                    keyframes[j].timestamp += drag_delta;
+                                }
+                            }
+                            self.drag_start.x = end.x;
+                            self.changed.swap(true, Ordering::Relaxed);
+                        }
+                    }
+                }
+                // Resets drag variables when user stops dragging
+                if keyframe.drag_stopped() {
+                    self.drag_start = pos2(0., 0.);
+                    self.dragging = false;
+                    self.resizing = false;
+                    // Since there is a chance that the chronological order of the keyframes has changed,
+                    // we need to update the keyframes vec to match the new order
+                    self.should_sort = true;
+                }
 
-            if self.dragging {
-                if let Some(end) = keyframe.interact_pointer_pos() {
-                    let drag_delta =
-                        (end.x - self.drag_start.x) * (1.0 / scale(ui, 1.0, self.scale));
-                    let t = keyframes[i].timestamp + drag_delta;
-                    if t > 0.0 {
-                        keyframes[i].timestamp = t;
-                        for j in 0..keyframe_state.len() {
-                            if keyframe_state[j] == 2 && j != i {
-                                keyframes[j].timestamp += drag_delta;
+                ui.input_mut(|input| {
+                    if input.consume_key(egui::Modifiers::NONE, egui::Key::Delete) {
+                        delete = true;
+                    }
+                });
+                // let uid = keyframes[i].uid;
+                keyframe.context_menu(|ui| {
+                    // Right clicking a keyframe does not guarrantee that it is selected, so we make sure here
+                    let index = self.selected_keyframes.binary_search(&keyframes[i].uid);
+                    if let Err(index) = index {
+                        self.selected_keyframes.insert(index, keyframes[i].uid);
+                    }
+                    // add the current one somehow
+                    if ui
+                        .add(egui::Button::new("Cut").shortcut_text("Ctrl+X"))
+                        .clicked()
+                    {
+                        cut = true;
+                        ui.close_menu();
+                    }
+                    if ui
+                        .add(egui::Button::new("Copy").shortcut_text("Ctrl+C"))
+                        .clicked()
+                    {
+                        if !self.selected_keyframes.is_empty() {
+                            self.clip_board.clear();
+                            // Loop through all keyframes
+                            for i in 0..keyframes.len() {
+                                let keyframe = keyframes[i].clone();
+                                // Check if the current keyframe is selected
+                                let x = self.selected_keyframes.binary_search(&keyframe.uid);
+                                if x.is_ok() {
+                                    // Add to clip_board if so..
+                                    self.clip_board.push(keyframe);
+                                }
                             }
                         }
-                        self.drag_start.x = end.x;
-                        self.changed.swap(true, Ordering::Relaxed);
+                        ui.close_menu();
                     }
-                }
-            }
-            if keyframe.drag_stopped() {
-                self.drag_start = pos2(0., 0.);
-                self.dragging = false;
-                self.resizing = false;
-                self.should_sort = true;
-            }
-            ui.input_mut(|input| {
-                if input.consume_key(egui::Modifiers::NONE, egui::Key::Delete) {
-                    delete = true;
-                }
-            });
-            // let uid = keyframes[i].uid;
-            keyframe.context_menu(|ui| {
-                // Right clicking a keyframe does not guarrantee that it is selected, so we make sure here
-                let index = self.selected_keyframes.binary_search(&keyframes[i].uid);
-                if let Err(index) = index {
-                    self.selected_keyframes.insert(index, keyframes[i].uid);
-                }
-                // add the current one somehow
-                if ui
-                    .add(egui::Button::new("Cut").shortcut_text("Ctrl+X"))
-                    .clicked()
-                {
-                    cut = true;
-                    ui.close_menu();
-                }
-                if ui
-                    .add(egui::Button::new("Copy").shortcut_text("Ctrl+C"))
-                    .clicked()
-                {
-                    if !self.selected_keyframes.is_empty() {
-                        self.clip_board.clear();
-                        for i in 0..keyframes.len() {
-                            let keyframe = keyframes[i].clone();
-                            let x = self.selected_keyframes.binary_search(&keyframe.uid);
-                            if x.is_ok() {
-                                self.clip_board.push(keyframe);
-                            }
+                    if ui
+                        .add(egui::Button::new("Paste").shortcut_text("Ctrl+V"))
+                        .clicked()
+                    {
+                        if !self.clip_board.is_empty() {
+                            // Clone the clip_board to update the keyframes with new UUIDs
+                            let mut clip_board: Vec<Keyframe> = self
+                                .clip_board
+                                .clone()
+                                .into_iter()
+                                .map(|mut kf| {
+                                    // Shift them all forward slightly so its clear what has been copied
+                                    kf.timestamp += 0.1;
+                                    // Change the UUIDs for the copied keyframes
+                                    kf.uid = uuid::Uuid::new_v4().to_bytes_le();
+                                    kf
+                                })
+                                .collect();
+                            // Use the new UUIDs as the currently selected keyframes
+                            self.selected_keyframes = clip_board.iter().map(|kf| kf.uid).collect();
+                            // Update keyframe_state to be all unselected (this will be updated with the new selected_keyframes later)
+                            self.keyframe_state
+                                .lock()
+                                .unwrap()
+                                .append(&mut vec![0; clip_board.len()]);
+                            // Finally paste the copied keyframes
+                            keyframes.append(&mut clip_board);
+                            // Since there is a chance that the chronological order of the keyframes has changed,
+                            // we need to update the keyframes vec to match the new order
+                            self.should_sort = true;
                         }
+                        ui.close_menu();
                     }
-                    ui.close_menu();
-                }
-                if ui
-                    .add(egui::Button::new("Paste").shortcut_text("Ctrl+V"))
-                    .clicked()
-                {
-                    if !self.clip_board.is_empty() {
-                        let mut clip_board: Vec<Keyframe> = self
-                            .clip_board
-                            .clone()
-                            .into_iter()
-                            .map(|mut kf| {
-                                // Shift them all forward slightly so its clear what has been copied
-                                kf.timestamp += 0.1;
-                                // Change the UUIDs for the copied keyframes
-                                kf.uid = uuid::Uuid::new_v4().to_bytes_le();
-                                kf
-                            })
-                            .collect();
-                        let uids: Vec<uuid::Bytes> =
-                            clip_board.clone().into_iter().map(|kf| kf.uid).collect();
-                        self.selected_keyframes = uids;
-                        self.keyframe_state
-                            .lock()
-                            .unwrap()
-                            .append(&mut vec![0; clip_board.len()]);
-                        keyframes.append(&mut clip_board);
-                        self.should_sort = true;
+                    if ui.button("Delete").clicked() {
+                        delete = true;
+                        ui.close_menu();
                     }
-                    ui.close_menu();
-                }
-                if ui.button("Delete").clicked() {
-                    delete = true;
-                    ui.close_menu();
-                }
-            });
+                });
+            }
         }
+        // Same as copy also deletes
         if cut {
             self.clip_board.clear();
             for uid in &self.selected_keyframes {
@@ -766,20 +763,20 @@ impl Sequencer {
             }
             self.selected_keyframes.clear();
         }
-        // if there are keyframes selected to delete
-        if delete {
+        // If there are keyframes selected to delete
+        if delete && !self.selected_keyframes.is_empty() {
             let number_of_selected_keyframes = self.selected_keyframes.len();
             let number_of_keyframes = keyframe_state.len();
-            // sort the selected list from least the greatest index
+            // Sort the selected list from least the greatest index
             self.selected_keyframes.sort();
             self.selected_keyframes.reverse();
-            // check if we can do a quick delete if every keyframe is selected
+            // Check if we can do a quick delete if every keyframe is selected
             if number_of_keyframes == number_of_selected_keyframes {
                 keyframes.clear();
                 keyframe_state.clear();
                 self.selected_keyframes.clear();
             } else {
-                // otherwise loop through keyframes and remove from last to first
+                // Otherwise loop through keyframes and remove from last to first (avoids index out of bounds)
                 let mut last_index = 0;
                 for uid in &self.selected_keyframes {
                     let mut index = 0;
@@ -793,9 +790,9 @@ impl Sequencer {
                     keyframe_state.remove(index);
                     last_index = index;
                 }
-                // if there are still keyframes left, we want to select the last one before the selection
+                // If there are still keyframes left, we want to select the last one before the selection
                 if !keyframes.is_empty() {
-                    // if the last keyframe before selection was the very last keyframe then we get the second last
+                    // If the last keyframe before selection was the very last keyframe then we get the second last
                     if last_index == keyframes.len() {
                         last_index -= 1;
                     }
@@ -1520,327 +1517,5 @@ fn handle_playing_keyframe(keyframe: &Keyframe, start: bool, offset: Vec2) {
 impl Default for Sequencer {
     fn default() -> Self {
         Self::new()
-    }
-}
-fn time_to_rect(t: f32, d: f32, max_t: f32, spacing: Vec2, res_rect: Rect) -> Option<Rect> {
-    let to_screen =
-        RectTransform::from_to(Rect::from_min_size(Pos2::ZERO, res_rect.size()), res_rect);
-    let mut p1 = Pos2 { x: t, y: 0.0 };
-    let height = ROW_HEIGHT - (spacing.y * 2.0);
-    let width = d.clamp(3.0, f32::INFINITY);
-    let mut p2 = p1
-        + Vec2 {
-            x: width,
-            y: height,
-        };
-    if max_t != 0.0 {
-        // 0.0 is for non-keyframe use cases to ignore
-        if p1.x > max_t || p2.x < 0.0 {
-            return None;
-        }
-        if p2.x > max_t {
-            p2.x = max_t - 1.0;
-        }
-        if p1.x < 0.0 {
-            p1.x = 0.0;
-        }
-    }
-    Some(Rect {
-        min: to_screen.transform_pos(p1),
-        max: to_screen.transform_pos(p2),
-    })
-}
-
-fn selection_contains_keyframe(selection: &Rect, keyframe: Rect) -> bool {
-    if selection.min.x + selection.width() >= keyframe.min.x
-        && selection.min.x <= keyframe.min.x + keyframe.width()
-        && selection.min.y + selection.height() >= keyframe.min.y
-        && selection.min.y <= keyframe.min.y + keyframe.height()
-    {
-        true
-    } else {
-        false
-    }
-}
-
-#[allow(dead_code)]
-fn strings_to_keys(string: &String) -> Vec<rdev::Key> {
-    let mut keys = vec![];
-    for x in string.split(' ') {
-        let key = string_to_keys(x);
-        // This fails if x is a string of characters, not a single character
-        if let Some(key) = key {
-            keys.push(key);
-        } else {
-            // if it failes then loop through the individual characters of the string too
-            for y in x.chars().into_iter() {
-                let key = string_to_keys(y.to_string().as_str());
-                if let Some(key) = key {
-                    keys.push(key);
-                }
-            }
-        }
-    }
-    return keys;
-}
-fn string_to_keys(c: &str) -> Option<rdev::Key> {
-    match c {
-        "a" => Some(rdev::Key::KeyA),
-        "b" => Some(rdev::Key::KeyB),
-        "c" => Some(rdev::Key::KeyC),
-        "d" => Some(rdev::Key::KeyD),
-        "e" => Some(rdev::Key::KeyE),
-        "f" => Some(rdev::Key::KeyF),
-        "g" => Some(rdev::Key::KeyG),
-        "h" => Some(rdev::Key::KeyH),
-        "i" => Some(rdev::Key::KeyI),
-        "j" => Some(rdev::Key::KeyJ),
-        "k" => Some(rdev::Key::KeyK),
-        "l" => Some(rdev::Key::KeyL),
-        "m" => Some(rdev::Key::KeyM),
-        "n" => Some(rdev::Key::KeyN),
-        "o" => Some(rdev::Key::KeyO),
-        "p" => Some(rdev::Key::KeyP),
-        "q" => Some(rdev::Key::KeyQ),
-        "r" => Some(rdev::Key::KeyR),
-        "s" => Some(rdev::Key::KeyS),
-        "t" => Some(rdev::Key::KeyT),
-        "u" => Some(rdev::Key::KeyU),
-        "v" => Some(rdev::Key::KeyV),
-        "w" => Some(rdev::Key::KeyW),
-        "x" => Some(rdev::Key::KeyX),
-        "y" => Some(rdev::Key::KeyY),
-        "z" => Some(rdev::Key::KeyZ),
-        "space" => Some(rdev::Key::Space),
-        "tab" => Some(rdev::Key::Tab),
-        "uparrow" => Some(rdev::Key::UpArrow),
-        "printscreen" => Some(rdev::Key::PrintScreen),
-        "scrolllock" => Some(rdev::Key::ScrollLock),
-        "pause" => Some(rdev::Key::Pause),
-        "numlock" => Some(rdev::Key::NumLock),
-        "`" => Some(rdev::Key::BackQuote),
-        "1" => Some(rdev::Key::Num1),
-        "2" => Some(rdev::Key::Num2),
-        "3" => Some(rdev::Key::Num3),
-        "4" => Some(rdev::Key::Num4),
-        "5" => Some(rdev::Key::Num5),
-        "6" => Some(rdev::Key::Num6),
-        "7" => Some(rdev::Key::Num7),
-        "8" => Some(rdev::Key::Num8),
-        "9" => Some(rdev::Key::Num9),
-        "0" => Some(rdev::Key::Num0),
-        "-" => Some(rdev::Key::Minus),
-        "=" => Some(rdev::Key::Equal),
-        "(" => Some(rdev::Key::LeftBracket),
-        ")" => Some(rdev::Key::RightBracket),
-        ";" => Some(rdev::Key::SemiColon),
-        "\"" => Some(rdev::Key::Quote),
-        "\\" => Some(rdev::Key::BackSlash),
-        "intlbackslash" => Some(rdev::Key::IntlBackslash),
-        ")," => Some(rdev::Key::Comma),
-        "." => Some(rdev::Key::Dot),
-        "/" => Some(rdev::Key::Slash),
-        "insert" => Some(rdev::Key::Insert),
-        "kpreturn" => Some(rdev::Key::KpReturn),
-        "kpminus" => Some(rdev::Key::KpMinus),
-        "kpplus" => Some(rdev::Key::KpPlus),
-        "kpmultiply" => Some(rdev::Key::KpMultiply),
-        "kpdivide" => Some(rdev::Key::KpDivide),
-        "kp0" => Some(rdev::Key::Kp0),
-        "kp1" => Some(rdev::Key::Kp1),
-        "kp2" => Some(rdev::Key::Kp2),
-        "kp3" => Some(rdev::Key::Kp3),
-        "kp4" => Some(rdev::Key::Kp4),
-        "kp5" => Some(rdev::Key::Kp5),
-        "kp6" => Some(rdev::Key::Kp6),
-        "kp7" => Some(rdev::Key::Kp7),
-        "kp8" => Some(rdev::Key::Kp8),
-        "kp9" => Some(rdev::Key::Kp9),
-        "kpdelete" => Some(rdev::Key::KpDelete),
-        "function" => Some(rdev::Key::Function),
-        "alt" => Some(rdev::Key::Alt),
-        "altgr" => Some(rdev::Key::AltGr),
-        "backspace" => Some(rdev::Key::Backspace),
-        "capslock" => Some(rdev::Key::CapsLock),
-        "ctrlleft" => Some(rdev::Key::ControlLeft),
-        "ctrlright" => Some(rdev::Key::ControlRight),
-        "delete" => Some(rdev::Key::Delete),
-        "downarrow" => Some(rdev::Key::DownArrow),
-        "end" => Some(rdev::Key::End),
-        "esc" => Some(rdev::Key::Escape),
-        "f1" => Some(rdev::Key::F1),
-        "f10" => Some(rdev::Key::F10),
-        "f11" => Some(rdev::Key::F11),
-        "f12" => Some(rdev::Key::F12),
-        "f2" => Some(rdev::Key::F2),
-        "f3" => Some(rdev::Key::F3),
-        "f4" => Some(rdev::Key::F4),
-        "f5" => Some(rdev::Key::F5),
-        "f6" => Some(rdev::Key::F6),
-        "f7" => Some(rdev::Key::F7),
-        "f8" => Some(rdev::Key::F8),
-        "f9" => Some(rdev::Key::F9),
-        "home" => Some(rdev::Key::Home),
-        "leftarrow" => Some(rdev::Key::LeftArrow),
-        "metaleft" => Some(rdev::Key::MetaLeft),
-        "metaright" => Some(rdev::Key::MetaRight),
-        "pagedown" => Some(rdev::Key::PageDown),
-        "pageup" => Some(rdev::Key::PageUp),
-        "return" => Some(rdev::Key::Return),
-        "rightarrow" => Some(rdev::Key::RightArrow),
-        "shiftleft" => Some(rdev::Key::ShiftLeft),
-        "shiftright" => Some(rdev::Key::ShiftRight),
-        _ => None,
-    }
-}
-fn key_to_char(k: &rdev::Key) -> String {
-    match k {
-        rdev::Key::KeyA => "a".to_string(),
-        rdev::Key::KeyB => "b".to_string(),
-        rdev::Key::KeyC => "c".to_string(),
-        rdev::Key::KeyD => "d".to_string(),
-        rdev::Key::KeyE => "e".to_string(),
-        rdev::Key::KeyF => "f".to_string(),
-        rdev::Key::KeyG => "g".to_string(),
-        rdev::Key::KeyH => "h".to_string(),
-        rdev::Key::KeyI => "i".to_string(),
-        rdev::Key::KeyJ => "j".to_string(),
-        rdev::Key::KeyK => "k".to_string(),
-        rdev::Key::KeyL => "l".to_string(),
-        rdev::Key::KeyM => "m".to_string(),
-        rdev::Key::KeyN => "n".to_string(),
-        rdev::Key::KeyO => "o".to_string(),
-        rdev::Key::KeyP => "p".to_string(),
-        rdev::Key::KeyQ => "q".to_string(),
-        rdev::Key::KeyR => "r".to_string(),
-        rdev::Key::KeyS => "s".to_string(),
-        rdev::Key::KeyT => "t".to_string(),
-        rdev::Key::KeyU => "u".to_string(),
-        rdev::Key::KeyV => "v".to_string(),
-        rdev::Key::KeyW => "w".to_string(),
-        rdev::Key::KeyX => "x".to_string(),
-        rdev::Key::KeyY => "y".to_string(),
-        rdev::Key::KeyZ => "z".to_string(),
-        rdev::Key::Space => "space".to_string(),
-        rdev::Key::Tab => "tab".to_string(),
-        rdev::Key::UpArrow => "uparrow".to_string(),
-        rdev::Key::PrintScreen => "printscreen".to_string(),
-        rdev::Key::ScrollLock => "scrolllock".to_string(),
-        rdev::Key::Pause => "pause".to_string(),
-        rdev::Key::NumLock => "numlock".to_string(),
-        rdev::Key::BackQuote => "`".to_string(),
-        rdev::Key::Num1 => "1".to_string(),
-        rdev::Key::Num2 => "2".to_string(),
-        rdev::Key::Num3 => "3".to_string(),
-        rdev::Key::Num4 => "4".to_string(),
-        rdev::Key::Num5 => "5".to_string(),
-        rdev::Key::Num6 => "6".to_string(),
-        rdev::Key::Num7 => "7".to_string(),
-        rdev::Key::Num8 => "8".to_string(),
-        rdev::Key::Num9 => "9".to_string(),
-        rdev::Key::Num0 => "0".to_string(),
-        rdev::Key::Minus => "-".to_string(),
-        rdev::Key::Equal => "=".to_string(),
-        rdev::Key::LeftBracket => "(".to_string(),
-        rdev::Key::RightBracket => ")".to_string(),
-        rdev::Key::SemiColon => ";".to_string(),
-        rdev::Key::Quote => '"'.to_string(),
-        rdev::Key::BackSlash => "\"".to_string(),
-        rdev::Key::IntlBackslash => "\"".to_string(),
-        rdev::Key::Comma => ",".to_string(),
-        rdev::Key::Dot => ".".to_string(),
-        rdev::Key::Slash => "/".to_string(),
-        rdev::Key::Insert => "insert".to_string(),
-        rdev::Key::KpReturn => "kpreturn".to_string(),
-        rdev::Key::KpMinus => "kpminus".to_string(),
-        rdev::Key::KpPlus => "kpplus".to_string(),
-        rdev::Key::KpMultiply => "kpmultiply".to_string(),
-        rdev::Key::KpDivide => "kpdivide".to_string(),
-        rdev::Key::Kp0 => "kp0".to_string(),
-        rdev::Key::Kp1 => "kp1".to_string(),
-        rdev::Key::Kp2 => "kp2".to_string(),
-        rdev::Key::Kp3 => "kp3".to_string(),
-        rdev::Key::Kp4 => "kp4".to_string(),
-        rdev::Key::Kp5 => "kp5".to_string(),
-        rdev::Key::Kp6 => "kp6".to_string(),
-        rdev::Key::Kp7 => "kp7".to_string(),
-        rdev::Key::Kp8 => "kp8".to_string(),
-        rdev::Key::Kp9 => "kp9".to_string(),
-        rdev::Key::KpDelete => "kpdelete".to_string(),
-        rdev::Key::Function => "function".to_string(),
-        rdev::Key::Unknown(_) => "".to_string(),
-        rdev::Key::Alt => "alt".to_string(),
-        rdev::Key::AltGr => "altgr".to_string(),
-        rdev::Key::Backspace => "backspace".to_string(),
-        rdev::Key::CapsLock => "capslock".to_string(),
-        rdev::Key::ControlLeft => "ctrlleft".to_string(),
-        rdev::Key::ControlRight => "ctrlright".to_string(),
-        rdev::Key::Delete => "delete".to_string(),
-        rdev::Key::DownArrow => "downarrow".to_string(),
-        rdev::Key::End => "end".to_string(),
-        rdev::Key::Escape => "esc".to_string(),
-        rdev::Key::F1 => "f1".to_string(),
-        rdev::Key::F10 => "f10".to_string(),
-        rdev::Key::F11 => "f11".to_string(),
-        rdev::Key::F12 => "f12".to_string(),
-        rdev::Key::F2 => "f2".to_string(),
-        rdev::Key::F3 => "f3".to_string(),
-        rdev::Key::F4 => "f4".to_string(),
-        rdev::Key::F5 => "f5".to_string(),
-        rdev::Key::F6 => "f6".to_string(),
-        rdev::Key::F7 => "f7".to_string(),
-        rdev::Key::F8 => "f8".to_string(),
-        rdev::Key::F9 => "f9".to_string(),
-        rdev::Key::Home => "home".to_string(),
-        rdev::Key::LeftArrow => "leftarrow".to_string(),
-        rdev::Key::MetaLeft => "metaleft".to_string(),
-        rdev::Key::MetaRight => "metaright".to_string(),
-        rdev::Key::PageDown => "pagedown".to_string(),
-        rdev::Key::PageUp => "pageup".to_string(),
-        rdev::Key::Return => "return".to_string(),
-        rdev::Key::RightArrow => "rightarrow".to_string(),
-        rdev::Key::ShiftLeft => "shiftleft".to_string(),
-        rdev::Key::ShiftRight => "shiftright".to_string(),
-    }
-}
-fn button_to_char(b: &rdev::Button) -> String {
-    match b {
-        rdev::Button::Left => "⏴".to_string(),
-        rdev::Button::Right => "⏵".to_string(),
-        rdev::Button::Middle => "◼".to_string(),
-        _ => "".to_string(),
-    }
-}
-fn scroll_to_char(delta: &Vec2) -> String {
-    return if delta.x != 0. {
-        "⬌".to_string()
-    } else if delta.y != 0. {
-        "⬍".to_string()
-    } else {
-        "".to_string()
-    };
-}
-
-/// Correctly scales a given time `i` to screen position
-fn scale(ui: &Ui, i: f32, scale: f32) -> f32 {
-    let width = ui.max_rect().size().x;
-    let s = 20.0 + scale * 40.0;
-    let num_of_digits = width / s;
-    let spacing = width / (num_of_digits);
-    i * spacing
-}
-
-fn screenshot() -> Option<Vec<u8>> {
-    // thread::spawn(move ||{
-    let monitors = Monitor::all().unwrap();
-
-    let monitor = monitors.iter().find(|m| m.is_primary());
-
-    if let Some(monitor) = monitor {
-        let image: xcap::image::ImageBuffer<xcap::image::Rgba<u8>, Vec<u8>> =
-            monitor.capture_image().unwrap();
-        Some(image.into_raw())
-    } else {
-        None
     }
 }
