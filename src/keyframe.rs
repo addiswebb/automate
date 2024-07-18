@@ -18,7 +18,6 @@ pub struct Keyframe {
     pub keyframe_type: KeyframeType,
     pub kind: u8,
     pub uid: Bytes,
-    pub screenshot: Option<Vec<u8>>,
 }
 impl Keyframe{
     pub fn mouse_move(timestamp: f32, pos: Vec2) -> Self{
@@ -28,7 +27,6 @@ impl Keyframe{
             keyframe_type: KeyframeType::MouseMove(pos),
             kind: 1,
             uid: Uuid::new_v4().to_bytes_le(),
-            screenshot: None,
         }
     }
     pub fn mouse_button(timestamp: f32, duration: f32, btn: rdev::Button) -> Self{
@@ -38,7 +36,6 @@ impl Keyframe{
             keyframe_type: KeyframeType::MouseBtn(btn),
             kind: 2,
             uid: Uuid::new_v4().to_bytes_le(),
-            screenshot: None,
         }
     }
     pub fn key_btn(timestamp: f32, duration: f32, key: rdev::Key) -> Self{
@@ -48,7 +45,6 @@ impl Keyframe{
             keyframe_type: KeyframeType::KeyBtn(key),
             kind: 0,
             uid: Uuid::new_v4().to_bytes_le(),
-            screenshot: None,
         }
     }
     pub fn scroll(timestamp: f32, delta: Vec2) -> Self{
@@ -58,12 +54,7 @@ impl Keyframe{
             keyframe_type: KeyframeType::Scroll(delta),
             kind: 3,
             uid: Uuid::new_v4().to_bytes_le(),
-            screenshot: None,
         }
-    }
-    pub fn add_screenshot(&mut self, screenshot: &Vec<u8>) -> &mut Self{
-        self.screenshot = Some(screenshot.clone());
-        self
     }
     pub fn calculate_duration(&mut self, dt: f32) -> &mut Self{
         self.duration = dt - self.timestamp;
@@ -79,7 +70,6 @@ impl Default for Keyframe {
             keyframe_type: KeyframeType::KeyBtn(rdev::Key::Space),
             kind: 0,
             uid: Uuid::new_v4().to_bytes_le(),
-            screenshot: None,
         }
     }
 }

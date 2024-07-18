@@ -1,19 +1,23 @@
 use egui_extras::{Column, TableBuilder};
 use rfd::FileDialog;
-use uuid::Uuid;
 use std::{
     fs::File,
-    io::{BufReader, Write},
+    io::{BufReader, Read, Write},
     path::PathBuf,
     sync::atomic::Ordering,
     time::Instant,
 };
+use uuid::Uuid;
+use zip::{
+    write::SimpleFileOptions,
+    ZipArchive, ZipWriter,
+};
 
 use crate::{
     keyframe::{Keyframe, KeyframeType},
-    sequencer::{Sequencer, SequencerState}, settings::{Settings, SettingsPage},
+    sequencer::{Sequencer, SequencerState},
+    settings::{Settings, SettingsPage},
 };
-
 
 #[derive(serde::Deserialize, serde::Serialize)]
 #[serde(default)]
@@ -84,33 +88,47 @@ impl App {
     ///
     /// Overwrites the current file if it already exists otherwise allows the creation of a new file.
     fn save_file(&mut self) {
-        let state = self.sequencer.save_to_state();
-        let data = bincode::serialize(&state).unwrap();
-            if self.file == "untitled.auto" {
-                self.file = FileDialog::new()
-                    .add_filter("automate", &["auto"])
-                    .set_directory("/")
-                    .save_file()
-                    .unwrap()
-                    .file_name()
-                    .unwrap()
-                    .to_str()
-                    .unwrap()
-                    .to_string();
-            }
-            // save the current file (if it was "untitled.auto", it has now been replaced)
+        if self.file == "untitled.auto" {
+            self.file = FileDialog::new()
+                .add_filter("automate", &["auto"])
+                .set_directory("/")
+                .save_file()
+                .unwrap()
+                .file_name()
+                .unwrap()
+                .to_str()
+                .unwrap()
+                .to_string();
+        }
 
-            let now = Instant::now();
-            let file = File::create(self.file.clone());
-            if let Ok(mut file) = file {
-                file.write_all(&data).unwrap();
-                self.sequencer.loaded_file = self.file.clone();
-                self.file_uptodate = true;
-                self.sequencer.changed.swap(false, Ordering::Relaxed);
-                log::info!("Save file: {:?}- {:?}", self.file,now.elapsed());
-            } else {
-                log::error!("Failed to save {:?}", file);
+        let state = bincode::serialize(&self.sequencer.save_to_state()).unwrap();
+        // save the current file (if it was "untitled.auto", it has now been replaced)
+
+        let now = Instant::now();
+        let file = File::create(self.file.clone());
+        if let Ok(file) = file {
+            // write
+            let mut zip = ZipWriter::new(file);
+            let options = SimpleFileOptions::default().compression_method(zip::CompressionMethod::Stored);
+            zip.start_file("data", options).unwrap();
+            zip.write_all(&state).unwrap();
+
+            let images = self.sequencer.images.lock().unwrap();
+            for uid in images.keys() {
+                zip.start_file(Uuid::from_bytes_le(*uid).to_string(), options)
+                    .unwrap();
+                zip.write_all(images.get(uid).unwrap().as_slice()).unwrap();
             }
+            zip.finish().unwrap();
+
+            // file.write_all(&data).unwrap();
+            self.sequencer.loaded_file = self.file.clone();
+            self.file_uptodate = true;
+            self.sequencer.changed.swap(false, Ordering::Relaxed);
+            log::info!("Save file: {:?} - {:?}", self.file, now.elapsed());
+        } else {
+            log::error!("Failed to save {:?}", file);
+        }
     }
     /// Open a file using the native file dialog
     fn open_file(&mut self) {
@@ -125,16 +143,38 @@ impl App {
     }
     ///Load an ".auto" file from the given path
     fn load_file(&mut self, path: &PathBuf) {
+        log::info!("Loading file: {:?}", path.file_name().unwrap());
         let now = Instant::now();
         let stream = File::open(path.clone());
         if let Ok(file) = stream {
             let reader = BufReader::new(file);
-            let data: SequencerState =bincode::deserialize_from(reader).unwrap();
-            self.sequencer.load_from_state(data);
-            self.file = path.file_name().unwrap().to_str().unwrap().to_string();
-            self.sequencer.loaded_file = self.file.clone();
-            self.file_uptodate = true;
-            log::info!("Load file: {:?} - {:?}", path,now.elapsed() );
+            let mut zip = ZipArchive::new(reader).unwrap();
+
+            // File of index 0 stores keyframes and general sequencer state 
+            let mut state = zip.by_index(0).unwrap();
+            let mut bytes = Vec::new();
+            state.read_to_end(&mut bytes).unwrap();
+            if let Ok(data) = bincode::deserialize::<SequencerState>(bytes.as_slice()) {
+                self.sequencer.load_from_state(data);
+                self.file = path.file_name().unwrap().to_str().unwrap().to_string();
+                self.sequencer.loaded_file = self.file.clone();
+                self.file_uptodate = true;
+                std::mem::drop(state);
+                // Load images, all other entries (excluding index: 0) are files named the UUID of the keyframe their image refers to
+                for i in 1..zip.len(){
+                    let mut image = zip.by_index(i).unwrap();
+                    let mut bytes = Vec::new();
+                    image.read_to_end(&mut bytes).unwrap();
+                    self.sequencer.images.lock().unwrap().insert(Uuid::parse_str(image.name()).unwrap().to_bytes_le(), bytes);
+                } 
+                log::info!("Loaded file: {:?} - {:?}", path, now.elapsed());
+            } else {
+                self.new_file();
+                log::info!(
+                    "Failed to load file: {:?}, most likely the file was created with an older version of Automate",
+                    path,
+                );
+            }
         } else {
             self.new_file();
             log::info!(
@@ -396,16 +436,15 @@ impl eframe::App for App {
                         ui.close_menu();
                     }
                     ui.separator();
-                    ui.menu_button("Add", |ui|{
+                    ui.menu_button("Add", |ui| {
                         if ui.button("Wait").clicked() {
                             let mut keyframes = self.sequencer.keyframes.lock().unwrap();
-                            keyframes.push(Keyframe{
+                            keyframes.push(Keyframe {
                                 timestamp: self.sequencer.get_time(),
                                 duration: 1.,
                                 keyframe_type: KeyframeType::Wait(1.),
                                 kind: 4,
                                 uid: Uuid::new_v4().to_bytes_le(),
-                                screenshot: None,
                             });
                             self.sequencer.keyframe_state.lock().unwrap().push(0);
                             ui.close_menu();
@@ -628,7 +667,6 @@ impl eframe::App for App {
         self.sequencer.selected_panel(ctx);
         self.sequencer.central_panel(ctx);
 
-        
         if cancel_close {
             ctx.send_viewport_cmd(egui::ViewportCommand::CancelClose);
         }

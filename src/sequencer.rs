@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, AtomicI32, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
@@ -13,9 +14,10 @@ use uuid::{Bytes, Uuid};
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct SequencerState {
-    pub keyframes: Vec<Keyframe>,
     pub repeats: i32,
     pub speed: f32,
+    pub keyframes: Vec<Keyframe>,
+    // pub images: HashMap<Bytes, Vec<u8>>,
 }
 /// We derive Deserialize/Serialize so we can persist app state on shutdown.
 #[derive(Deserialize, Serialize)]
@@ -72,10 +74,8 @@ pub struct Sequencer {
     current_image: Option<TextureHandle>,
     #[serde(skip)]
     current_image_uid: Bytes,
-    // #[serde(skip)]
-    // Currently used to store starting and ending images before saving
-    // Maybe use a ghost keyframe to store the images on
-    // images: [Vec<u8>; 2], // Todo(addis): Make this nicer somehow
+    #[serde(skip)]
+    pub images: Arc<Mutex<HashMap<Bytes, Vec<u8>>>>,
 }
 
 impl Sequencer {
@@ -91,6 +91,7 @@ impl Sequencer {
         let recording_instant = Arc::new(Mutex::new(Instant::now()));
         let changed = Arc::new(AtomicBool::new(false));
         let calibrate = Arc::new(AtomicBool::new(false));
+        let images = Arc::new(Mutex::new(HashMap::new()));
 
         let shared_kfs = Arc::clone(&keyframes);
         let shared_pkfs = Arc::clone(&keyframe_state);
@@ -100,6 +101,7 @@ impl Sequencer {
         let shared_instant = Arc::clone(&recording_instant);
         let shared_changed = Arc::clone(&changed);
         let shared_calibrate = Arc::clone(&calibrate);
+        let shared_images = Arc::clone(&images);
 
         let mut was_recording = false;
 
@@ -129,7 +131,6 @@ impl Sequencer {
                                     )),
                                     kind: u8::MAX, // This is code to say the keyframe is for calibration only and must be deleted after use
                                     uid: Uuid::nil().to_bytes_le(),
-                                    screenshot: None,
                                 });
                             }
                             _ => {}
@@ -159,16 +160,10 @@ impl Sequencer {
                                     }
                                     // Keybind(F9): Manually add a mouse move keyframe (can be used for filling in missed movements due to record resolution)
                                     rdev::Key::F9 => {
-                                        tmp_keyframe = Some(Keyframe {
-                                            timestamp: dt.as_secs_f32(),
-                                            duration: 0.1,
-                                            keyframe_type: KeyframeType::MouseMove(
-                                                previous_mouse_position,
-                                            ),
-                                            kind: 1,
-                                            uid: Uuid::new_v4().to_bytes_le(),
-                                            screenshot: None,
-                                        });
+                                        tmp_keyframe = Some(Keyframe::mouse_move(
+                                            dt.as_secs_f32(),
+                                            previous_mouse_position,
+                                        ))
                                     }
                                     _ => {}
                                 }
@@ -184,19 +179,25 @@ impl Sequencer {
                             tmp_keyframe = match &event.event_type {
                                 // Button & Key Press events just push info
                                 rdev::EventType::ButtonPress(btn) => {
-                                    let mut keyframe =
+                                    let keyframe =
                                         Keyframe::mouse_button(dt.as_secs_f32(), 0., btn.clone());
                                     if let Some(screenshot) = screenshot() {
-                                        keyframe.add_screenshot(&screenshot);
+                                        shared_images
+                                            .lock()
+                                            .unwrap()
+                                            .insert(keyframe.uid, screenshot);
                                     }
                                     mouse_keyframes.push(keyframe);
                                     None
                                 }
                                 rdev::EventType::KeyPress(key) => {
-                                    let mut keyframe =
+                                    let keyframe =
                                         Keyframe::key_btn(dt.as_secs_f32(), 0., key.clone());
                                     if let Some(screenshot) = screenshot() {
-                                        keyframe.add_screenshot(&screenshot);
+                                        shared_images
+                                            .lock()
+                                            .unwrap()
+                                            .insert(keyframe.uid, screenshot);
                                     }
                                     key_keyframes.push(keyframe);
                                     None
@@ -312,7 +313,7 @@ impl Sequencer {
             calibrate,
             current_image: None,
             current_image_uid: Uuid::nil().to_bytes_le(),
-            // images: [Vec::new(), Vec::new()],
+            images,
         }
     }
 
@@ -323,9 +324,10 @@ impl Sequencer {
     /// Saves the current state of the sequencer to `SequencerState`
     pub fn save_to_state(&self) -> SequencerState {
         SequencerState {
-            keyframes: self.keyframes.lock().unwrap().clone(),
             repeats: self.repeats,
             speed: self.speed,
+            keyframes: self.keyframes.lock().unwrap().clone(),
+            // images: self.images.lock().unwrap().clone(),
         }
     }
     /// Loads the sequencer with the `SequencerState`
@@ -1128,6 +1130,20 @@ impl Sequencer {
                 ui.separator();
                 //todo: add mouse position
                 ui.checkbox(&mut self.clear_before_recording, "Overwrite Recording");
+                if ui.button("Debug size").clicked(){
+                    println!("u8: {:?}",std::mem::size_of::<u8>());
+                    println!("i16: {:?}",std::mem::size_of::<usize>());
+                    // for keyframe in self.keyframes.lock().unwrap().iter(){
+                    //     println!("Keyframe: {:?}",std::mem::size_of_val::<Keyframe>(keyframe));
+                    // }
+                    let images = self.images.lock().unwrap();
+                    // let x = images.clone();
+                    let last_image = images.values().last().unwrap();
+                    println!("capacity: {:?}",last_image.capacity());
+                    println!("std::mem::size_of_val() {:?}",std::mem::size_of_val::<[u8]>(last_image.as_slice()));
+                    println!("image.len(): {:?}", last_image.len());
+                    // println!("{:?}",images);
+                }
             });
     }
     /// Renders the editable data of the selected keyframe
@@ -1379,16 +1395,16 @@ impl Sequencer {
         let x = tmp.iter().position(|&state| state == 2);
         if let Some(index) = x {
             // Since the tmp vec is reversed we need to invert it below
-            let tmp_keyframe = &keyframes[keyframes.len() - index - 1];
-            if self.current_image_uid != tmp_keyframe.uid {
-                if let Some(screenshot) = &tmp_keyframe.screenshot {
+            let uid = keyframes[keyframes.len() - index - 1].uid;
+            if self.current_image_uid != uid {
+                if let Some(screenshot) = &self.images.lock().unwrap().get(&uid){
                     let x =
                         ColorImage::from_rgba_unmultiplied([1920, 1080], &screenshot.as_slice());
                     // Todo(addis): stop this from being called several times per image
                     // Maybe load all of them with URIs then draw image using that instead
                     self.current_image =
                         Some(ctx.load_texture("screenshot", x, Default::default()));
-                    self.current_image_uid = tmp_keyframe.uid;
+                    self.current_image_uid = uid;
                 }
             }
         } else {
@@ -1430,10 +1446,9 @@ impl Sequencer {
                 {
                     keyframe_state[i] = 1; //change keyframe state to playing, highlight
                     if self.current_image_uid != keyframe.uid {
-                        if let Some(screenshot) = &keyframe.screenshot {
-                            let data = screenshot.clone();
+                        if let Some(screenshot) = &self.images.lock().unwrap().get(&keyframe.uid){
                             let x =
-                                ColorImage::from_rgba_unmultiplied([1920, 1080], data.as_slice());
+                                ColorImage::from_rgba_unmultiplied([1920, 1080], &screenshot.as_slice());
                             self.current_image =
                                 Some(ctx.load_texture("screenshot", x, Default::default()));
                             self.current_image_uid = keyframe.uid;
