@@ -212,8 +212,7 @@ impl Sequencer {
                                     });
                                     match index {
                                         Some(index) => {
-                                            let mut keyframe = mouse_keyframes[index].clone();
-                                            mouse_keyframes.remove(index);
+                                            let mut keyframe = mouse_keyframes.remove(index);
                                             keyframe.calculate_duration(dt.as_secs_f32());
                                             Some(keyframe)
                                         }
@@ -233,8 +232,7 @@ impl Sequencer {
                                     });
                                     match index {
                                         Some(index) => {
-                                            let mut keyframe = key_keyframes[index].clone();
-                                            key_keyframes.remove(index);
+                                            let mut keyframe = key_keyframes.remove(index);
                                             keyframe.calculate_duration(dt.as_secs_f32());
                                             Some(keyframe)
                                         }
@@ -370,10 +368,9 @@ impl Sequencer {
         if !self.selected_keyframes.is_empty() {
             self.clip_board.clear();
             for i in 0..keyframes.len() {
-                let keyframe = keyframes[i].clone();
-                let x = self.selected_keyframes.binary_search(&keyframe.uid);
+                let x = self.selected_keyframes.binary_search(&keyframes[i].uid);
                 if x.is_ok() {
-                    self.clip_board.push(keyframe);
+                    self.clip_board.push(keyframes[i].clone());
                 }
             }
         }
@@ -393,8 +390,12 @@ impl Sequencer {
                     kf
                 })
                 .collect();
-            let uids: Vec<uuid::Bytes> = clip_board.clone().into_iter().map(|kf| kf.uid).collect();
-            self.selected_keyframes = uids;
+
+            // Use the new UUIDs as the currently selected keyframes
+            self.selected_keyframes.clear();
+            for i in 0..clip_board.len() {
+                self.selected_keyframes.push(clip_board[i].uid);
+            }
             self.keyframe_state
                 .lock()
                 .unwrap()
@@ -695,12 +696,11 @@ impl Sequencer {
                             self.clip_board.clear();
                             // Loop through all keyframes
                             for i in 0..keyframes.len() {
-                                let keyframe = keyframes[i].clone();
                                 // Check if the current keyframe is selected
-                                let x = self.selected_keyframes.binary_search(&keyframe.uid);
+                                let x = self.selected_keyframes.binary_search(&keyframes[i].uid);
                                 if x.is_ok() {
                                     // Add to clip_board if so..
-                                    self.clip_board.push(keyframe);
+                                    self.clip_board.push(keyframes[i].clone());
                                 }
                             }
                         }
@@ -725,7 +725,10 @@ impl Sequencer {
                                 })
                                 .collect();
                             // Use the new UUIDs as the currently selected keyframes
-                            self.selected_keyframes = clip_board.iter().map(|kf| kf.uid).collect();
+                            self.selected_keyframes.clear();
+                            for i in 0..clip_board.len() {
+                                self.selected_keyframes.push(clip_board[i].uid);
+                            }
                             // Update keyframe_state to be all unselected (this will be updated with the new selected_keyframes later)
                             self.keyframe_state
                                 .lock()
@@ -1379,8 +1382,8 @@ impl Sequencer {
             let tmp_keyframe = &keyframes[keyframes.len() - index - 1];
             if self.current_image_uid != tmp_keyframe.uid {
                 if let Some(screenshot) = &tmp_keyframe.screenshot {
-                    let data = screenshot.clone();
-                    let x = ColorImage::from_rgba_unmultiplied([1920, 1080], data.as_slice());
+                    let x =
+                        ColorImage::from_rgba_unmultiplied([1920, 1080], &screenshot.as_slice());
                     // Todo(addis): stop this from being called several times per image
                     // Maybe load all of them with URIs then draw image using that instead
                     self.current_image =
@@ -1433,17 +1436,24 @@ impl Sequencer {
                                 ColorImage::from_rgba_unmultiplied([1920, 1080], data.as_slice());
                             self.current_image =
                                 Some(ctx.load_texture("screenshot", x, Default::default()));
-                            self.current_image_uid = keyframe.uid.clone();
+                            self.current_image_uid = keyframe.uid;
                         }
                     }
+                    // Checks if the keyframe has changed since the playhead moved
                     if current_keyframe_state != keyframe_state[i] {
+                        // If so and the sequencer is playing
                         if play {
                             handle_playing_keyframe(keyframe, true, offset);
                         }
                     }
                 } else {
-                    keyframe_state[i] = 0; //change keyframe state to not playing, no highlight
+                    // Unhighlight an already highlighted keyframe making sure to avoid selected keyframes
+                    if keyframe_state[i] == 1 {
+                        keyframe_state[i] = 0; //change keyframe state to not playing, no highlight
+                    }
+                    // Checks if the keyframe has changed since the playhead moved
                     if current_keyframe_state != keyframe_state[i] {
+                        // If so and the sequencer is playing
                         if play {
                             handle_playing_keyframe(keyframe, false, offset);
                         }
@@ -1457,9 +1467,9 @@ impl Sequencer {
         *last_instant = now;
     }
 }
-/// Simulates a given keyframe
+/// Simulates the given keyframe
 ///
-/// `start` decides whether it is a keypress or release
+/// `start` decides whether to treat this as the start or end of a keyframe
 fn handle_playing_keyframe(keyframe: &Keyframe, start: bool, offset: Vec2) {
     match &keyframe.keyframe_type {
         KeyframeType::KeyBtn(key) => {
