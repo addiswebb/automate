@@ -1,5 +1,24 @@
 # automate
 
-Tool to record and play back user actions intended to automate repetitive and tedious tasks otherwise done by a human.
+![Build Status](https://github.com/addiswebb/automate/actions/workflows/rust.yml/badge.svg)
 
-> automate is unlicensed
+---
+Automate is a tool designed to record and play back user actions intended to automate repetitive and tedious tasks otherwise done by a slowly and more error prone by a human.
+<div align="center">
+  <img src="https://github.com/user-attachments/assets/6ce0a379-2739-49cb-94fc-54709c958b90" width="500">
+</div>
+
+  
+
+## Quick start
+Go to the latest [release](https://github.com/addiswebb/automate/releases) and follow the **Install** instructions
+
+## Goals
+* Quick and easy to setup
+* Reliable and safe
+* Use Sub-image search to reliably select desired inputs
+* Use Object Recognition to reliably select desired inputs
+
+---
+
+> automate is unlicensed, that means its mine, not yours.
