@@ -369,39 +369,50 @@ impl Sequencer {
         let keyframes = self.keyframes.lock().unwrap();
         if !self.selected_keyframes.is_empty() {
             self.clip_board.clear();
+            let now = Instant::now();
             for i in 0..keyframes.len() {
                 let x = self.selected_keyframes.binary_search(&keyframes[i].uid);
                 if x.is_ok() {
                     self.clip_board.push(keyframes[i].clone());
                 }
             }
+            println!("{:?}", now.elapsed());
         }
     }
     ///Paste the clipboard
     pub fn paste(&mut self) {
+        // Todo(addis): this only copies the keyframes, not their respective images (easy fix but idk brev)
         if !self.clip_board.is_empty() {
+            let mut images = self.images.lock().unwrap();
+
+            // Selected keyframes will be reset and then filled with the new keyframes
+            self.selected_keyframes.clear();
+            // Used to update the state for new keyframes
+            let mut keyframe_state = self.keyframe_state.lock().unwrap();
+
             let mut clip_board: Vec<Keyframe> = self
                 .clip_board
                 .clone()
                 .into_iter()
                 .map(|mut kf| {
                     // Shift them all forward slightly so its clear what has been copied
-                    kf.timestamp += 0.1;
-                    // Change the UUIDs for the copied keyframes
-                    kf.uid = uuid::Uuid::new_v4().to_bytes_le();
+                    kf.timestamp += 1.;
+                    // Change the UIDs for the copied keyframes
+                    let new_uid = Uuid::new_v4().to_bytes_le();
+                    // Check if the keyframe had an image, clone it with the new UID if so
+                    if let Some(image) = images.get(&kf.uid).cloned() {
+                        images.insert(new_uid, image);
+                    }
+                    // Update the UID so there are no duplicates
+                    kf.uid = new_uid;
+
+                    // Use the new UUIDs as the currently selected keyframes
+                    self.selected_keyframes.push(new_uid);
+                    keyframe_state.push(0);
                     kf
                 })
                 .collect();
 
-            // Use the new UUIDs as the currently selected keyframes
-            self.selected_keyframes.clear();
-            for i in 0..clip_board.len() {
-                self.selected_keyframes.push(clip_board[i].uid);
-            }
-            self.keyframe_state
-                .lock()
-                .unwrap()
-                .append(&mut vec![0; clip_board.len()]);
             self.keyframes.lock().unwrap().append(&mut clip_board);
             // since the keyframes array has changed, it should be resorted
             self.should_sort = true;
@@ -411,26 +422,27 @@ impl Sequencer {
     pub fn cut(&mut self) {
         let mut keyframes = self.keyframes.lock().unwrap();
         self.clip_board.clear();
-        for uid in &self.selected_keyframes {
-            let mut index = 0;
-            for i in 0..keyframes.len() {
-                if keyframes[i].uid == *uid {
-                    index = i;
-                    self.clip_board.push(keyframes[i].clone());
-                    break;
-                }
+
+        for i in (0..keyframes.len()).rev() {
+            let x = self.selected_keyframes.binary_search(&keyframes[i].uid);
+            if x.is_ok() {
+                self.clip_board.push(keyframes[i].clone());
+                keyframes.remove(i);
+                self.keyframe_state.lock().unwrap().remove(i);
             }
-            keyframes.remove(index);
-            self.keyframe_state.lock().unwrap().remove(index);
+        }
+        // Since the clipboard starts empty, if it isnt now that means keyframes were copied and then removed
+
+        if !self.clip_board.is_empty() {
+            self.changed.swap(true, Ordering::Relaxed);
         }
         self.selected_keyframes.clear();
     }
     /// Select all keyframes
     pub fn select_all(&mut self) {
-        let keyframes = self.keyframes.lock().unwrap();
-        for i in 0..keyframes.len() {
-            self.selected_keyframes.push(keyframes[i].uid);
-        }
+        self.keyframes.lock().unwrap().iter().for_each(|kf| {
+            self.selected_keyframes.push(kf.uid);
+        });
     }
     /// Toggle whether the sequencer is recording keystrokes or not
     ///
@@ -480,7 +492,6 @@ impl Sequencer {
             log::info!("Start Recording");
         }
     }
-
     /// Loops through all the sequencer's keyframes and renders them accordingly
     ///
     /// Also handles deleting keyframes due to convenience
@@ -808,7 +819,6 @@ impl Sequencer {
             self.changed.swap(true, Ordering::Relaxed);
         }
     }
-
     /// Handles rendering the control bar
     fn render_control_bar(&mut self, ui: &mut Ui) {
         if ui.button("⏪").on_hover_text("Restart").clicked() {
@@ -885,7 +895,6 @@ impl Sequencer {
             }
         }
     }
-
     /// Render the timeline with numbers and notches
     fn render_timeline(&self, ui: &mut Ui, max_rect: Rect) {
         let pos = time_to_rect(4.0, 0.0, 0.0, ui.spacing().item_spacing, max_rect)
@@ -1130,19 +1139,9 @@ impl Sequencer {
                 ui.separator();
                 //todo: add mouse position
                 ui.checkbox(&mut self.clear_before_recording, "Overwrite Recording");
-                if ui.button("Debug size").clicked(){
-                    println!("u8: {:?}",std::mem::size_of::<u8>());
-                    println!("i16: {:?}",std::mem::size_of::<usize>());
-                    // for keyframe in self.keyframes.lock().unwrap().iter(){
-                    //     println!("Keyframe: {:?}",std::mem::size_of_val::<Keyframe>(keyframe));
-                    // }
-                    let images = self.images.lock().unwrap();
-                    // let x = images.clone();
-                    let last_image = images.values().last().unwrap();
-                    println!("capacity: {:?}",last_image.capacity());
-                    println!("std::mem::size_of_val() {:?}",std::mem::size_of_val::<[u8]>(last_image.as_slice()));
-                    println!("image.len(): {:?}", last_image.len());
-                    // println!("{:?}",images);
+                if ui.button("Debug selection").clicked() {
+                    // println!("{:?}",self.selected_keyframes);
+                    println!("{:?}", self.selected_keyframes.len());
                 }
             });
     }
@@ -1150,6 +1149,7 @@ impl Sequencer {
     pub fn selected_panel(&mut self, ctx: &egui::Context) {
         egui::SidePanel::left("Selected Keyframe")
             .min_width(155.0)
+            .max_width(155.0)
             .resizable(false)
             .show(ctx, |ui| {
                 if let Some(uid) = self.selected_keyframes.last() {
@@ -1205,7 +1205,6 @@ impl Sequencer {
                                 .range(0.00001..=100.0),
                         );
                     });
-
                     ui.small(format!(
                         "UUID: {}",
                         Uuid::from_bytes_le(keyframe.uid).to_string()
@@ -1215,6 +1214,10 @@ impl Sequencer {
                         self.changed.swap(true, Ordering::Relaxed);
                         self.should_sort = true;
                     }
+                } else {
+                    ui.centered_and_justified(|ui| {
+                        ui.small("Select a keyframe to view and edit its details");
+                    });
                 }
             });
     }
@@ -1397,7 +1400,7 @@ impl Sequencer {
             // Since the tmp vec is reversed we need to invert it below
             let uid = keyframes[keyframes.len() - index - 1].uid;
             if self.current_image_uid != uid {
-                if let Some(screenshot) = &self.images.lock().unwrap().get(&uid){
+                if let Some(screenshot) = &self.images.lock().unwrap().get(&uid) {
                     let x =
                         ColorImage::from_rgba_unmultiplied([1920, 1080], &screenshot.as_slice());
                     // Todo(addis): stop this from being called several times per image
@@ -1446,9 +1449,11 @@ impl Sequencer {
                 {
                     keyframe_state[i] = 1; //change keyframe state to playing, highlight
                     if self.current_image_uid != keyframe.uid {
-                        if let Some(screenshot) = &self.images.lock().unwrap().get(&keyframe.uid){
-                            let x =
-                                ColorImage::from_rgba_unmultiplied([1920, 1080], &screenshot.as_slice());
+                        if let Some(screenshot) = &self.images.lock().unwrap().get(&keyframe.uid) {
+                            let x = ColorImage::from_rgba_unmultiplied(
+                                [1920, 1080],
+                                &screenshot.as_slice(),
+                            );
                             self.current_image =
                                 Some(ctx.load_texture("screenshot", x, Default::default()));
                             self.current_image_uid = keyframe.uid;
