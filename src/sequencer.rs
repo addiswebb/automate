@@ -443,9 +443,11 @@ impl Sequencer {
     }
     /// Select all keyframes
     pub fn select_all(&mut self) {
+        self.selected_keyframes.clear();
         self.keyframes.lock().unwrap().iter().for_each(|kf| {
             self.selected_keyframes.push(kf.uid);
         });
+        self.selected_keyframes.sort();
     }
     /// Toggle whether the sequencer is recording keystrokes or not
     ///
@@ -1144,9 +1146,6 @@ impl Sequencer {
                 ui.separator();
                 //todo: add mouse position
                 ui.checkbox(&mut self.clear_before_recording, "Overwrite Recording");
-                if ui.button("Debug selection").clicked() {
-                    println!("{:?}", self.selected_keyframes);
-                }
             });
     }
     /// Renders the editable data of the selected keyframe
