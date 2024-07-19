@@ -76,6 +76,8 @@ pub struct Sequencer {
     current_image_uid: Bytes,
     #[serde(skip)]
     pub images: Arc<Mutex<HashMap<Bytes, Vec<u8>>>>,
+    #[serde(skip)]
+    texture_handles: Vec<TextureHandle>,
 }
 
 impl Sequencer {
@@ -314,6 +316,7 @@ impl Sequencer {
             current_image: None,
             current_image_uid: Uuid::nil().to_bytes_le(),
             images,
+            texture_handles: Vec::new(),
         }
     }
 
@@ -1142,8 +1145,7 @@ impl Sequencer {
                 //todo: add mouse position
                 ui.checkbox(&mut self.clear_before_recording, "Overwrite Recording");
                 if ui.button("Debug selection").clicked() {
-                    // println!("{:?}",self.selected_keyframes);
-                    println!("{:?}", self.selected_keyframes.len());
+                    println!("{:?}", self.selected_keyframes);
                 }
             });
     }
@@ -1403,12 +1405,27 @@ impl Sequencer {
             let uid = keyframes[keyframes.len() - index - 1].uid;
             if self.current_image_uid != uid {
                 if let Some(screenshot) = &self.images.lock().unwrap().get(&uid) {
-                    let x =
-                        ColorImage::from_rgba_unmultiplied([1920, 1080], &screenshot.as_slice());
-                    // Todo(addis): stop this from being called several times per image
-                    // Maybe load all of them with URIs then draw image using that instead
-                    self.current_image =
-                        Some(ctx.load_texture("screenshot", x, Default::default()));
+                    // Check if the texture already exists
+                    if let Some(texture_handle) = self
+                        .texture_handles
+                        .iter()
+                        .find(|h| h.name() == Uuid::from_bytes_le(uid).to_string())
+                    {
+                        self.current_image = Some(texture_handle.clone());
+                    } else {
+                    // Otherwise load it
+                        let x = ColorImage::from_rgba_unmultiplied(
+                            [1920, 1080],
+                            &screenshot.as_slice(),
+                        );
+                        let texture_handle =  ctx.load_texture(
+                            Uuid::from_bytes_le(uid).to_string(),
+                            x,
+                            Default::default(),
+                        );
+                        self.texture_handles.push(texture_handle.clone());
+                        self.current_image = Some(texture_handle);
+                    }
                     self.current_image_uid = uid;
                 }
             }
