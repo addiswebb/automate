@@ -765,17 +765,18 @@ impl Sequencer {
         // Same as copy also deletes
         if cut {
             self.clip_board.clear();
-            for uid in &self.selected_keyframes {
-                let mut index = 0;
-                for i in 0..keyframes.len() {
-                    if keyframes[i].uid == *uid {
-                        index = i;
-                        self.clip_board.push(keyframes[i].clone());
-                        break;
-                    }
+
+            for i in (0..keyframes.len()).rev() {
+                let x = self.selected_keyframes.binary_search(&keyframes[i].uid);
+                if x.is_ok() {
+                    self.clip_board.push(keyframes[i].clone());
+                    keyframes.remove(i);
+                    self.keyframe_state.lock().unwrap().remove(i);
                 }
-                keyframes.remove(index);
-                keyframe_state.remove(index);
+            }
+            // Since the clipboard starts empty, if it isnt now that means keyframes were copied and then removed
+            if !self.clip_board.is_empty() {
+                self.changed.swap(true, Ordering::Relaxed);
             }
             self.selected_keyframes.clear();
         }
@@ -804,6 +805,7 @@ impl Sequencer {
                     }
                     keyframes.remove(index);
                     keyframe_state.remove(index);
+                    self.images.lock().unwrap().remove(uid);
                     last_index = index;
                 }
                 // If there are still keyframes left, we want to select the last one before the selection
