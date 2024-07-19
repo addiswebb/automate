@@ -583,17 +583,17 @@ impl Sequencer {
                     .rect(rect, egui::Rounding::same(2.0), color, stroke);
 
                 // Checks if it is worth displaying a label for the keyframe based of its width
-                if rect.width() > 10.0 {
-                    let label = format!(
-                        "{}",
-                        match &keyframes[i].keyframe_type {
-                            KeyframeType::KeyBtn(key) => key_to_char(key),
-                            KeyframeType::MouseBtn(btn) => button_to_char(btn),
-                            KeyframeType::MouseMove(_) => "".to_string(),
-                            KeyframeType::Scroll(delta) => scroll_to_char(delta),
-                            KeyframeType::Wait(secs) => format!("{}s", secs).to_string(),
-                        }
-                    );
+                let label = format!(
+                    "{}",
+                    match &keyframes[i].keyframe_type {
+                        KeyframeType::KeyBtn(key) => key_to_char(key),
+                        KeyframeType::MouseBtn(btn) => button_to_char(btn),
+                        KeyframeType::MouseMove(_) => "".to_string(),
+                        KeyframeType::Scroll(delta) => scroll_to_char(delta),
+                        KeyframeType::Wait(secs) => format!("{}s", secs).to_string(),
+                    }
+                );
+                if rect.width() > label.len() as f32 * 10. {
                     ui.painter().text(
                         rect.center(),
                         Align2::CENTER_CENTER,
@@ -1423,44 +1423,48 @@ impl Sequencer {
                     break;
                 }
             }
+
             keyframe_state[index] = 2; // 2 == selected/highlighted (orange)
         }
 
-        // Code to get the mose recently selected keyframe and display it's image if possible, otherwise show start/end image
-        let mut tmp = keyframe_state.clone();
-        tmp.reverse();
-        // Finds the first selected keyframe state in the list (effectivly the last keyframe)
-        let x = tmp.iter().position(|&state| state == 2);
-        if let Some(index) = x {
-            // Since the tmp vec is reversed we need to invert it below
-            let uid = keyframes[keyframes.len() - index - 1].uid;
-            if self.current_image_uid != uid {
-                if let Some(screenshot) = &self.images.lock().unwrap().get(&uid) {
-                    // Check if the texture already exists
-                    if let Some(texture_handle) = self
-                        .texture_handles
-                        .iter()
-                        .find(|h| h.name() == Uuid::from_bytes_le(uid).to_string())
-                    {
-                        self.current_image = Some(texture_handle.clone());
-                    } else {
-                        // Otherwise load it
-                        let x = ColorImage::from_rgba_unmultiplied(
-                            [1920, 1080],
-                            &screenshot.as_slice(),
-                        );
-                        let texture_handle = ctx.load_texture(
-                            Uuid::from_bytes_le(uid).to_string(),
-                            x,
-                            Default::default(),
-                        );
-                        self.texture_handles.push(texture_handle.clone());
-                        self.current_image = Some(texture_handle);
+        if self.selected_keyframes.is_empty() {
+            // Get the first keyframe with an image and show that
+        } else {
+            // Code to get the mose recently selected keyframe and display it's image if possible, otherwise show start/end image
+            let mut tmp = keyframe_state.clone();
+            tmp.reverse();
+            // Finds the first selected keyframe state in the list (effectivly the last keyframe)
+            let x = tmp.iter().position(|&state| state == 2);
+            if let Some(index) = x {
+                // Since the tmp vec is reversed we need to invert it below
+                let uid = keyframes[keyframes.len() - index - 1].uid;
+                if self.current_image_uid != uid {
+                    if let Some(screenshot) = &self.images.lock().unwrap().get(&uid) {
+                        // Check if the texture already exists
+                        if let Some(texture_handle) = self
+                            .texture_handles
+                            .iter()
+                            .find(|h| h.name() == Uuid::from_bytes_le(uid).to_string())
+                        {
+                            self.current_image = Some(texture_handle.clone());
+                        } else {
+                            // Otherwise load it
+                            let x = ColorImage::from_rgba_unmultiplied(
+                                [1920, 1080],
+                                &screenshot.as_slice(),
+                            );
+                            let texture_handle = ctx.load_texture(
+                                Uuid::from_bytes_le(uid).to_string(),
+                                x,
+                                Default::default(),
+                            );
+                            self.texture_handles.push(texture_handle.clone());
+                            self.current_image = Some(texture_handle);
+                        }
+                        self.current_image_uid = uid;
                     }
-                    self.current_image_uid = uid;
                 }
             }
-        } else {
         }
 
         let now = Instant::now();
@@ -1490,6 +1494,7 @@ impl Sequencer {
             //The playhead has moved if the current time is not equal to the previous time
             // Todo(addis): create a slice of keyframes to come (without already played keyframes), to skip checking needlessly when playing
             // Todo(addis): or create a current and next keyframe tuple and only check those, then update it if one is handled
+            // Idea: v <-- change the 0 to a most recently finished keyframe index variable
             for i in 0..keyframes.len() {
                 let keyframe = &keyframes[i];
                 let current_keyframe_state = keyframe_state[i]; //1 if playing, 0 if not
@@ -1498,14 +1503,30 @@ impl Sequencer {
                     && self.time <= keyframe.timestamp + keyframe.duration
                 {
                     keyframe_state[i] = 1; //change keyframe state to playing, highlight
+
+                    // Set the current image when playing if its not already set to the current image
                     if self.current_image_uid != keyframe.uid {
                         if let Some(screenshot) = &self.images.lock().unwrap().get(&keyframe.uid) {
-                            let x = ColorImage::from_rgba_unmultiplied(
-                                [1920, 1080],
-                                &screenshot.as_slice(),
-                            );
-                            self.current_image =
-                                Some(ctx.load_texture("screenshot", x, Default::default()));
+                            if let Some(texture_handle) = self
+                                .texture_handles
+                                .iter()
+                                .find(|h| h.name() == Uuid::from_bytes_le(keyframe.uid).to_string())
+                            {
+                                self.current_image = Some(texture_handle.clone());
+                            } else {
+                                // Otherwise load it
+                                let x = ColorImage::from_rgba_unmultiplied(
+                                    [1920, 1080],
+                                    &screenshot.as_slice(),
+                                );
+                                let texture_handle = ctx.load_texture(
+                                    Uuid::from_bytes_le(keyframe.uid).to_string(),
+                                    x,
+                                    Default::default(),
+                                );
+                                self.texture_handles.push(texture_handle.clone());
+                                self.current_image = Some(texture_handle);
+                            }
                             self.current_image_uid = keyframe.uid;
                         }
                     }
