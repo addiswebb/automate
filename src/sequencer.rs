@@ -771,7 +771,6 @@ impl Sequencer {
                                 })
                                 .collect();
 
-
                             // Since the clipboard starts empty, if it isnt now that means keyframes were copied and then removed
                             if !self.clip_board.is_empty() {
                                 self.changed.swap(true, Ordering::Relaxed);

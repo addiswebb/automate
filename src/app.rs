@@ -8,10 +8,7 @@ use std::{
     time::Instant,
 };
 use uuid::Uuid;
-use zip::{
-    write::SimpleFileOptions,
-    ZipArchive, ZipWriter,
-};
+use zip::{write::SimpleFileOptions, ZipArchive, ZipWriter};
 
 use crate::{
     keyframe::{Keyframe, KeyframeType},
@@ -101,33 +98,34 @@ impl App {
                 .to_string();
         }
 
-        let state = bincode::serialize(&self.sequencer.save_to_state()).unwrap();
-        // save the current file (if it was "untitled.auto", it has now been replaced)
+        if let Ok(state) = bincode::serialize(&self.sequencer.save_to_state()) {
+            // save the current file (if it was "untitled.auto", it has now been replaced)
+            let now = Instant::now();
+            let file = File::create(self.file.clone());
+            if let Ok(file) = file {
+                // write
+                let mut zip = ZipWriter::new(file);
+                let options =
+                    SimpleFileOptions::default().compression_method(zip::CompressionMethod::Stored);
+                zip.start_file("data", options).unwrap();
+                zip.write_all(&state).unwrap();
 
-        let now = Instant::now();
-        let file = File::create(self.file.clone());
-        if let Ok(file) = file {
-            // write
-            let mut zip = ZipWriter::new(file);
-            let options = SimpleFileOptions::default().compression_method(zip::CompressionMethod::Stored);
-            zip.start_file("data", options).unwrap();
-            zip.write_all(&state).unwrap();
+                let images = self.sequencer.images.lock().unwrap();
+                for uid in images.keys() {
+                    zip.start_file(Uuid::from_bytes_le(*uid).to_string(), options)
+                        .unwrap();
+                    zip.write_all(images.get(uid).unwrap().as_slice()).unwrap();
+                }
+                zip.finish().unwrap();
 
-            let images = self.sequencer.images.lock().unwrap();
-            for uid in images.keys() {
-                zip.start_file(Uuid::from_bytes_le(*uid).to_string(), options)
-                    .unwrap();
-                zip.write_all(images.get(uid).unwrap().as_slice()).unwrap();
+                // file.write_all(&data).unwrap();
+                self.sequencer.loaded_file = self.file.clone();
+                self.file_uptodate = true;
+                self.sequencer.changed.swap(false, Ordering::Relaxed);
+                log::info!("Save file: {:?} - {:?}", self.file, now.elapsed());
+            } else {
+                log::error!("Failed to save {:?}", file);
             }
-            zip.finish().unwrap();
-
-            // file.write_all(&data).unwrap();
-            self.sequencer.loaded_file = self.file.clone();
-            self.file_uptodate = true;
-            self.sequencer.changed.swap(false, Ordering::Relaxed);
-            log::info!("Save file: {:?} - {:?}", self.file, now.elapsed());
-        } else {
-            log::error!("Failed to save {:?}", file);
         }
     }
     /// Open a file using the native file dialog
@@ -150,7 +148,7 @@ impl App {
             let reader = BufReader::new(file);
             let mut zip = ZipArchive::new(reader).unwrap();
 
-            // File of index 0 stores keyframes and general sequencer state 
+            // File of index 0 stores keyframes and general sequencer state
             let mut state = zip.by_index(0).unwrap();
             let mut bytes = Vec::new();
             state.read_to_end(&mut bytes).unwrap();
@@ -161,12 +159,16 @@ impl App {
                 self.file_uptodate = true;
                 std::mem::drop(state);
                 // Load images, all other entries (excluding index: 0) are files named the UUID of the keyframe their image refers to
-                for i in 1..zip.len(){
+                for i in 1..zip.len() {
                     let mut image = zip.by_index(i).unwrap();
                     let mut bytes = Vec::new();
                     image.read_to_end(&mut bytes).unwrap();
-                    self.sequencer.images.lock().unwrap().insert(Uuid::parse_str(image.name()).unwrap().to_bytes_le(), bytes);
-                } 
+                    self.sequencer
+                        .images
+                        .lock()
+                        .unwrap()
+                        .insert(Uuid::parse_str(image.name()).unwrap().to_bytes_le(), bytes);
+                }
                 log::info!("Loaded file: {:?} - {:?}", path, now.elapsed());
             } else {
                 self.new_file();
@@ -259,12 +261,12 @@ impl eframe::App for App {
                     let mut last_index = 0;
 
                     if !keyframe_state.is_empty() {
-                        if !self.sequencer.selected_keyframes.is_empty() {
-                            let last_uuid =
-                                self.sequencer.selected_keyframes.last().unwrap().clone();
+                        if let Some(last_uuid) =
+                            self.sequencer.selected_keyframes.last()
+                        {
                             let mut next = 0;
                             for i in 0..keyframes.len() {
-                                if keyframes[i].uid == last_uuid {
+                                if keyframes[i].uid == *last_uuid {
                                     next = i;
                                     break;
                                 }
@@ -562,7 +564,8 @@ impl eframe::App for App {
                                                 // Keyframe kind of 255 is used only for calibrating monitor offset
                                                 if last.kind == u8::MAX{
                                                     if let KeyframeType::MouseMove(pos) = last.keyframe_type{
-                                                        self.settings.offset = pos;
+                                                        // Invert the pos so it brings us back to (0,0)
+                                                        self.settings.offset = pos * egui::Vec2::new(-1.,-1.);
                                                     }
                                                 }
                                             }
