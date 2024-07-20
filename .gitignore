@@ -14,3 +14,4 @@ Cargo.lock
 
 # Ignore all auto files created within the directory
 *.auto
+/.idea

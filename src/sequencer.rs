@@ -19,7 +19,7 @@ pub struct SequencerState {
     pub keyframes: Vec<Keyframe>,
     // pub images: HashMap<Bytes, Vec<u8>>,
 }
-/// We derive Deserialize/Serialize so we can persist app state on shutdown.
+/// We derive Deserialize/Serialize, so we can persist app state on shutdown.
 #[derive(Deserialize, Serialize)]
 #[serde(default)] // if we add new fields, give them default values when deserializing old state
 pub struct Sequencer {
@@ -40,7 +40,7 @@ pub struct Sequencer {
     #[serde(skip)]
     pub keyframes: Arc<Mutex<Vec<Keyframe>>>,
     #[serde(skip)]
-    pub selected_keyframes: Vec<uuid::Bytes>,
+    pub selected_keyframes: Vec<Bytes>,
     #[serde(skip)]
     pub keyframe_state: Arc<Mutex<Vec<usize>>>,
     scale: f32, // egui coord points:seconds
@@ -141,7 +141,7 @@ impl Sequencer {
                         let is_recording = shared_rec.load(Ordering::Relaxed);
                         let mut tmp_keyframe = None;
                         let dt = Instant::now().duration_since(*shared_instant.lock().unwrap());
-                        // Handle global keybinds without focus
+                        // Handle global keybindings without focus
                         match &event.event_type {
                             rdev::EventType::KeyRelease(key) => {
                                 match key {
@@ -388,7 +388,7 @@ impl Sequencer {
     }
     ///Paste the clipboard
     pub fn paste(&mut self) {
-        // Todo(addis): this only copies the keyframes, not their respective images (easy fix but idk brev)
+        // Todo(addis): this only copies the keyframes, not their respective images (easy fix but idk)
         if !self.clip_board.is_empty() {
             let mut images = self.images.lock().unwrap();
 
@@ -444,7 +444,7 @@ impl Sequencer {
             self.clip_board.len(),
             now.elapsed()
         );
-        // Since the clipboard starts empty, if it isnt now that means keyframes were copied and then removed
+        // Since the clipboard starts empty, if it isn't now that means keyframes were copied and then removed
 
         if !self.clip_board.is_empty() {
             self.changed.swap(true, Ordering::Relaxed);
@@ -484,8 +484,8 @@ impl Sequencer {
                         screenshot();
                     }
                 }
-                std::mem::drop(keyframes);
-                std::mem::drop(keyframe_state);
+                drop(keyframes);
+                drop(keyframe_state);
                 if self.clear_before_recording {
                     self.time = 0.;
                 }
@@ -517,7 +517,7 @@ impl Sequencer {
         let mut cut = false;
         for i in 0..keyframes.len() {
             let offset_y = ui.spacing().item_spacing.y;
-            // Determine which row to draw the keframe on depending on its type
+            // Determine which row to draw the keyframe on depending on its type
             let y = match keyframes[i].kind {
                 0 => offset_y,
                 1 => ROW_HEIGHT * 2. + 9.,
@@ -604,11 +604,11 @@ impl Sequencer {
                 }
                 // Handles the user clicking a keyframe
                 if keyframe.clicked() {
-                    // Check whether there was more than one keyframe selected before clearing the vec, (used for edgecase)
+                    // Check whether there was more than one keyframe selected before clearing the vec, (used for edge cases)
                     let was_empty = self.selected_keyframes.is_empty();
                     // Attempt to find the selected keyframe using its uuid
                     let x = self.selected_keyframes.binary_search(&keyframes[i].uid);
-                    // If not ctrl clicked, only a single keyframe can ever be selected so we clear the vec early
+                    // If not ctrl clicked, only a single keyframe can ever be selected, so we clear the vec early
                     if !ctrl {
                         self.selected_keyframes.clear();
                     }
@@ -628,7 +628,7 @@ impl Sequencer {
                         // not already selected
                         Err(index) => {
                             if !ctrl {
-                                // If not already selected, select it and push (note we use push instead of insert here because the vec is empty and it will be placed at index 0 by default)
+                                // If not already selected, select it and push (note we use push instead of insert here because the vec is empty, and it will be placed at index 0 by default)
                                 self.selected_keyframes.push(keyframes[i].uid)
                             } else {
                                 // If ctrl is pressed, then insert the keyframe while keeping order (note we need a sorted vec to allow for binary search later on)
@@ -704,7 +704,7 @@ impl Sequencer {
                 });
                 // let uid = keyframes[i].uid;
                 keyframe.context_menu(|ui| {
-                    // Right clicking a keyframe does not guarrantee that it is selected, so we make sure here
+                    // Right-clicking a keyframe does not guarantee that it is selected, so we make sure here
                     let index = self.selected_keyframes.binary_search(&keyframes[i].uid);
                     if let Err(index) = index {
                         self.selected_keyframes.insert(index, keyframes[i].uid);
@@ -771,7 +771,7 @@ impl Sequencer {
                                 })
                                 .collect();
 
-                            // Since the clipboard starts empty, if it isnt now that means keyframes were copied and then removed
+                            // Since the clipboard starts empty, if it isn't now that means keyframes were copied and then removed
                             if !self.clip_board.is_empty() {
                                 self.changed.swap(true, Ordering::Relaxed);
                             }
@@ -805,7 +805,7 @@ impl Sequencer {
                 self.clip_board.len(),
                 now.elapsed()
             );
-            // Since the clipboard starts empty, if it isnt now that means keyframes were copied and then removed
+            // Since the clipboard starts empty, if it isn't now that means keyframes were copied and then removed
             if !self.clip_board.is_empty() {
                 self.changed.swap(true, Ordering::Relaxed);
             }
@@ -954,16 +954,16 @@ impl Sequencer {
                 pos + vec2(scale(ui, i as f32 - self.scroll, self.scale), 0.0) + vec2(0., y_offset);
             painter.text(
                 point,
-                egui::Align2::CENTER_TOP,
+                Align2::CENTER_TOP,
                 format!("{}", i),
-                egui::FontId::monospace(font_size),
+                FontId::monospace(font_size),
                 // egui::FontId::monospace(12.0),
                 egui::Color32::GRAY,
             );
             painter.line_segment(
                 [
                     pos2(point.x, max_rect.max.y),
-                    pos2(point.x, max_rect.max.y) + egui::vec2(0.0, -6.0),
+                    pos2(point.x, max_rect.max.y) + vec2(0.0, -6.0),
                 ],
                 egui::Stroke::new(1.0, egui::Color32::GRAY),
             );
@@ -1018,13 +1018,13 @@ impl Sequencer {
             self.drag_start = pos2(0., 0.);
             self.dragging = false;
         }
-        // clip the playhead so it is not visible when off the timeline
+        // clip the playhead, so it is not visible when off the timeline
         let painter = ui.painter().with_clip_rect(rect.expand2(vec2(0., 4.0)));
         painter.text(
-            p1 - egui::vec2(0.0, 3.0),
-            egui::Align2::CENTER_TOP,
+            p1 - vec2(0.0, 3.0),
+            Align2::CENTER_TOP,
             "⏷",
-            egui::FontId::monospace(10.0),
+            FontId::monospace(10.0),
             egui::Color32::LIGHT_RED,
         );
         painter.line_segment([p1, p2], egui::Stroke::new(1.0, egui::Color32::LIGHT_RED));
@@ -1430,10 +1430,10 @@ impl Sequencer {
         if self.selected_keyframes.is_empty() {
             // Get the first keyframe with an image and show that
         } else {
-            // Code to get the mose recently selected keyframe and display it's image if possible, otherwise show start/end image
+            // Code to get the mose recently selected keyframe and display its image if possible, otherwise show start/end image
             let mut tmp = keyframe_state.clone();
             tmp.reverse();
-            // Finds the first selected keyframe state in the list (effectivly the last keyframe)
+            // Finds the first selected keyframe state in the list (effectively the last keyframe)
             let x = tmp.iter().position(|&state| state == 2);
             if let Some(index) = x {
                 // Since the tmp vec is reversed we need to invert it below
@@ -1504,7 +1504,7 @@ impl Sequencer {
                 {
                     keyframe_state[i] = 1; //change keyframe state to playing, highlight
 
-                    // Set the current image when playing if its not already set to the current image
+                    // Set the current image when playing if it's not already set to the current image
                     if self.current_image_uid != keyframe.uid {
                         if let Some(screenshot) = &self.images.lock().unwrap().get(&keyframe.uid) {
                             if let Some(texture_handle) = self
@@ -1588,22 +1588,22 @@ fn handle_playing_keyframe(keyframe: &Keyframe, start: bool, offset: Vec2) {
                     y: (pos.y + offset.y) as f64,
                 })
                 .expect(
-                    "Failed to simulate Mouse Movement (Probably due to an anticheat installed)",
+                    "Failed to simulate Mouse Movement (Probably due to an anti-cheat installed)",
                 );
             }
         }
         KeyframeType::Scroll(delta) => {
             if start {
                 rdev::simulate(&rdev::EventType::Wheel {
-                    delta_x: (delta.x) as i64,
-                    delta_y: (delta.y) as i64,
+                    delta_x: delta.x as i64,
+                    delta_y: delta.y as i64,
                 })
-                .expect("Failed to simulate Mouse Scroll (Possibly due to anticheat)");
+                .expect("Failed to simulate Mouse Scroll (Possibly due to anti-cheat)");
             }
         }
         KeyframeType::Wait(secs) => {
             if start {
-                // Todo(addis): multiply dt so that it takes *secs* seconds to traverse 1 second of sequecer time
+                // Todo(addis): multiply dt so that it takes *secs* seconds to traverse 1 second of sequencer time
                 // This will remove the need to block the thread and freeze the application, and keep the playhead moving in a slow but satisfying way
                 thread::sleep(Duration::from_secs_f32(secs.clone()));
             }
