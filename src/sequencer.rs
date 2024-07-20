@@ -107,9 +107,7 @@ impl Sequencer {
 
         let mut was_recording = false;
 
-        // Todo(addis): combine key and mouse vecs into one
-        let mut mouse_keyframes = vec![];
-        let mut key_keyframes = vec![];
+        let mut tmp_keyframes = vec![];
 
         let mut previous_mouse_position = Vec2::ZERO;
         // this needs to get reset every time recording starts
@@ -151,7 +149,7 @@ impl Sequencer {
                                             shared_rec.swap(false, Ordering::Relaxed);
                                         } else {
                                             shared_rec.swap(true, Ordering::Relaxed);
-                                            key_keyframes = vec![];
+                                            tmp_keyframes = vec![];
                                             mouse_move_count = 20;
                                             previous_mouse_position = Vec2::ZERO;
                                         }
@@ -189,7 +187,7 @@ impl Sequencer {
                                             .unwrap()
                                             .insert(keyframe.uid, screenshot);
                                     }
-                                    mouse_keyframes.push(keyframe);
+                                    tmp_keyframes.push(keyframe);
                                     None
                                 }
                                 rdev::EventType::KeyPress(key) => {
@@ -201,12 +199,12 @@ impl Sequencer {
                                             .unwrap()
                                             .insert(keyframe.uid, screenshot);
                                     }
-                                    key_keyframes.push(keyframe);
+                                    tmp_keyframes.push(keyframe);
                                     None
                                 }
                                 // Button & Key Release events search for the matching keypress event to create a full keyframe
                                 rdev::EventType::ButtonRelease(btn) => {
-                                    let index = mouse_keyframes.iter().position(|kf| {
+                                    let index = tmp_keyframes.iter().position(|kf| {
                                         if let KeyframeType::MouseBtn(b) = kf.keyframe_type {
                                             b == *btn
                                         } else {
@@ -215,7 +213,7 @@ impl Sequencer {
                                     });
                                     match index {
                                         Some(index) => {
-                                            let mut keyframe = mouse_keyframes.remove(index);
+                                            let mut keyframe = tmp_keyframes.remove(index);
                                             keyframe.calculate_duration(dt.as_secs_f32());
                                             Some(keyframe)
                                         }
@@ -226,7 +224,7 @@ impl Sequencer {
                                     }
                                 }
                                 rdev::EventType::KeyRelease(key) => {
-                                    let index = key_keyframes.iter().position(|kf| {
+                                    let index = tmp_keyframes.iter().position(|kf| {
                                         if let KeyframeType::KeyBtn(k) = kf.keyframe_type {
                                             k == *key
                                         } else {
@@ -235,7 +233,7 @@ impl Sequencer {
                                     });
                                     match index {
                                         Some(index) => {
-                                            let mut keyframe = key_keyframes.remove(index);
+                                            let mut keyframe = tmp_keyframes.remove(index);
                                             keyframe.calculate_duration(dt.as_secs_f32());
                                             Some(keyframe)
                                         }
@@ -702,6 +700,7 @@ impl Sequencer {
                         delete = true;
                     }
                 });
+
                 // let uid = keyframes[i].uid;
                 keyframe.context_menu(|ui| {
                     // Right-clicking a keyframe does not guarantee that it is selected, so we make sure here
@@ -721,6 +720,7 @@ impl Sequencer {
                         .add(egui::Button::new("Copy").shortcut_text("Ctrl+C"))
                         .clicked()
                     {
+                        // self.copy();
                         if !self.selected_keyframes.is_empty() {
                             self.clip_board.clear();
                             let now = Instant::now();
