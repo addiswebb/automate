@@ -317,7 +317,6 @@ impl Sequencer {
             texture_handles: Vec::new(),
         }
     }
-
     /// Returns the current time where the playhead is
     pub fn get_time(&self) -> f32 {
         self.time
@@ -343,8 +342,12 @@ impl Sequencer {
     }
     /// Toggles whether the sequencer is playing or not
     pub fn toggle_play(&mut self) {
-        self.play
-            .swap(!self.play.load(Ordering::Relaxed), Ordering::Relaxed);
+        let is_playing = self.play.load(Ordering::Relaxed);
+        // If its not already playing, it will so we need to empty the selected keyframes
+        if !is_playing {
+            self.selected_keyframes.clear();
+        }
+        self.play.swap(!is_playing, Ordering::Relaxed);
     }
     /// Reset the time and playhead to 0 seconds
     pub fn reset_time(&mut self) {
@@ -1178,6 +1181,9 @@ impl Sequencer {
                 ui.separator();
                 //todo: add mouse position
                 ui.checkbox(&mut self.clear_before_recording, "Overwrite Recording");
+                if ui.button("Cull Minor Movement").clicked() {
+                    self.cull_minor_movement_keyframes();
+                }
             });
     }
     /// Renders the editable data of the selected keyframe
@@ -1426,7 +1432,7 @@ impl Sequencer {
 
             keyframe_state[index] = 2; // 2 == selected/highlighted (orange)
         }
-
+        // Handle selecting the correct keyframe screenshot
         if self.selected_keyframes.is_empty() {
             // Get the first keyframe with an image and show that
         } else {
@@ -1556,6 +1562,34 @@ impl Sequencer {
         //update previous time to keep track of when time changes
         self.prev_time = self.time;
         *last_instant = now;
+    }
+    fn cull_minor_movement_keyframes(&mut self) {
+        let mut keyframes = self.keyframes.lock().unwrap();
+        let mut keyframe_state = self.keyframe_state.lock().unwrap();
+        let mut previous_move_keyframe: Option<usize> = None;
+        let mut keyframes_to_remove: Vec<usize> = Vec::new();
+        for i in 0..keyframes.len() {
+            // If the current keyframe is a movement
+            if keyframes[i].kind == 1 {
+                // And the previous was a movement, remove the previous
+                if let Some(index) = previous_move_keyframe {
+                    // Remove the previous as it essentially does nothing (its minor)
+                    keyframes_to_remove.push(index);
+                }
+                // Update the previous move keyframe to be the current move keyframe
+                previous_move_keyframe = Some(i);
+            } else {
+                // If its not a move keyframe
+                previous_move_keyframe = None;
+            }
+        }
+        if !keyframes_to_remove.is_empty() {
+            self.changed.swap(true, Ordering::Relaxed);
+        }
+        for i in keyframes_to_remove.iter().rev() {
+            keyframes.remove(*i);
+            keyframe_state.remove(*i);
+        }
     }
 }
 /// Simulates the given keyframe
