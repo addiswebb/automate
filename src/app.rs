@@ -85,6 +85,10 @@ impl App {
     ///
     /// Overwrites the current file if it already exists otherwise allows the creation of a new file.
     fn save_file(&mut self) {
+        // No need to save if the file is up to date (Just ensure this is accurate)
+        if self.file_uptodate {
+            return;
+        }
         if self.file == "untitled.auto" {
             self.file = FileDialog::new()
                 .add_filter("automate", &["auto"])
@@ -261,9 +265,7 @@ impl eframe::App for App {
                     let mut last_index = 0;
 
                     if !keyframe_state.is_empty() {
-                        if let Some(last_uuid) =
-                            self.sequencer.selected_keyframes.last()
-                        {
+                        if let Some(last_uuid) = self.sequencer.selected_keyframes.last() {
                             let mut next = 0;
                             for i in 0..keyframes.len() {
                                 if keyframes[i].uid == *last_uuid {

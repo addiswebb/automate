@@ -364,8 +364,9 @@ impl Sequencer {
     }
     /// Scrolls through the keyframes
     pub fn scroll(&mut self, delta: f32) {
-        let multiplier = 1.0 / 80.0;
-        self.scroll = (self.scroll + delta * multiplier / self.scale).clamp(0., f32::INFINITY);
+        let multiplier = 0.0125;
+        self.scroll = (self.scroll + (delta * multiplier) / self.scale.clamp(0.5, f32::INFINITY))
+            .clamp(0., f32::INFINITY);
     }
     /// Copy the selected keyframes to clipboard
     pub fn copy(&mut self) {
@@ -524,6 +525,7 @@ impl Sequencer {
                 1 => ROW_HEIGHT * 2. + 9.,
                 2 => ROW_HEIGHT + offset_y * 2.,
                 3 => ROW_HEIGHT + offset_y * 2.,
+                5 => offset_y,
                 _ => 0.,
             };
             // Calculate the rect for the keyframe
@@ -569,6 +571,7 @@ impl Sequencer {
                     1 => egui::Color32::from_rgb(95, 186, 213), //Mouse move
                     2 => egui::Color32::LIGHT_GREEN,            //Button Click
                     3 => egui::Color32::LIGHT_YELLOW,           //Scroll
+                    5 => egui::Color32::LIGHT_RED,              //Keyboard
                     _ => egui::Color32::LIGHT_GRAY,
                 };
                 let stroke = match keyframe_state[i] {
@@ -592,6 +595,7 @@ impl Sequencer {
                         KeyframeType::MouseMove(_) => "".to_string(),
                         KeyframeType::Scroll(delta) => scroll_to_char(delta),
                         KeyframeType::Wait(secs) => format!("{}s", secs).to_string(),
+                        KeyframeType::KeyStrokes(keys) => keys_to_string(keys),
                     }
                 );
                 if rect.width() > label.len() as f32 * 10. {
@@ -1184,6 +1188,12 @@ impl Sequencer {
                 if ui.button("Cull Minor Movement").clicked() {
                     self.cull_minor_movement_keyframes();
                 }
+                if ui.button("Combine into keystrokes").clicked() {
+                    self.combine_into_keystrokes();
+                }
+                ui.label(format!("scale: {:?}", self.scale));
+
+                ui.label(format!("scroll: {:?}", self.scroll));
             });
     }
     /// Renders the editable data of the selected keyframe
@@ -1225,6 +1235,10 @@ impl Sequencer {
                         KeyframeType::Wait(secs) => {
                             ui.strong("Wait");
                             ui.label(format!("{:?}s", secs));
+                        }
+                        KeyframeType::KeyStrokes(keys) => {
+                            ui.strong("Key Strokes");
+                            ui.label(keys_to_string(keys));
                         }
                     }
                     // Used later to check if the keyframe was edited
@@ -1591,6 +1605,49 @@ impl Sequencer {
             keyframe_state.remove(*i);
         }
     }
+    fn combine_into_keystrokes(&mut self) {
+        let mut selected_keyframes: Vec<usize> = Vec::new();
+        let mut keyframes = self.keyframes.lock().unwrap();
+        let mut keyframe_state = self.keyframe_state.lock().unwrap();
+        for i in (0..keyframe_state.len()).rev() {
+            // Add it to selected keyframes if it is selected and is a key press
+            if keyframe_state[i] == 2 {
+                if keyframes[i].kind == 0 {
+                    selected_keyframes.push(i);
+                } else {
+                    log::warn!("Tried to combine non key button keyframes into a keystroke");
+                    return;
+                }
+            }
+        }
+        let mut keys: Vec<rdev::Key> = Vec::new();
+        let mut last_index = 0;
+        let mut last_timestamp = 0.;
+        for index in selected_keyframes {
+            last_timestamp = keyframes[index].timestamp;
+            if let KeyframeType::KeyBtn(key) = keyframes[index].keyframe_type {
+                keys.push(key);
+                keyframes.remove(index);
+                keyframe_state.remove(index);
+                last_index = index;
+            }
+        }
+        keys.reverse();
+        if !keys.is_empty() {
+            keyframes.insert(
+                last_index,
+                Keyframe {
+                    timestamp: last_timestamp,
+                    duration: 0.2,
+                    keyframe_type: KeyframeType::KeyStrokes(keys),
+                    kind: 5,
+                    uid: Uuid::new_v4().to_bytes_le(),
+                },
+            );
+            keyframe_state.insert(last_index, 0);
+            self.changed.swap(true, Ordering::Relaxed);
+        }
+    }
 }
 /// Simulates the given keyframe
 ///
@@ -1640,6 +1697,17 @@ fn handle_playing_keyframe(keyframe: &Keyframe, start: bool, offset: Vec2) {
                 // Todo(addis): multiply dt so that it takes *secs* seconds to traverse 1 second of sequencer time
                 // This will remove the need to block the thread and freeze the application, and keep the playhead moving in a slow but satisfying way
                 thread::sleep(Duration::from_secs_f32(secs.clone()));
+            }
+        }
+        KeyframeType::KeyStrokes(keys) => {
+            if start {
+                for key in keys {
+                    rdev::simulate(&rdev::EventType::KeyPress(*key))
+                        .expect("Failed to simulate keypress");
+                    // thread::sleep(Duration::from_secs(0.01));
+                    rdev::simulate(&rdev::EventType::KeyRelease(*key))
+                        .expect("Failed to simulate keypress");
+                }
             }
         }
     }

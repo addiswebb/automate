@@ -44,7 +44,13 @@ pub fn selection_contains_keyframe(selection: &Rect, keyframe: Rect) -> bool {
     }
 }
 
-#[allow(dead_code)]
+pub fn keys_to_string(keys: &Vec<rdev::Key>) -> String {
+    let mut string = String::new();
+    for key in keys {
+        string.push_str(key_to_char(key).as_str());
+    }
+    string
+}
 pub fn strings_to_keys(string: &String) -> Vec<rdev::Key> {
     let mut keys = vec![];
     for x in string.split(' ') {

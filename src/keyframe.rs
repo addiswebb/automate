@@ -2,13 +2,14 @@ use egui::Vec2;
 use serde::{Deserialize, Serialize};
 use uuid::{Bytes, Uuid};
 
-#[derive(Clone, Copy, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum KeyframeType {
-    KeyBtn(rdev::Key),      //0
-    MouseBtn(rdev::Button), //1
-    MouseMove(Vec2),        //2
-    Scroll(Vec2),           //3
-    Wait(f32),              //4
+    KeyBtn(rdev::Key),          //0
+    MouseBtn(rdev::Button),     //1
+    MouseMove(Vec2),            //2
+    Scroll(Vec2),               //3
+    Wait(f32),                  //4
+    KeyStrokes(Vec<rdev::Key>), //5
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
