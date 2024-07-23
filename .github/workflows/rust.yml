@@ -14,11 +14,9 @@ env:
 
 jobs:
   build:
-
     runs-on: windows-latest
-
     steps:
     - uses: actions/checkout@v4
+    - run: choco install llvm opencv
     - name: Build
-      run: choco install llvm opencv
       run: cargo build --verbose
