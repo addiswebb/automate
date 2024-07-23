@@ -8,6 +8,9 @@ on:
 
 env:
   CARGO_TERM_COLOR: always
+  OPENCV_INCLUDE_PATHS: C:\tools\opencv\build\include
+  OPENCV_LINK_LIBS: opencv_world4100
+  OPENCV_LINK_PATHS: C:\tools\opencv\build\x64\vc16\lib
 
 jobs:
   build:
@@ -17,4 +20,5 @@ jobs:
     steps:
     - uses: actions/checkout@v4
     - name: Build
+      run: choco install llvm opencv
       run: cargo build --verbose
