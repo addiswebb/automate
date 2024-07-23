@@ -14,9 +14,21 @@ env:
 
 jobs:
   build:
+    name: "Build automate release"
     runs-on: windows-latest
     steps:
-    - uses: actions/checkout@v4
-    - run: choco install llvm opencv
-    - name: Build
-      run: cargo build --verbose
+      - uses: actions/checkout@v4
+
+      - name: "Configure choco cache"
+        run: choco config set cacheLocation ./.choco-cache
+
+      - uses: actions/cache@v4
+        with:
+          path: ./.choco-cache
+          key: choco-cache
+
+      - name: "Install llvm and opencv via chocolate"
+        run: choco install llvm opencv
+
+      - name: Build
+        run: cargo build --verbose
