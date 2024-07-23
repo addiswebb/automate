@@ -13,7 +13,7 @@ use zip::{write::SimpleFileOptions, ZipArchive, ZipWriter};
 use crate::{
     keyframe::{Keyframe, KeyframeType},
     sequencer::{Sequencer, SequencerState},
-    settings::{Settings, SettingsPage},
+    settings::{MonitorEdge, Settings, SettingsPage},
 };
 
 #[derive(serde::Deserialize, serde::Serialize)]
@@ -552,63 +552,87 @@ impl eframe::App for App {
                                 ui.heading(egui::RichText::new("Preferences").strong());
                                 ui.separator();
                                 ui.add_space(4.);
-                                ui.vertical(|ui| {
-                                    ui.horizontal(|ui|{
-                                        ui.strong("Monitor Offset ");
-                                        ui.add(
-                                            egui::DragValue::new(&mut self.settings.offset.x).speed(1),
-                                        )
-                                        .on_hover_text("X");
-                                        ui.add(
-                                            egui::DragValue::new(&mut self.settings.offset.y).speed(1),
-                                        )
-                                        .on_hover_text("Y");
-                                    });
-                                    ui.label("Monitor Offset is used to correctly simulate mouse movements when using multiple monitors");
-                                    ui.add_space(4.);
-                                    ui.horizontal(|ui|{
-                                        if ui.add(egui::Button::new("Calibrate")).on_hover_text("Calibrates the offset necessary to correctly move the mouse when using multiple monitors").clicked() {
-                                            self.sequencer.calibrate.swap(true, Ordering::Relaxed);
-                                            rdev::simulate(&rdev::EventType::MouseMove { x: 0., y: 0. }).unwrap();
-                                            let mut keyframes = self.sequencer.keyframes.lock().unwrap();
-                                            let last = keyframes.last();
-                                            if let Some(last) = last{
-                                                // Keyframe kind of 255 is used only for calibrating monitor offset
-                                                if last.kind == u8::MAX{
-                                                    if let KeyframeType::MouseMove(pos) = last.keyframe_type{
-                                                        // Invert the pos so it brings us back to (0,0)
-                                                        self.settings.offset = pos * egui::Vec2::new(-1.,-1.);
+                                egui::ScrollArea::vertical().show(ui, |ui| {
+                                    ui.vertical(|ui| {
+                                        ui.horizontal(|ui|{
+                                            ui.strong("Monitor Offset ");
+                                            ui.add(
+                                                egui::DragValue::new(&mut self.settings.offset.x).speed(1),
+                                            )
+                                            .on_hover_text("X");
+                                            ui.add(
+                                                egui::DragValue::new(&mut self.settings.offset.y).speed(1),
+                                            )
+                                            .on_hover_text("Y");
+                                        });
+                                        ui.label("Monitor Offset is used to correctly simulate mouse movements when using multiple monitors");
+                                        ui.add_space(4.);
+                                        ui.horizontal(|ui|{
+                                            if ui.add(egui::Button::new("Calibrate")).on_hover_text("Calibrates the offset necessary to correctly move the mouse when using multiple monitors").clicked() {
+                                                self.sequencer.calibrate.swap(true, Ordering::Relaxed);
+                                                rdev::simulate(&rdev::EventType::MouseMove { x: 0., y: 0. }).unwrap();
+                                                let mut keyframes = self.sequencer.keyframes.lock().unwrap();
+                                                let last = keyframes.last();
+                                                if let Some(last) = last{
+                                                    // Keyframe kind of 255 is used only for calibrating monitor offset
+                                                    if last.kind == u8::MAX{
+                                                        if let KeyframeType::MouseMove(pos) = last.keyframe_type{
+                                                            // Invert the pos so it brings us back to (0,0)
+                                                            self.settings.offset = pos * egui::Vec2::new(-1.,-1.);
+                                                        }
                                                     }
                                                 }
+                                                keyframes.pop();
+                                                self.sequencer.calibrate.swap(false, Ordering::Relaxed);
+                                                log::info!("Calibrated Monitor Offset: {:?}", self.settings.offset);
                                             }
-                                            keyframes.pop();
-                                            self.sequencer.calibrate.swap(false, Ordering::Relaxed);
-                                            log::info!("Calibrated Monitor Offset: {:?}", self.settings.offset);
-                                        }
+                                        });
                                     });
-                                });
-                                ui.add_space(6.);
-                                ui.separator();
-                                ui.add_space(6.);
-                                ui.vertical(|ui|{
-                                    ui.horizontal(|ui|{
-                                        ui.strong("Recording Resolution");
+                                    ui.add_space(6.);
+                                    ui.separator();
+                                    ui.add_space(6.);
+                                    ui.vertical(|ui|{
+                                        ui.horizontal(|ui|{
+                                            ui.strong("Recording Resolution");
 
-                                        let mut resolution = self
-                                            .sequencer
-                                            .mouse_movement_record_resolution
-                                            .load(Ordering::Relaxed);
-                                        ui.add(
-                                            egui::DragValue::new(&mut resolution)
-                                                .speed(1)
-                                                .range(0..=100),
-                                        )
-                                        .on_hover_text("Recording Resolution");
-                                        self.sequencer.mouse_movement_record_resolution
-                                            .store(resolution, Ordering::Relaxed);
+                                            let mut resolution = self
+                                                .sequencer
+                                                .mouse_movement_record_resolution
+                                                .load(Ordering::Relaxed);
+                                            ui.add(
+                                                egui::DragValue::new(&mut resolution)
+                                                    .speed(1)
+                                                    .range(0..=100),
+                                            )
+                                            .on_hover_text("Recording Resolution");
+                                            self.sequencer.mouse_movement_record_resolution
+                                                .store(resolution, Ordering::Relaxed);
+                                        });
+                                        ui.label("The resolution at which mouse movement events are captured as keyframes, higher is better for accuracy.");
+                                        ui.small("0 disables mouse recording, use F9 to record manually");
                                     });
-                                    ui.label("The resolution at which mouse movement events are captured as keyframes, higher is better for accuracy.");
-                                    ui.small("0 disables mouse recording, use F9 to record manually");
+                                    ui.add_space(6.);
+                                    ui.separator();
+                                    ui.add_space(6.);
+                                    ui.vertical(|ui|{
+                                        ui.horizontal(|ui|{
+                                            ui.strong("Fail safe");
+                                            let mut monitor_edge = *self.sequencer.failsafe_edge.lock().unwrap();
+                                            
+                                            egui::ComboBox::from_label("")
+                                                .selected_text(format!("{:?}", monitor_edge))
+                                                .show_ui(ui, |ui| {
+                                                    ui.selectable_value(&mut monitor_edge, MonitorEdge::Left, "Left");
+                                                    ui.selectable_value(&mut monitor_edge, MonitorEdge::Right, "Right");
+                                                    ui.selectable_value(&mut monitor_edge, MonitorEdge::Bottom, "Bottom");
+                                                    ui.selectable_value(&mut monitor_edge, MonitorEdge::Top, "Top");
+                                                });
+                                            *self.sequencer.failsafe_edge.lock().unwrap() = monitor_edge;
+                                        });
+                                        ui.label("Incase of failure during playback, quickly slam the mouse into the selected edge to stop.");
+                                        ui.small("Only works for main monitor");
+                                    });
+                                    ui.add_space(6.);
                                 });
                                 // ui.spacing();
                                 // ui.separator();

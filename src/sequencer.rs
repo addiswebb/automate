@@ -5,6 +5,7 @@ use std::time::Duration;
 use std::{thread, time::Instant};
 
 use crate::keyframe::{Keyframe, KeyframeType};
+use crate::settings::MonitorEdge;
 use crate::util::*;
 use eframe::egui::{self, pos2, Ui, Vec2};
 use egui::{vec2, Align2, ColorImage, FontId, TextureHandle};
@@ -78,6 +79,7 @@ pub struct Sequencer {
     #[serde(skip)]
     texture_handles: Vec<TextureHandle>,
     x: (u8, f32),
+    pub failsafe_edge: Arc<Mutex<MonitorEdge>>,
 }
 
 impl Sequencer {
@@ -94,6 +96,7 @@ impl Sequencer {
         let changed = Arc::new(AtomicBool::new(false));
         let calibrate = Arc::new(AtomicBool::new(false));
         let images = Arc::new(Mutex::new(HashMap::new()));
+        let failsafe_edge = Arc::new(Mutex::new(MonitorEdge::Right));
 
         let shared_kfs = Arc::clone(&keyframes);
         let shared_pkfs = Arc::clone(&keyframe_state);
@@ -104,8 +107,7 @@ impl Sequencer {
         let shared_changed = Arc::clone(&changed);
         let shared_calibrate = Arc::clone(&calibrate);
         let shared_images = Arc::clone(&images);
-
-        let mut was_recording = false;
+        let shared_edge = Arc::clone(&failsafe_edge);
 
         let mut tmp_keyframes = vec![];
 
@@ -168,14 +170,35 @@ impl Sequencer {
                                     _ => {}
                                 }
                             }
+                            // Handle monitor edge fail safe
+                            rdev::EventType::MouseMove { x, y } => {
+                                match *shared_edge.lock().unwrap() {
+                                    MonitorEdge::Left => {
+                                        if *x < 0. {
+                                            shared_play.swap(false, Ordering::Relaxed);
+                                        }
+                                    }
+                                    MonitorEdge::Right => {
+                                        if *x > 1920. {
+                                            shared_play.swap(false, Ordering::Relaxed);
+                                        }
+                                    }
+                                    MonitorEdge::Bottom => {
+                                        if *y > 1080. {
+                                            shared_play.swap(false, Ordering::Relaxed);
+                                        }
+                                    }
+                                    MonitorEdge::Top => {
+                                        if *y < 0. {
+                                            shared_play.swap(false, Ordering::Relaxed);
+                                        }
+                                    }
+                                }
+                            }
                             _ => {}
                         }
                         if is_recording && tmp_keyframe.is_none() {
                             // Checks if there are no keyframes (Would only be the case if a new recording has started and there is no start screenshot)
-                            if !was_recording {
-                                // START
-                                // Todo(addis): record start keyframe and save it somewhere
-                            }
                             tmp_keyframe = match &event.event_type {
                                 // Button & Key Press events just push info
                                 rdev::EventType::ButtonPress(btn) => {
@@ -278,7 +301,6 @@ impl Sequencer {
                                 shared_changed.swap(true, Ordering::Relaxed);
                             }
                         }
-                        was_recording = is_recording;
                     }
                 }) {
                     log::error!("Error: {:?}", error)
@@ -316,6 +338,7 @@ impl Sequencer {
             images,
             texture_handles: Vec::new(),
             x: (2, 0.999),
+            failsafe_edge,
         }
     }
     /// Returns the current time where the playhead is
@@ -391,7 +414,6 @@ impl Sequencer {
     }
     ///Paste the clipboard
     pub fn paste(&mut self) {
-        // Todo(addis): this only copies the keyframes, not their respective images (easy fix but idk)
         if !self.clip_board.is_empty() {
             let mut images = self.images.lock().unwrap();
 
@@ -1252,7 +1274,6 @@ impl Sequencer {
     /// Renders the central panel used to display images and video
     pub fn central_panel(&self, ctx: &egui::Context) {
         egui::CentralPanel::default().show(ctx, |ui| {
-            // Todo(addis): Keep specific 16/9 ratio so images are displayed properly
             egui_extras::install_image_loaders(ctx);
             ui.vertical_centered_justified(|ui| {
                 if let Some(texture) = &self.current_image {

@@ -18,6 +18,13 @@ pub enum KeybindType {
     AddKeyframe,
     SelectAll,
 }
+#[derive(Debug, Clone, Copy, Deserialize, Serialize, PartialEq)]
+pub enum MonitorEdge {
+    Left,
+    Right,
+    Bottom,
+    Top,
+}
 
 pub enum SettingsPage {
     Preferences,
