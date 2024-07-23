@@ -1,5 +1,4 @@
 use std::collections::HashMap;
-use std::io::Read;
 use std::sync::atomic::{AtomicBool, AtomicI32, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
@@ -10,8 +9,6 @@ use crate::util::*;
 use eframe::egui::{self, pos2, Ui, Vec2};
 use egui::{vec2, Align2, ColorImage, FontId, TextureHandle};
 use egui::{Pos2, Rect};
-use image::io::Reader;
-use image::GenericImageView;
 use serde::{Deserialize, Serialize};
 use uuid::{Bytes, Uuid};
 

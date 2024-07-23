@@ -1,8 +1,7 @@
 use std::time::Instant;
 
 use egui::{emath::RectTransform, vec2, Pos2, Rect, Ui, Vec2};
-use image::{open, DynamicImage, GenericImageView, ImageBuffer, Rgba};
-// use imageproc::template_matching::{match_template_parallel, MatchTemplateMethod};
+use image::{DynamicImage, GenericImageView, ImageBuffer, Rgba};
 use xcap::Monitor;
 
 pub const ROW_HEIGHT: f32 = 24.0;
@@ -323,6 +322,7 @@ pub fn scale(ui: &Ui, i: f32, scale: f32) -> f32 {
     i * spacing
 }
 
+/// Takes a screenshot of the primary monitor and returns it as a `Vec<u8>` in `Rgba` format
 pub fn screenshot() -> Option<Vec<u8>> {
     // thread::spawn(move ||{
     let monitors = Monitor::all().unwrap();
