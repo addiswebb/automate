@@ -14,7 +14,7 @@ env:
 
 jobs:
   build:
-    name: "Build automate release"
+    name: "Build Automate"
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
