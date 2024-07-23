@@ -439,24 +439,7 @@ impl eframe::App for App {
                         println!("Redo: to be implemented");
                         ui.close_menu();
                     }
-                    ui.separator();
-                    ui.menu_button("Add", |ui| {
-                        if ui.button("Wait").clicked() {
-                            let mut keyframes = self.sequencer.keyframes.lock().unwrap();
-                            keyframes.push(Keyframe {
-                                timestamp: self.sequencer.get_time(),
-                                duration: 1.,
-                                keyframe_type: KeyframeType::Wait(1.),
-                                kind: 4,
-                                uid: Uuid::new_v4().to_bytes_le(),
-                            });
-                            self.sequencer.keyframe_state.lock().unwrap().push(0);
-                            ui.close_menu();
-                        }
-                        if ui.button("Key").clicked() {
-                            ui.close_menu();
-                        }
-                    });
+
                     ui.separator();
                     if ui
                         .add_enabled(
@@ -488,6 +471,33 @@ impl eframe::App for App {
                         self.sequencer.paste();
                         ui.close_menu();
                     }
+                    ui.separator();
+                    ui.menu_button("Add", |ui| {
+                        if ui.button("Wait").clicked() {
+                            let mut keyframes = self.sequencer.keyframes.lock().unwrap();
+                            keyframes.push(Keyframe {
+                                timestamp: self.sequencer.get_time(),
+                                duration: 1.,
+                                keyframe_type: KeyframeType::Wait(1.),
+                                kind: 4,
+                                uid: Uuid::new_v4().to_bytes_le(),
+                            });
+                            self.sequencer.keyframe_state.lock().unwrap().push(0);
+                            ui.close_menu();
+                        }
+                        if ui.button("Magic Move").clicked() {
+                            let mut keyframes = self.sequencer.keyframes.lock().unwrap();
+                            keyframes.push(Keyframe {
+                                timestamp: self.sequencer.get_time(),
+                                duration: 0.2,
+                                keyframe_type: KeyframeType::MagicMove("target.png".to_string()),
+                                kind: 6,
+                                uid: Uuid::new_v4().to_bytes_le(),
+                            });
+                            self.sequencer.keyframe_state.lock().unwrap().push(0);
+                            ui.close_menu();
+                        }
+                    });
                 });
             });
         });
@@ -666,7 +676,7 @@ impl eframe::App for App {
             });
 
         self.sequencer
-            .update(&mut self.last_instant, ctx, self.settings.offset);
+            .update(&mut self.last_instant, ctx, &self.settings.offset);
         self.sequencer.show(ctx);
         self.sequencer.debug_panel(ctx);
         self.sequencer.selected_panel(ctx);

@@ -12,8 +12,10 @@ fn main() -> eframe::Result<()> {
             .with_min_inner_size([740.0, 407.0])
             .with_icon(
                 // NOTE: Adding an icon is optional
-                eframe::icon_data::from_png_bytes(&include_bytes!("../assets/icon-256.png")[..])
-                    .expect("Failed to load icon"),
+                eframe::icon_data::from_png_bytes(
+                    &include_bytes!("../assets/icons/icon-256.png")[..],
+                )
+                .expect("Failed to load icon"),
             ),
         ..Default::default()
     };

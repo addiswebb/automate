@@ -1,4 +1,5 @@
 use std::collections::HashMap;
+use std::io::Read;
 use std::sync::atomic::{AtomicBool, AtomicI32, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
@@ -9,6 +10,8 @@ use crate::util::*;
 use eframe::egui::{self, pos2, Ui, Vec2};
 use egui::{vec2, Align2, ColorImage, FontId, TextureHandle};
 use egui::{Pos2, Rect};
+use image::io::Reader;
+use image::GenericImageView;
 use serde::{Deserialize, Serialize};
 use uuid::{Bytes, Uuid};
 
@@ -17,14 +20,33 @@ pub struct SequencerState {
     pub repeats: i32,
     pub speed: f32,
     pub keyframes: Vec<Keyframe>,
-    // pub images: HashMap<Bytes, Vec<u8>>,
 }
 /// We derive Deserialize/Serialize, so we can persist app state on shutdown.
 #[derive(Deserialize, Serialize)]
 #[serde(default)] // if we add new fields, give them default values when deserializing old state
 pub struct Sequencer {
+    pub mouse_movement_record_resolution: Arc<AtomicI32>,
+    scale: f32, // egui coord points:seconds
+    repeats: i32,
+    speed: f32,
+    #[serde(skip)]
+    pub keyframes: Arc<Mutex<Vec<Keyframe>>>,
+    #[serde(skip)]
+    pub selected_keyframes: Vec<Bytes>,
+    #[serde(skip)]
+    pub keyframe_state: Arc<Mutex<Vec<usize>>>,
+    #[serde(skip)]
+    pub images: Arc<Mutex<HashMap<Bytes, Vec<u8>>>>,
     #[serde(skip)]
     pub changed: Arc<AtomicBool>,
+    #[serde(skip)]
+    pub recording: Arc<AtomicBool>,
+    #[serde(skip)]
+    pub loaded_file: String,
+    #[serde(skip)]
+    pub clip_board: Vec<Keyframe>,
+    #[serde(skip)]
+    pub calibrate: Arc<AtomicBool>,
     #[serde(skip)]
     should_sort: bool,
     #[serde(skip)]
@@ -38,15 +60,6 @@ pub struct Sequencer {
     #[serde(skip)]
     resizing: bool,
     #[serde(skip)]
-    pub keyframes: Arc<Mutex<Vec<Keyframe>>>,
-    #[serde(skip)]
-    pub selected_keyframes: Vec<Bytes>,
-    #[serde(skip)]
-    pub keyframe_state: Arc<Mutex<Vec<usize>>>,
-    scale: f32, // egui coord points:seconds
-    repeats: i32,
-    speed: f32,
-    #[serde(skip)]
     scroll: f32,
     #[serde(skip)]
     time: f32,
@@ -54,30 +67,20 @@ pub struct Sequencer {
     prev_time: f32,
     #[serde(skip)]
     play: Arc<AtomicBool>,
-    pub mouse_movement_record_resolution: Arc<AtomicI32>,
-    #[serde(skip)]
-    pub recording: Arc<AtomicBool>,
     #[serde(skip)]
     was_recording: bool,
     clear_before_recording: bool,
     #[serde(skip)]
     recording_instant: Arc<Mutex<Instant>>,
     #[serde(skip)]
-    pub loaded_file: String,
-    #[serde(skip)]
-    pub clip_board: Vec<Keyframe>,
-    #[serde(skip)]
     once_bool: bool,
-    #[serde(skip)]
-    pub calibrate: Arc<AtomicBool>,
     #[serde(skip)]
     current_image: Option<TextureHandle>,
     #[serde(skip)]
     current_image_uid: Bytes,
     #[serde(skip)]
-    pub images: Arc<Mutex<HashMap<Bytes, Vec<u8>>>>,
-    #[serde(skip)]
     texture_handles: Vec<TextureHandle>,
+    x: (u8, f32),
 }
 
 impl Sequencer {
@@ -315,6 +318,7 @@ impl Sequencer {
             current_image_uid: Uuid::nil().to_bytes_le(),
             images,
             texture_handles: Vec::new(),
+            x: (2, 0.999),
         }
     }
     /// Returns the current time where the playhead is
@@ -517,16 +521,19 @@ impl Sequencer {
         let mut keyframe_state = self.keyframe_state.lock().unwrap();
         let mut delete = false;
         let mut cut = false;
+        let mut copy = false;
+        let mut paste = false;
+        let mut combine = false;
+
         for i in 0..keyframes.len() {
             let offset_y = ui.spacing().item_spacing.y;
             // Determine which row to draw the keyframe on depending on its type
             let y = match keyframes[i].kind {
-                0 => offset_y,
-                1 => ROW_HEIGHT * 2. + 9.,
-                2 => ROW_HEIGHT + offset_y * 2.,
-                3 => ROW_HEIGHT + offset_y * 2.,
-                5 => offset_y,
-                _ => 0.,
+                1 => ROW_HEIGHT * 2. + 9.,       // Mouse move
+                6 => ROW_HEIGHT * 2. + 9.,       // Mouse move
+                2 => ROW_HEIGHT + offset_y * 2., // Mouse buttons
+                3 => ROW_HEIGHT + offset_y * 2., // Scroll
+                _ => offset_y,                   // 0,4,5 (keypress, wait, keystrokes)
             };
             // Calculate the rect for the keyframe
             let rect = time_to_rect(
@@ -567,11 +574,12 @@ impl Sequencer {
                 }
 
                 let color = match keyframes[i].kind {
-                    0 => egui::Color32::LIGHT_RED,              //Keyboard
-                    1 => egui::Color32::from_rgb(95, 186, 213), //Mouse move
-                    2 => egui::Color32::LIGHT_GREEN,            //Button Click
-                    3 => egui::Color32::LIGHT_YELLOW,           //Scroll
-                    5 => egui::Color32::LIGHT_RED,              //Keyboard
+                    0 => egui::Color32::LIGHT_RED,               //Keyboard
+                    1 => egui::Color32::from_rgb(95, 186, 213),  //Mouse move
+                    2 => egui::Color32::LIGHT_GREEN,             //Button Click
+                    3 => egui::Color32::LIGHT_YELLOW,            //Scroll
+                    5 => egui::Color32::LIGHT_RED,               //Keyboard
+                    6 => egui::Color32::from_rgb(214, 180, 252), //Mouse move
                     _ => egui::Color32::LIGHT_GRAY,
                 };
                 let stroke = match keyframe_state[i] {
@@ -592,10 +600,11 @@ impl Sequencer {
                     match &keyframes[i].keyframe_type {
                         KeyframeType::KeyBtn(key) => key_to_char(key),
                         KeyframeType::MouseBtn(btn) => button_to_char(btn),
-                        KeyframeType::MouseMove(_) => "".to_string(),
+                        KeyframeType::MouseMove(_pos) => "".to_string(),
                         KeyframeType::Scroll(delta) => scroll_to_char(delta),
                         KeyframeType::Wait(secs) => format!("{}s", secs).to_string(),
                         KeyframeType::KeyStrokes(keys) => keys_to_string(keys),
+                        KeyframeType::MagicMove(_path) => "🔮".to_string(),
                     }
                 );
                 if rect.width() > label.len() as f32 * 10. {
@@ -626,15 +635,14 @@ impl Sequencer {
                             }
                             // If ctrl was not pressed, and one of several already selected keyframes was clicked, leave only that one selected (note that vec is empty here)
                             if was_empty {
-                                println!("test");
-                                self.selected_keyframes.push(keyframes[i].uid)
+                                self.selected_keyframes = vec![keyframes[i].uid];
                             }
                         }
                         // not already selected
                         Err(index) => {
                             if !ctrl {
                                 // If not already selected, select it and push (note we use push instead of insert here because the vec is empty, and it will be placed at index 0 by default)
-                                self.selected_keyframes.push(keyframes[i].uid)
+                                self.selected_keyframes = vec![keyframes[i].uid]
                             } else {
                                 // If ctrl is pressed, then insert the keyframe while keeping order (note we need a sorted vec to allow for binary search later on)
                                 self.selected_keyframes.insert(index, keyframes[i].uid)
@@ -708,14 +716,17 @@ impl Sequencer {
                     }
                 });
 
-                // let uid = keyframes[i].uid;
                 keyframe.context_menu(|ui| {
                     // Right-clicking a keyframe does not guarantee that it is selected, so we make sure here
                     let index = self.selected_keyframes.binary_search(&keyframes[i].uid);
                     if let Err(index) = index {
                         self.selected_keyframes.insert(index, keyframes[i].uid);
                     }
-                    // add the current one somehow
+                    if ui.add(egui::Button::new("Combine")).clicked() {
+                        combine = true;
+                        ui.close_menu();
+                    }
+                    ui.separator();
                     if ui
                         .add(egui::Button::new("Cut").shortcut_text("Ctrl+X"))
                         .clicked()
@@ -727,97 +738,28 @@ impl Sequencer {
                         .add(egui::Button::new("Copy").shortcut_text("Ctrl+C"))
                         .clicked()
                     {
-                        // self.copy();
-                        if !self.selected_keyframes.is_empty() {
-                            self.clip_board.clear();
-                            let now = Instant::now();
-                            // Find all selected keyframes (state of 2 == selected)
-                            for i in 0..keyframe_state.len() {
-                                if keyframe_state[i] == 2 {
-                                    self.clip_board.push(keyframes[i].clone());
-                                }
-                            }
-                            log::info!(
-                                "Copied {} keyframes in {:?}",
-                                self.clip_board.len(),
-                                now.elapsed()
-                            );
-                        }
+                        copy = true;
                         ui.close_menu();
                     }
                     if ui
                         .add(egui::Button::new("Paste").shortcut_text("Ctrl+V"))
                         .clicked()
                     {
-                        if !self.clip_board.is_empty() {
-                            let mut images = self.images.lock().unwrap();
-
-                            // Selected keyframes will be reset and then filled with the new keyframes
-                            self.selected_keyframes.clear();
-
-                            let mut clip_board: Vec<Keyframe> = self
-                                .clip_board
-                                .clone()
-                                .into_iter()
-                                .map(|mut kf| {
-                                    // Shift them all forward slightly so its clear what has been copied
-                                    kf.timestamp += 1.;
-                                    // Change the UIDs for the copied keyframes
-                                    let new_uid = Uuid::new_v4().to_bytes_le();
-                                    // Check if the keyframe had an image, clone it with the new UID if so
-                                    if let Some(image) = images.get(&kf.uid).cloned() {
-                                        images.insert(new_uid, image);
-                                    }
-                                    // Update the UID so there are no duplicates
-                                    kf.uid = new_uid;
-
-                                    // Use the new UUIDs as the currently selected keyframes
-                                    self.selected_keyframes.push(new_uid);
-                                    keyframe_state.push(0);
-                                    kf
-                                })
-                                .collect();
-
-                            // Since the clipboard starts empty, if it isn't now that means keyframes were copied and then removed
-                            if !self.clip_board.is_empty() {
-                                self.changed.swap(true, Ordering::Relaxed);
-                            }
-                            keyframes.append(&mut clip_board);
-                            // since the keyframes array has changed, it should be resorted
-                            self.should_sort = true;
-                        }
+                        paste = true;
                         ui.close_menu();
                     }
-                    if ui.button("Delete").clicked() {
+                    ui.separator();
+                    if ui
+                        .add(egui::Button::new("Delete").shortcut_text("Delete"))
+                        .clicked()
+                    {
                         delete = true;
                         ui.close_menu();
                     }
                 });
             }
         }
-        // Same as copy also deletes
-        if cut {
-            self.clip_board.clear();
-            let now = Instant::now();
-            // Find all selected keyframes (state of 2 == selected)
-            for i in (0..keyframe_state.len()).rev() {
-                if keyframe_state[i] == 2 {
-                    self.clip_board.push(keyframes[i].clone());
-                    keyframes.remove(i);
-                    keyframe_state.remove(i);
-                }
-            }
-            log::info!(
-                "Cut {} keyframes in {:?}",
-                self.clip_board.len(),
-                now.elapsed()
-            );
-            // Since the clipboard starts empty, if it isn't now that means keyframes were copied and then removed
-            if !self.clip_board.is_empty() {
-                self.changed.swap(true, Ordering::Relaxed);
-            }
-            self.selected_keyframes.clear();
-        }
+
         // If there are keyframes selected to delete
         if delete && !self.selected_keyframes.is_empty() {
             let now = Instant::now();
@@ -825,7 +767,7 @@ impl Sequencer {
             let number_of_keyframes = keyframe_state.len();
             // Sort the selected list from least the greatest index
             self.selected_keyframes.sort();
-            self.selected_keyframes.reverse();
+            // self.selected_keyframes.reverse();
             // Check if we can do a quick delete if every keyframe is selected
             if number_of_keyframes == number_of_selected_keyframes {
                 keyframes.clear();
@@ -863,6 +805,23 @@ impl Sequencer {
                 now.elapsed()
             );
             self.changed.swap(true, Ordering::Relaxed);
+        }
+
+        // Free `&mut self` to be used below
+        drop(keyframes);
+        drop(keyframe_state);
+
+        if cut {
+            self.cut();
+        }
+        if copy {
+            self.copy();
+        }
+        if paste {
+            self.paste();
+        }
+        if combine {
+            self.combine_into_keystrokes();
         }
     }
     /// Handles rendering the control bar
@@ -1194,6 +1153,18 @@ impl Sequencer {
                 ui.label(format!("scale: {:?}", self.scale));
 
                 ui.label(format!("scroll: {:?}", self.scroll));
+                ui.label("Tolerance");
+                ui.add(
+                    egui::DragValue::new(&mut self.x.0)
+                        .speed(1)
+                        .range(0.0..=255.0),
+                );
+                ui.label("Confidence");
+                ui.add(
+                    egui::DragValue::new(&mut self.x.1)
+                        .speed(0.05)
+                        .range(0.0..=1.0),
+                )
             });
     }
     /// Renders the editable data of the selected keyframe
@@ -1214,7 +1185,7 @@ impl Sequencer {
                     }
                     let keyframe = &mut keyframes[index];
 
-                    match &keyframe.keyframe_type {
+                    match &mut keyframe.keyframe_type {
                         KeyframeType::KeyBtn(key) => {
                             ui.strong("Keyboard Button press");
                             ui.label("key stroke");
@@ -1239,6 +1210,10 @@ impl Sequencer {
                         KeyframeType::KeyStrokes(keys) => {
                             ui.strong("Key Strokes");
                             ui.label(keys_to_string(keys));
+                        }
+                        KeyframeType::MagicMove(path) => {
+                            ui.strong("Magic!!");
+                            ui.text_edit_singleline(path);
                         }
                     }
                     // Used later to check if the keyframe was edited
@@ -1403,7 +1378,7 @@ impl Sequencer {
         });
     }
     /// Handles keeping state, and replaying keystrokes when playing
-    pub fn update(&mut self, last_instant: &mut Instant, ctx: &egui::Context, offset: Vec2) {
+    pub fn update(&mut self, last_instant: &mut Instant, ctx: &egui::Context, offset: &Vec2) {
         // Handle focus of the window when recording and when not
         if self.was_recording != self.recording.load(Ordering::Relaxed) {
             self.was_recording = self.recording.load(Ordering::Relaxed);
@@ -1554,7 +1529,7 @@ impl Sequencer {
                     if current_keyframe_state != keyframe_state[i] {
                         // If so and the sequencer is playing
                         if play {
-                            handle_playing_keyframe(keyframe, true, offset);
+                            self.handle_playing_keyframe(keyframe, true, offset);
                         }
                     }
                 } else {
@@ -1566,7 +1541,7 @@ impl Sequencer {
                     if current_keyframe_state != keyframe_state[i] {
                         // If so and the sequencer is playing
                         if play {
-                            handle_playing_keyframe(keyframe, false, offset);
+                            self.handle_playing_keyframe(keyframe, false, offset);
                         }
                     }
                 }
@@ -1577,6 +1552,7 @@ impl Sequencer {
         self.prev_time = self.time;
         *last_instant = now;
     }
+    /// Deletes all movement keyframes determined to be redundant.
     fn cull_minor_movement_keyframes(&mut self) {
         let mut keyframes = self.keyframes.lock().unwrap();
         let mut keyframe_state = self.keyframe_state.lock().unwrap();
@@ -1605,6 +1581,7 @@ impl Sequencer {
             keyframe_state.remove(*i);
         }
     }
+    /// Combine keybtn keyframes into a single keystroke
     fn combine_into_keystrokes(&mut self) {
         let mut selected_keyframes: Vec<usize> = Vec::new();
         let mut keyframes = self.keyframes.lock().unwrap();
@@ -1634,6 +1611,7 @@ impl Sequencer {
         }
         keys.reverse();
         if !keys.is_empty() {
+            let uid = Uuid::new_v4().to_bytes_le();
             keyframes.insert(
                 last_index,
                 Keyframe {
@@ -1641,72 +1619,78 @@ impl Sequencer {
                     duration: 0.2,
                     keyframe_type: KeyframeType::KeyStrokes(keys),
                     kind: 5,
-                    uid: Uuid::new_v4().to_bytes_le(),
+                    uid,
                 },
             );
+            // Clear and select only the new keyframe
+            self.selected_keyframes = vec![uid];
+
             keyframe_state.insert(last_index, 0);
             self.changed.swap(true, Ordering::Relaxed);
         }
     }
-}
-/// Simulates the given keyframe
-///
-/// `start` decides whether to treat this as the start or end of a keyframe
-fn handle_playing_keyframe(keyframe: &Keyframe, start: bool, offset: Vec2) {
-    match &keyframe.keyframe_type {
-        KeyframeType::KeyBtn(key) => {
-            if start {
-                rdev::simulate(&rdev::EventType::KeyPress(*key))
-                    .expect("Failed to simulate keypress");
-            } else {
-                rdev::simulate(&rdev::EventType::KeyRelease(*key))
-                    .expect("Failed to simulate keyrelease");
-            }
-        }
-        KeyframeType::MouseBtn(btn) => {
-            if start {
-                rdev::simulate(&rdev::EventType::ButtonPress(*btn))
-                    .expect("Failed to simulate Button Release");
-            } else {
-                rdev::simulate(&rdev::EventType::ButtonRelease(*btn))
-                    .expect("Failed to simulate Button Release");
-            }
-        }
-        KeyframeType::MouseMove(pos) => {
-            if start {
-                rdev::simulate(&rdev::EventType::MouseMove {
-                    x: (pos.x + offset.x) as f64,
-                    y: (pos.y + offset.y) as f64,
-                })
-                .expect(
-                    "Failed to simulate Mouse Movement (Probably due to an anti-cheat installed)",
-                );
-            }
-        }
-        KeyframeType::Scroll(delta) => {
-            if start {
-                rdev::simulate(&rdev::EventType::Wheel {
-                    delta_x: delta.x as i64,
-                    delta_y: delta.y as i64,
-                })
-                .expect("Failed to simulate Mouse Scroll (Possibly due to anti-cheat)");
-            }
-        }
-        KeyframeType::Wait(secs) => {
-            if start {
-                // Todo(addis): multiply dt so that it takes *secs* seconds to traverse 1 second of sequencer time
-                // This will remove the need to block the thread and freeze the application, and keep the playhead moving in a slow but satisfying way
-                thread::sleep(Duration::from_secs_f32(secs.clone()));
-            }
-        }
-        KeyframeType::KeyStrokes(keys) => {
-            if start {
-                for key in keys {
+
+    /// Simulates the given keyframe
+    ///
+    /// `start` decides whether to treat this as the start or end of a keyframe
+    fn handle_playing_keyframe(&self, keyframe: &Keyframe, start: bool, offset: &Vec2) {
+        match &keyframe.keyframe_type {
+            KeyframeType::KeyBtn(key) => {
+                if start {
                     rdev::simulate(&rdev::EventType::KeyPress(*key))
                         .expect("Failed to simulate keypress");
-                    // thread::sleep(Duration::from_secs(0.01));
+                } else {
                     rdev::simulate(&rdev::EventType::KeyRelease(*key))
-                        .expect("Failed to simulate keypress");
+                        .expect("Failed to simulate keyrelease");
+                }
+            }
+            KeyframeType::MouseBtn(btn) => {
+                if start {
+                    rdev::simulate(&rdev::EventType::ButtonPress(*btn))
+                        .expect("Failed to simulate Button Release");
+                } else {
+                    rdev::simulate(&rdev::EventType::ButtonRelease(*btn))
+                        .expect("Failed to simulate Button Release");
+                }
+            }
+            KeyframeType::MouseMove(pos) => {
+                if start {
+                    simulate_move(pos, &offset);
+                }
+            }
+            KeyframeType::Scroll(delta) => {
+                if start {
+                    rdev::simulate(&rdev::EventType::Wheel {
+                        delta_x: delta.x as i64,
+                        delta_y: delta.y as i64,
+                    })
+                    .expect("Failed to simulate Mouse Scroll (Possibly due to anti-cheat)");
+                }
+            }
+            KeyframeType::Wait(secs) => {
+                if start {
+                    // Todo(addis): multiply dt so that it takes *secs* seconds to traverse 1 second of sequencer time
+                    // This will remove the need to block the thread and freeze the application, and keep the playhead moving in a slow but satisfying way
+                    thread::sleep(Duration::from_secs_f32(secs.clone()));
+                }
+            }
+            KeyframeType::KeyStrokes(keys) => {
+                if start {
+                    for key in keys {
+                        rdev::simulate(&rdev::EventType::KeyPress(*key))
+                            .expect("Failed to simulate keypress");
+                        // thread::sleep(Duration::from_secs(0.01));
+                        rdev::simulate(&rdev::EventType::KeyRelease(*key))
+                            .expect("Failed to simulate keypress");
+                    }
+                }
+            }
+            KeyframeType::MagicMove(path) => {
+                if start {
+                    let target = image::ImageReader::open(path).unwrap().decode().unwrap();
+                    if let Some(target_center) = template_match_opencv(target.clone()) {
+                        simulate_move(&target_center, offset);
+                    }
                 }
             }
         }

@@ -1,4 +1,8 @@
-use egui::{emath::RectTransform, Pos2, Rect, Ui, Vec2};
+use std::time::Instant;
+
+use egui::{emath::RectTransform, vec2, Pos2, Rect, Ui, Vec2};
+use image::{open, DynamicImage, GenericImageView, ImageBuffer, Rgba};
+// use imageproc::template_matching::{match_template_parallel, MatchTemplateMethod};
 use xcap::Monitor;
 
 pub const ROW_HEIGHT: f32 = 24.0;
@@ -51,6 +55,7 @@ pub fn keys_to_string(keys: &Vec<rdev::Key>) -> String {
     }
     string
 }
+#[allow(unused)]
 pub fn strings_to_keys(string: &String) -> Vec<rdev::Key> {
     let mut keys = vec![];
     for x in string.split(' ') {
@@ -70,6 +75,7 @@ pub fn strings_to_keys(string: &String) -> Vec<rdev::Key> {
     }
     return keys;
 }
+#[allow(unused)]
 pub fn string_to_keys(c: &str) -> Option<rdev::Key> {
     match c {
         "a" => Some(rdev::Key::KeyA),
@@ -330,4 +336,157 @@ pub fn screenshot() -> Option<Vec<u8>> {
     } else {
         None
     }
+}
+
+pub fn simulate_move(pos: &Vec2, offset: &Vec2) {
+    rdev::simulate(&rdev::EventType::MouseMove {
+        x: (pos.x + offset.x) as f64,
+        y: (pos.y + offset.y) as f64,
+    })
+    .expect("Failed to simulate Mouse Movement (Probably due to an anti-cheat installed)");
+}
+
+#[allow(unused)]
+pub fn image_in_image_search(
+    target: DynamicImage,
+    tolerance: u8,
+    min_confidence: f32,
+) -> Option<Vec2> {
+    let now = Instant::now();
+    let step_size = 1;
+    // let tolerance = 0;
+    // let min_confidence = 0.9;
+    let (w, h) = (1920, 1080);
+    if let Some(screenshot) = screenshot() {
+        let screenshot: ImageBuffer<Rgba<u8>, Vec<u8>> =
+            ImageBuffer::from_vec(w, h, screenshot).unwrap();
+        let mut screenshot = DynamicImage::ImageRgba8(screenshot);
+
+        let screen_pixels: Vec<_> = screenshot.pixels().map(|p| p.2 .0).collect();
+        let target_pixels: Vec<_> = target.pixels().map(|p| p.2 .0).collect();
+
+        for y in (0..h - target.height()).step_by(step_size) {
+            for x in (0..w - target.width()).step_by(step_size) {
+                let mut matching_pixels = 0;
+                let mut total_pixels = 0;
+                'outer: for dy in 0..target.height() {
+                    for dx in 0..target.width() {
+                        let screenshot_index: usize =
+                            ((y + dy) * screenshot.width() + (x + dx)) as usize;
+                        let target_index: usize = (dy * target.width() + dx) as usize;
+
+                        let screenshot_pixel = screen_pixels[screenshot_index];
+                        let target_pixel = target_pixels[target_index];
+
+                        if target_pixel[3] < 128 {
+                            continue;
+                        }
+
+                        total_pixels += 1;
+
+                        // if screenshot_pixel == target_pixel {
+                        if within_tolerance(screenshot_pixel[0], target_pixel[0], tolerance)
+                            && within_tolerance(screenshot_pixel[1], target_pixel[1], tolerance)
+                            && within_tolerance(screenshot_pixel[2], target_pixel[2], tolerance)
+                        {
+                            matching_pixels += 1;
+                        } else {
+                            break 'outer;
+                        }
+                    }
+                }
+
+                let confidence = if total_pixels == 0 {
+                    0.0
+                } else {
+                    matching_pixels as f32 / total_pixels as f32
+                };
+                if confidence >= min_confidence {
+                    println!("found at :{confidence}");
+
+                    screenshot
+                        .crop(x, y, target.width() + 20, target.height() + 20)
+                        .save("test.png")
+                        .unwrap();
+                    log::info!(
+                        "Magic found {}% move in {:?}",
+                        confidence * 100.,
+                        now.elapsed()
+                    );
+                    return Some(vec2(
+                        (x + target.width() / 2) as f32,
+                        (y + target.height() / 2) as f32,
+                    ));
+                }
+            }
+        }
+    }
+
+    None
+}
+
+// Helper function to check if a color value is within a tolerance range
+pub fn within_tolerance(value1: u8, value2: u8, tolerance: u8) -> bool {
+    let min_value = value2.saturating_sub(tolerance);
+    let max_value = value2.saturating_add(tolerance);
+    // Check if the color value is within tolerance range
+    value1 >= min_value && value1 <= max_value
+}
+
+use opencv::core::{Mat, Point};
+
+pub fn template_match_opencv(target: DynamicImage) -> Option<Vec2> {
+    let now = Instant::now();
+    if let Some(screenshot) = screenshot() {
+        let screenshot: ImageBuffer<Rgba<u8>, Vec<u8>> =
+            ImageBuffer::from_vec(1920, 1080, screenshot).unwrap();
+        let screenshot = DynamicImage::ImageRgba8(screenshot);
+
+        let screenshot_vec = screenshot.to_luma8().to_vec();
+        let screenshot_mat = opencv::core::Mat::new_rows_cols_with_bytes::<u8>(
+            screenshot.height() as i32,
+            screenshot.width() as i32,
+            &screenshot_vec,
+        )
+        .unwrap();
+
+        let target_vec = target.to_luma8().to_vec();
+        let target_mat = opencv::core::Mat::new_rows_cols_with_bytes::<u8>(
+            target.height() as i32,
+            target.width() as i32,
+            &target_vec,
+        )
+        .unwrap();
+
+        let mut output = Mat::default();
+
+        opencv::imgproc::match_template_def(&screenshot_mat, &target_mat, &mut output, 0).unwrap();
+
+        let mut min_val: f64 = 0.0;
+        let mut max_val: f64 = 0.0;
+        let mut min_loc: Point = Point::new(0, 0);
+        let mut max_loc: Point = Point::new(0, 0);
+
+        opencv::core::min_max_loc(
+            &output,
+            Some(&mut min_val),
+            Some(&mut max_val),
+            Some(&mut min_loc),
+            Some(&mut max_loc),
+            &Mat::default(),
+        )
+        .unwrap();
+
+        let top_left = min_loc;
+
+        log::info!("Magic found target in {:?}", now.elapsed());
+        let pos = vec2(
+            (top_left.x as u32 + target.width() / 2) as f32,
+            (top_left.y as u32 + target.height() / 2) as f32,
+        );
+        // Todo(addis): detect when it failed to find the target image
+        return Some(pos);
+    }
+
+    None
 }

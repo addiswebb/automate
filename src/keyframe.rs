@@ -4,12 +4,20 @@ use uuid::{Bytes, Uuid};
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
 pub enum KeyframeType {
-    KeyBtn(rdev::Key),          //0
-    MouseBtn(rdev::Button),     //1
-    MouseMove(Vec2),            //2
-    Scroll(Vec2),               //3
-    Wait(f32),                  //4
+    /// Simulates a key press
+    KeyBtn(rdev::Key), //0
+    /// Simulates a mouse button press
+    MouseBtn(rdev::Button), //1
+    /// Moves the mouse to the given position
+    MouseMove(Vec2), //2
+    /// Simulates a scroll action given a 2D delta vector
+    Scroll(Vec2), //3
+    /// Pauses the sequencer for the set amount of time in `seconds`
+    Wait(f32), //4
+    /// Similar to KeyBtn but presses multiple keys at once. Significantly faster
     KeyStrokes(Vec<rdev::Key>), //5
+    /// Using a target image, it attempts to move the mouse to that position
+    MagicMove(String), // 6
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
