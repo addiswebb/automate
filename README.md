@@ -14,7 +14,7 @@ Go to the latest [release](https://github.com/addiswebb/automate/releases) and f
 ## Goals
 - [x] Quick and easy to record an automation
 - [x] Safe and reliably replay an automation
-- [ ] Use Sub-image search to reliably select desired inputs
+- [x] Use Sub-image search to reliably select desired inputs
 - [ ] Use Object Recognition to reliably select desired inputs
 
 ---
