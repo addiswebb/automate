@@ -16,6 +16,12 @@ use crate::{
     settings::{MonitorEdge, Settings, SettingsPage},
 };
 
+pub enum DialogPurpose{
+    Close,
+    Open,
+    New, 
+}
+
 #[derive(serde::Deserialize, serde::Serialize)]
 #[serde(default)]
 pub struct App {
@@ -29,10 +35,10 @@ pub struct App {
     #[serde(skip)]
     allowed_to_close: bool,
     #[serde(skip)]
-    show_close_dialog: bool,
+    show_save_dialog: bool,
     #[serde(skip)]
     // weird name, basically determines whether the save before exiting dialog closes the window or creates a new file
-    is_dialog_to_close: bool,
+    dialog_purpose: DialogPurpose,
     settings: Settings,
 }
 
@@ -44,8 +50,8 @@ impl Default for App {
             file: "untitled.auto".to_string(),
             file_uptodate: true,
             allowed_to_close: false,
-            show_close_dialog: false,
-            is_dialog_to_close: false,
+            show_save_dialog: false,
+            dialog_purpose: DialogPurpose::Close,
             settings: Settings::default(),
         }
     }
@@ -77,8 +83,8 @@ impl App {
             log::info!("New file: {:?}", "untitled.auto");
         } else {
             // offer to save the current file before making a new one
-            self.show_close_dialog = true;
-            self.is_dialog_to_close = false;
+            self.show_save_dialog = true;
+            self.dialog_purpose = DialogPurpose::New;
         }
     }
     /// Safely saves the current file
@@ -146,14 +152,20 @@ impl App {
     }
     /// Open a file using the native file dialog
     fn open_file(&mut self) {
-        FileDialog::new()
-            .add_filter("automate", &["auto"])
-            .set_directory("/")
-            .pick_file()
-            .and_then(|path| {
-                self.load_file(&path);
-                Some(())
-            });
+        if self.file_uptodate {
+            FileDialog::new()
+                .add_filter("automate", &["auto"])
+                .set_directory("/")
+                .pick_file()
+                .and_then(|path| {
+                    self.load_file(&path);
+                    Some(())
+                });
+        } else {
+            // offer to save the current file before making a new one
+            self.show_save_dialog = true;
+            self.dialog_purpose = DialogPurpose::Open;
+        }
     }
     ///Load an ".auto" file from the given path
     fn load_file(&mut self, path: &PathBuf) {
@@ -232,11 +244,10 @@ impl eframe::App for App {
         if self.sequencer.changed.load(Ordering::Relaxed) || !self.file_uptodate {
             self.file_uptodate = false;
         }
-        self.set_title(ctx);
         let mut cancel_close = false;
         ctx.input(|i| {
             // Make sure that mouse scrolling only zooms/scrolls when sequencer is in focus
-            if !self.show_close_dialog && !self.settings.show {
+            if !self.show_save_dialog && !self.settings.show {
                 self.sequencer.zoom(i.smooth_scroll_delta.x);
                 self.sequencer.scroll(i.smooth_scroll_delta.y);
             }
@@ -255,6 +266,7 @@ impl eframe::App for App {
                 // Keybind(ctrl+o): Open a file
                 else if i.key_pressed(egui::Key::O) {
                     self.open_file();
+                    println!("opend, setting title");
                 }
                 // Keybind(ctrl+z): Undo last change
                 else if i.key_pressed(egui::Key::O) {
@@ -355,45 +367,68 @@ impl eframe::App for App {
             if i.viewport().close_requested() && !self.file_uptodate {
                 if !self.allowed_to_close {
                     log::info!("Close without saving?");
-                    self.show_close_dialog = true;
-                    self.is_dialog_to_close = true;
+                    self.show_save_dialog = true;
+                    self.dialog_purpose = DialogPurpose::Close;
                     cancel_close = true;
                 }
             }
         });
 
-        if self.show_close_dialog {
+        // Should be called after saving and opening, but cannot be called within ctx.input so we call here
+        self.set_title(ctx);
+
+        if self.show_save_dialog {
             egui::Window::new("Automate")
                 .resizable(false)
                 .movable(true)
                 .collapsible(false)
                 .show(ctx, |ui| {
-                    ui.label(format!("Do you want to save changes to {:?}", Path::new(&self.file).file_name().unwrap().to_str().unwrap().to_string()));
+                    let before_saving = match self.dialog_purpose {
+                        DialogPurpose::Close => " before exiting",
+                        DialogPurpose::Open => "",
+                        DialogPurpose::New => " before creating a new file",
+                    };
+                    ui.label(format!("Do you want to save changes to {:?}{}?", Path::new(&self.file).file_name().unwrap().to_str().unwrap().to_string(),before_saving));
                     ui.horizontal(|ui| {
                         if ui.button("Save").clicked() {
                             self.save_file();
-                            self.show_close_dialog = false;
-                            if self.is_dialog_to_close {
-                                self.allowed_to_close = true;
-                                ctx.send_viewport_cmd(egui::ViewportCommand::Close);
-                            } else {
-                                self.new_file();
-                            }
+                            self.show_save_dialog = false;
+                            match self.dialog_purpose {
+                                DialogPurpose::Close => {
+                                    self.allowed_to_close = true;
+                                    ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+                                }
+                                DialogPurpose::New => {
+                                    self.new_file();
+                                }
+                                DialogPurpose::Open => {
+                                    self.open_file();
+                                }
+                            } 
+                            self.set_title(ctx);
                         }
                         if ui.button("Don't Save").clicked() {
-                            self.show_close_dialog = false;
-                            if self.is_dialog_to_close {
-                                self.allowed_to_close = true;
-                                ctx.send_viewport_cmd(egui::ViewportCommand::Close);
-                            } else {
-                                // set file_uptodate to true to force create a new file, avoids infinite loop
-                                self.file_uptodate = true;
-                                self.new_file();
+                            self.show_save_dialog = false;
+                            match self.dialog_purpose{
+                                DialogPurpose::Close => {
+                                    self.allowed_to_close = true;
+                                    ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+                                }
+                                DialogPurpose::New => {
+                                    // set file_uptodate to true to force create a new file, avoids infinite loop
+                                    self.file_uptodate = true;
+                                    self.new_file();
+                                }
+                                DialogPurpose::Open => {
+                                    self.file_uptodate = true;
+                                    self.open_file();
+                                    self.set_title(ctx);
+                                }
                             }
                         }
 
                         if ui.button("Cancel").clicked() {
-                            self.show_close_dialog = false;
+                            self.show_save_dialog = false;
                             self.allowed_to_close = false;
                         }
                     });
