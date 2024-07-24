@@ -554,6 +554,13 @@ impl Sequencer {
                 3 => ROW_HEIGHT + offset_y * 2., // Scroll
                 _ => offset_y,                   // 0,4,5 (keypress, wait, keystrokes)
             };
+            // Determins the spacing for normal keyframes and also makes loop keyframes full height
+            let spacing = if keyframes[i].kind == 7 {
+                vec2(ui.spacing().item_spacing.x, ROW_HEIGHT * -1.)
+            } else {
+                ui.spacing().item_spacing
+            };
+
             // Calculate the rect for the keyframe
             let rect = time_to_rect(
                 scale(ui, keyframes[i].timestamp, self.scale) - scale(ui, self.scroll, self.scale)
@@ -564,7 +571,7 @@ impl Sequencer {
                     max_rect.width() * (1.0 / scale(ui, 1.0, self.scale)),
                     self.scale,
                 ),
-                ui.spacing().item_spacing,
+                spacing,
                 max_rect.translate(vec2(0., y)),
             );
             // Time_to_rect clips all keyframes that are not visible for performance, this skips them
@@ -597,14 +604,19 @@ impl Sequencer {
                     1 => egui::Color32::from_rgb(95, 186, 213),  //Mouse move
                     2 => egui::Color32::LIGHT_GREEN,             //Button Click
                     3 => egui::Color32::LIGHT_YELLOW,            //Scroll
+                    4 => egui::Color32::BLACK,                   //Wait
                     5 => egui::Color32::LIGHT_RED,               //Keyboard
                     6 => egui::Color32::from_rgb(214, 180, 252), //Mouse move
+                    7 => egui::Color32::TRANSPARENT,             //Loop
                     _ => egui::Color32::LIGHT_GRAY,
                 };
                 let stroke = match keyframe_state[i] {
                     1 => egui::Stroke::new(1.5, egui::Color32::LIGHT_RED), //Playing
                     2 => egui::Stroke::new(1.5, egui::Color32::from_rgb(233, 181, 125)), //Selected
-                    _ => egui::Stroke::new(0.4, egui::Color32::from_rgb(15, 37, 42)), //Not selected
+                    _ => match keyframes[i].kind == 7 {
+                        true => egui::Stroke::new(1., egui::Color32::WHITE),
+                        false => egui::Stroke::new(0.4, egui::Color32::from_rgb(15, 37, 42)),
+                    }, //Not selected
                 };
 
                 let keyframe = ui
@@ -624,6 +636,7 @@ impl Sequencer {
                         KeyframeType::Wait(secs) => format!("{}s", secs).to_string(),
                         KeyframeType::KeyStrokes(keys) => keys_to_string(keys),
                         KeyframeType::MagicMove(_path) => "🔮".to_string(),
+                        KeyframeType::Loop(repeats, i) => format!("{i}/{repeats}"),
                     }
                 );
                 if rect.width() > label.len() as f32 * 10. {
@@ -632,7 +645,10 @@ impl Sequencer {
                         Align2::CENTER_CENTER,
                         format!("{}", label),
                         FontId::default(),
-                        egui::Color32::BLACK,
+                        match keyframes[i].kind == 7 {
+                            true => egui::Color32::WHITE,
+                            false => egui::Color32::BLACK,
+                        },
                     );
                 }
                 // Handles the user clicking a keyframe
@@ -740,6 +756,12 @@ impl Sequencer {
                     let index = self.selected_keyframes.binary_search(&keyframes[i].uid);
                     if let Err(index) = index {
                         self.selected_keyframes.insert(index, keyframes[i].uid);
+                    }
+                    if let KeyframeType::Loop(r, _) = keyframes[i].keyframe_type {
+                        if ui.add(egui::Button::new("Reset")).clicked() {
+                            keyframes[i].keyframe_type = KeyframeType::Loop(r, 1);
+                            ui.close_menu();
+                        }
                     }
                     if ui.add(egui::Button::new("Combine")).clicked() {
                         combine = true;
@@ -1234,6 +1256,12 @@ impl Sequencer {
                             ui.strong("Magic!!");
                             ui.text_edit_singleline(path);
                         }
+                        KeyframeType::Loop(repeats, i) => {
+                            ui.strong("Loop");
+                            ui.label("Repeats");
+                            ui.add(egui::DragValue::new(repeats).speed(1).range(0..=100));
+                            ui.label(format!("i: {i}"));
+                        }
                     }
                     // Used later to check if the keyframe was edited
                     let (tmpx, tmpy) = (keyframe.timestamp, keyframe.duration);
@@ -1509,7 +1537,7 @@ impl Sequencer {
             // Todo(addis): or create a current and next keyframe tuple and only check those, then update it if one is handled
             // Idea: v <-- change the 0 to a most recently finished keyframe index variable
             for i in 0..keyframes.len() {
-                let keyframe = &keyframes[i];
+                let keyframe = &mut keyframes[i];
                 let current_keyframe_state = keyframe_state[i]; //1 if playing, 0 if not
                                                                 // checks if the playhead is entering or exiting the current keyframe, (far left or far right of keyframe in terms of time)
                 if self.time >= keyframe.timestamp
@@ -1560,6 +1588,14 @@ impl Sequencer {
                         // If so and the sequencer is playing
                         if play {
                             self.handle_playing_keyframe(keyframe, false, offset);
+                            if let KeyframeType::Loop(repeats, i) = keyframe.keyframe_type {
+                                if i < repeats {
+                                    keyframe.keyframe_type = KeyframeType::Loop(repeats, i + 1);
+                                    self.time = keyframe.timestamp;
+                                } else {
+                                    keyframe.keyframe_type = KeyframeType::Loop(repeats, 1);
+                                }
+                            }
                         }
                     }
                 }
@@ -1651,7 +1687,7 @@ impl Sequencer {
     /// Simulates the given keyframe
     ///
     /// `start` decides whether to treat this as the start or end of a keyframe
-    fn handle_playing_keyframe(&self, keyframe: &Keyframe, start: bool, offset: &Vec2) {
+    fn handle_playing_keyframe(&self, keyframe: &mut Keyframe, start: bool, offset: &Vec2) {
         match &keyframe.keyframe_type {
             KeyframeType::KeyBtn(key) => {
                 if start {
@@ -1711,6 +1747,8 @@ impl Sequencer {
                     }
                 }
             }
+            // Loop is handled outside of this function
+            KeyframeType::Loop(_, _) => {}
         }
     }
 }

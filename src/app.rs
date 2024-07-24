@@ -145,7 +145,6 @@ impl App {
     }
     ///Load an ".auto" file from the given path
     fn load_file(&mut self, path: &PathBuf) {
-        log::info!("Loading file: {:?}", path.file_name().unwrap());
         let now = Instant::now();
         let stream = File::open(path.clone());
         if let Ok(file) = stream {
@@ -492,6 +491,18 @@ impl eframe::App for App {
                                 duration: 0.2,
                                 keyframe_type: KeyframeType::MagicMove("target.png".to_string()),
                                 kind: 6,
+                                uid: Uuid::new_v4().to_bytes_le(),
+                            });
+                            self.sequencer.keyframe_state.lock().unwrap().push(0);
+                            ui.close_menu();
+                        }
+                        if ui.button("Loop").clicked() {
+                            let mut keyframes = self.sequencer.keyframes.lock().unwrap();
+                            keyframes.push(Keyframe {
+                                timestamp: self.sequencer.get_time(),
+                                duration: 5.,
+                                keyframe_type: KeyframeType::Loop(10,1),
+                                kind: 7,
                                 uid: Uuid::new_v4().to_bytes_le(),
                             });
                             self.sequencer.keyframe_state.lock().unwrap().push(0);

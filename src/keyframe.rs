@@ -18,6 +18,8 @@ pub enum KeyframeType {
     KeyStrokes(Vec<rdev::Key>), //5
     /// Using a target image, it attempts to move the mouse to that position
     MagicMove(String), // 6
+    /// Loop the keyframes within this keyframes timeframe
+    Loop(u32, u32), // 7
 }
 
 #[derive(Clone, Debug, Serialize, Deserialize)]
