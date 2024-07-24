@@ -57,6 +57,8 @@ pub struct Settings {
     #[serde(skip)]
     pub keybind_search: String,
     pub keybinds: Vec<Keybind>,
+    pub fail_detection: bool,
+    pub max_fail_error: f32,
     pub offset: Vec2,
     #[serde(skip)]
     pub page: SettingsPage,
@@ -140,6 +142,8 @@ impl Default for Settings {
                     KeyboardShortcut::new(egui::Modifiers::CTRL, egui::Key::A),
                 ),
             ],
+            fail_detection: true,
+            max_fail_error: 0.2,
             offset: Vec2::NAN,
             page: SettingsPage::Preferences,
             show: false,

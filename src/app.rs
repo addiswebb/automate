@@ -400,14 +400,6 @@ impl eframe::App for App {
                         ui.close_menu();
                     }
                     if ui
-                        .add(egui::Button::new("Save File...").shortcut_text("Ctrl+S"))
-                        .clicked()
-                    {
-                        self.save_file();
-                        self.set_title(ctx);
-                        ui.close_menu();
-                    }
-                    if ui
                         .add(egui::Button::new("Open File...").shortcut_text("Ctrl+O"))
                         .clicked()
                     {
@@ -416,12 +408,22 @@ impl eframe::App for App {
                         ui.close_menu();
                     }
                     if ui
+                        .add(egui::Button::new("Save File...").shortcut_text("Ctrl+S"))
+                        .clicked()
+                    {
+                        self.save_file();
+                        self.set_title(ctx);
+                        ui.close_menu();
+                    }
+                    ui.separator(); 
+                    if ui
                         .add(egui::Button::new("Settings").shortcut_text("Ctrl+,"))
                         .clicked()
                     {
                         self.settings.show = true;
                         ui.close_menu();
                     }
+                    ui.separator(); 
                     if ui
                         .add(egui::Button::new("Exit").shortcut_text("Alt+F4"))
                         .clicked()
@@ -564,6 +566,7 @@ impl eframe::App for App {
                                 ui.separator();
                                 ui.add_space(4.);
                                 egui::ScrollArea::vertical().show(ui, |ui| {
+                                    // Monitor offset
                                     ui.vertical(|ui| {
                                         ui.horizontal(|ui|{
                                             ui.strong("Monitor Offset ");
@@ -576,7 +579,7 @@ impl eframe::App for App {
                                             )
                                             .on_hover_text("Y");
                                         });
-                                        ui.label("Monitor Offset is used to correctly simulate mouse movements when using multiple monitors");
+                                        ui.label("Monitor Offset is used to correctly simulate mouse movements when using multiple monitors.");
                                         ui.add_space(4.);
                                         ui.horizontal(|ui|{
                                             if ui.add(egui::Button::new("Calibrate")).on_hover_text("Calibrates the offset necessary to correctly move the mouse when using multiple monitors").clicked() {
@@ -602,6 +605,8 @@ impl eframe::App for App {
                                     ui.add_space(6.);
                                     ui.separator();
                                     ui.add_space(6.);
+
+                                    // Recording resolution
                                     ui.vertical(|ui|{
                                         ui.horizontal(|ui|{
                                             ui.strong("Recording Resolution");
@@ -625,6 +630,7 @@ impl eframe::App for App {
                                     ui.add_space(6.);
                                     ui.separator();
                                     ui.add_space(6.);
+                                    // Fail safe
                                     ui.vertical(|ui|{
                                         ui.horizontal(|ui|{
                                             ui.strong("Fail safe");
@@ -646,18 +652,18 @@ impl eframe::App for App {
                                     ui.add_space(6.);
                                     ui.separator();
                                     ui.add_space(6.);
+                                    // Fail detection
                                     ui.vertical(|ui|{
                                         ui.horizontal(|ui|{
-                                            ui.strong("Error detection");
-                                            ui.add(egui::DragValue::new(&mut self.sequencer.max_percentage_error).speed(0.01).range(0.0..=1.0));
+                                            ui.strong("Fail detection");
+                                            ui.checkbox(&mut self.settings.fail_detection, "");
+                                            ui.add(egui::DragValue::new(&mut self.settings.max_fail_error).speed(0.01).range(0.0..=1.0));
                                         });
-                                        ui.label("Incase of failure during playback, quickly slam the mouse into the selected edge to stop.");
+                                        ui.label("Computes the percentage different between the keyframe's expect screenshot vs what is on the screen and stops execution if it is beyond the threshold above, using computer vision.");
                                         ui.small("Only works for main monitor");
                                     });
                                     ui.add_space(6.);
                                 });
-                                // ui.spacing();
-                                // ui.separator();
                             }
                             SettingsPage::Shortcuts => {
                                 ui.heading(egui::RichText::new("Shortcuts").strong());
@@ -722,7 +728,7 @@ impl eframe::App for App {
             });
 
         self.sequencer
-            .update(&mut self.last_instant, ctx, &self.settings.offset);
+            .update(&mut self.last_instant, ctx, &self.settings.offset, (self.settings.fail_detection,self.settings.max_fail_error));
         self.sequencer.show(ctx);
         self.sequencer.debug_panel(ctx);
         self.sequencer.selected_panel(ctx);

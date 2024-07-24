@@ -10,8 +10,6 @@ use crate::util::*;
 use eframe::egui::{self, pos2, Ui, Vec2};
 use egui::{vec2, Align2, ColorImage, FontId, TextureHandle};
 use egui::{Pos2, Rect};
-use image::{DynamicImage, ImageBuffer, Rgba};
-use opencv::core::VecN;
 use serde::{Deserialize, Serialize};
 use uuid::{Bytes, Uuid};
 
@@ -80,9 +78,7 @@ pub struct Sequencer {
     current_image_uid: Bytes,
     #[serde(skip)]
     texture_handles: Vec<TextureHandle>,
-    x: (u8, f32),
     pub failsafe_edge: Arc<Mutex<MonitorEdge>>,
-    pub max_percentage_error: f32,
 }
 
 impl Sequencer {
@@ -340,9 +336,7 @@ impl Sequencer {
             current_image_uid: Uuid::nil().to_bytes_le(),
             images,
             texture_handles: Vec::new(),
-            x: (2, 0.999),
             failsafe_edge,
-            max_percentage_error: 0.1,
         }
     }
     /// Returns the current time where the playhead is
@@ -1196,20 +1190,7 @@ impl Sequencer {
                     self.combine_into_keystrokes();
                 }
                 ui.label(format!("scale: {:?}", self.scale));
-
                 ui.label(format!("scroll: {:?}", self.scroll));
-                ui.label("Tolerance");
-                ui.add(
-                    egui::DragValue::new(&mut self.x.0)
-                        .speed(1)
-                        .range(0.0..=255.0),
-                );
-                ui.label("Confidence");
-                ui.add(
-                    egui::DragValue::new(&mut self.x.1)
-                        .speed(0.05)
-                        .range(0.0..=1.0),
-                )
             });
     }
     /// Renders the editable data of the selected keyframe
@@ -1428,7 +1409,13 @@ impl Sequencer {
         });
     }
     /// Handles keeping state, and replaying keystrokes when playing
-    pub fn update(&mut self, last_instant: &mut Instant, ctx: &egui::Context, offset: &Vec2) {
+    pub fn update(
+        &mut self,
+        last_instant: &mut Instant,
+        ctx: &egui::Context,
+        offset: &Vec2,
+        fail_detection: (bool, f32),
+    ) {
         // Handle focus of the window when recording and when not
         if self.was_recording != self.recording.load(Ordering::Relaxed) {
             self.was_recording = self.recording.load(Ordering::Relaxed);
@@ -1573,13 +1560,13 @@ impl Sequencer {
                                 self.current_image = Some(texture_handle.clone());
                             } else {
                                 // Otherwise load it
-                                let x = ColorImage::from_rgba_unmultiplied(
+                                let image = ColorImage::from_rgba_unmultiplied(
                                     [1920, 1080],
                                     &screenshot.as_slice(),
                                 );
                                 let texture_handle = ctx.load_texture(
                                     Uuid::from_bytes_le(keyframe.uid).to_string(),
-                                    x,
+                                    image,
                                     Default::default(),
                                 );
                                 self.texture_handles.push(texture_handle.clone());
@@ -1592,21 +1579,22 @@ impl Sequencer {
                     if current_keyframe_state != keyframe_state[i] {
                         // If so and the sequencer is playing
                         if play {
-                            // Check if the keyframe has a screenshot
-                            if let Some(src1) = self.images.lock().unwrap().get(&keyframe.uid) {
-                                if let Some(src2) = screenshot() {
-                                    let percentage_err = image_dif_opencv(src1, &src2);
-                                    if percentage_err > self.max_percentage_error {
-                                        self.play.swap(false, Ordering::Relaxed);
-                                        log::warn!(
-                                            "Fail Detected: {:?}% err",
-                                            percentage_err * 100.
-                                        );
-                                        break;
+                            // When fail detection is enabled check if the keyframe has a screenshot
+                            if fail_detection.0 {
+                                if let Some(src1) = self.images.lock().unwrap().get(&keyframe.uid) {
+                                    if let Some(src2) = screenshot() {
+                                        let percentage_err = image_dif_opencv(src1, &src2);
+                                        if percentage_err > fail_detection.1 {
+                                            self.play.swap(false, Ordering::Relaxed);
+                                            log::warn!(
+                                                "Fail Detected: {:?}% err",
+                                                percentage_err * 100.
+                                            );
+                                            break;
+                                        }
                                     }
                                 }
                             }
-                            println!("handling");
                             self.handle_playing_keyframe(keyframe, true, offset);
                         }
                     }
@@ -1774,7 +1762,9 @@ impl Sequencer {
             KeyframeType::MagicMove(path) => {
                 if start {
                     let target = image::ImageReader::open(path).unwrap().decode().unwrap();
+                    let now = Instant::now();
                     if let Some(target_center) = template_match_opencv(target.clone()) {
+                        log::info!("Magic found target in {:?}", now.elapsed());
                         simulate_move(&target_center, offset);
                     }
                 }

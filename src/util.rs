@@ -432,7 +432,6 @@ pub fn within_tolerance(value1: u8, value2: u8, tolerance: u8) -> bool {
 use opencv::core::{Mat, MatTraitConst, Point, VecN};
 
 pub fn template_match_opencv(target: DynamicImage) -> Option<Vec2> {
-    let now = Instant::now();
     if let Some(screenshot) = screenshot() {
         let screenshot: ImageBuffer<Rgba<u8>, Vec<u8>> =
             ImageBuffer::from_vec(1920, 1080, screenshot).unwrap();
@@ -475,7 +474,6 @@ pub fn template_match_opencv(target: DynamicImage) -> Option<Vec2> {
 
         let top_left = min_loc;
 
-        log::info!("Magic found target in {:?}", now.elapsed());
         let pos = vec2(
             (top_left.x as u32 + target.width() / 2) as f32,
             (top_left.y as u32 + target.height() / 2) as f32,
