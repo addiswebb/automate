@@ -122,7 +122,6 @@ impl App {
                 }
                 zip.finish().unwrap();
 
-                // file.write_all(&data).unwrap();
                 self.sequencer.loaded_file = self.file.clone();
                 self.file_uptodate = true;
                 self.sequencer.changed.swap(false, Ordering::Relaxed);
@@ -131,6 +130,19 @@ impl App {
                 log::error!("Failed to save {:?}", file);
             }
         }
+    }
+    /// Saves the current file always asking where and under what name to save it as
+    fn save_as(&mut self) {
+        self.file = FileDialog::new()
+            .add_filter("automate", &["auto"])
+            .set_directory("/")
+            .save_file()
+            .unwrap()
+            .to_str()
+            .unwrap()
+            .to_string();
+        self.file_uptodate = false;
+        self.save_file();
     }
     /// Open a file using the native file dialog
     fn open_file(&mut self) {
@@ -408,10 +420,18 @@ impl eframe::App for App {
                         ui.close_menu();
                     }
                     if ui
-                        .add(egui::Button::new("Save File...").shortcut_text("Ctrl+S"))
+                        .add(egui::Button::new("Save").shortcut_text("Ctrl+S"))
                         .clicked()
                     {
                         self.save_file();
+                        self.set_title(ctx);
+                        ui.close_menu();
+                    }
+                    if ui
+                        .add(egui::Button::new("Save As...").shortcut_text("Ctrl+Shift+S"))
+                        .clicked()
+                    {
+                        self.save_as();
                         self.set_title(ctx);
                         ui.close_menu();
                     }
