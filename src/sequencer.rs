@@ -1445,7 +1445,19 @@ impl Sequencer {
         }
 
         if self.should_sort {
-            keyframes.sort_by(|a, b| a.timestamp.partial_cmp(&b.timestamp).unwrap());
+            keyframes.sort_by(|a, b| {
+                // These checks keep loop keyframes at the start of the array so they are rendered first
+                if a.kind == 7 && b.kind == 7 {
+                    return std::cmp::Ordering::Equal;
+                }
+                if a.kind == 7 && b.kind != 7 {
+                    return std::cmp::Ordering::Less;
+                }
+                if a.kind != 7 && b.kind == 7 {
+                    return std::cmp::Ordering::Greater;
+                }
+                a.timestamp.partial_cmp(&b.timestamp).unwrap()
+            });
             self.should_sort = false;
         }
 
