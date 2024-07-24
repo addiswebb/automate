@@ -3,7 +3,7 @@ use rfd::FileDialog;
 use std::{
     fs::File,
     io::{BufReader, Read, Write},
-    path::PathBuf,
+    path::{Path, PathBuf},
     sync::atomic::Ordering,
     time::Instant,
 };
@@ -157,7 +157,7 @@ impl App {
             state.read_to_end(&mut bytes).unwrap();
             if let Ok(data) = bincode::deserialize::<SequencerState>(bytes.as_slice()) {
                 self.sequencer.load_from_state(data);
-                self.file = path.file_name().unwrap().to_str().unwrap().to_string();
+                self.file = path.to_str().unwrap().to_string();
                 self.sequencer.loaded_file = self.file.clone();
                 self.file_uptodate = true;
                 std::mem::drop(state);
@@ -199,7 +199,7 @@ impl App {
         };
         ctx.send_viewport_cmd(egui::ViewportCommand::Title(format!(
             "{}{} - Automate",
-            self.file, //.replace(".auto", ""),
+            Path::new(&self.file).file_name().unwrap().to_str().unwrap().to_string(), //.replace(".auto", ""),
             saved,
         )));
     }
@@ -356,7 +356,7 @@ impl eframe::App for App {
                 .movable(true)
                 .collapsible(false)
                 .show(ctx, |ui| {
-                    ui.label(format!("Do you want to save changes to {:?}", self.file));
+                    ui.label(format!("Do you want to save changes to {:?}", Path::new(&self.file).file_name().unwrap().to_str().unwrap().to_string()));
                     ui.horizontal(|ui| {
                         if ui.button("Save").clicked() {
                             self.save_file();
