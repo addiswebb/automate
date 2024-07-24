@@ -19,7 +19,7 @@ use crate::{
 #[derive(serde::Deserialize, serde::Serialize)]
 #[serde(default)]
 pub struct App {
-    #[serde(skip)] //Serializing creates two threads somehow
+    // #[serde(skip)] //Serializing creates two threads somehow
     sequencer: Sequencer,
     #[serde(skip)]
     last_instant: Instant,

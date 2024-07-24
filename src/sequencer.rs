@@ -25,7 +25,9 @@ pub struct SequencerState {
 pub struct Sequencer {
     pub mouse_movement_record_resolution: Arc<AtomicI32>,
     scale: f32, // egui coord points:seconds
+    #[serde(skip)]
     repeats: i32,
+    #[serde(skip)]
     speed: f32,
     #[serde(skip)]
     pub keyframes: Arc<Mutex<Vec<Keyframe>>>,
@@ -916,6 +918,7 @@ impl Sequencer {
         )
         .on_hover_text("Time");
 
+        let (r,s) = (self.repeats, self.speed);
         ui.add(
             egui::DragValue::new(&mut self.repeats)
                 .speed(1)
@@ -926,9 +929,15 @@ impl Sequencer {
             egui::DragValue::new(&mut self.speed)
                 .speed(1)
                 .suffix("x")
-                .range(1.0..=20.0),
+                .range(1.0..=20.0) ,
         )
         .on_hover_text("Playback Speed");
+        // Check if repeats or speed has changed,
+        if (r,s) != (self.repeats,self.speed){
+            // This is important as if a change is not detected, they cannot be saved properly leading to
+            // frustrating inconsistences as both are saved per file
+            self.changed.swap(true, Ordering::Relaxed);
+        }
 
         if self.recording.load(Ordering::Relaxed) {
             if ui.button("⏹").on_hover_text("Stop Recording: F8").clicked() {
