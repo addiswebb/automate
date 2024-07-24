@@ -573,7 +573,7 @@ impl Sequencer {
                 max_rect.translate(vec2(0., y)),
             );
             // Time_to_rect clips all keyframes that are not visible for performance, this skips them
-            if let Some(rect) = rect {
+            if let Some(mut rect) = rect {
                 // Used to determine different interactions with keyframes
                 let ctrl = ui.input(|i| i.modifiers.ctrl);
                 // Handle when the user is drag selecting over keyframes
@@ -611,12 +611,16 @@ impl Sequencer {
                 let stroke = match keyframe_state[i] {
                     1 => egui::Stroke::new(1.5, egui::Color32::LIGHT_RED), //Playing
                     2 => egui::Stroke::new(1.5, egui::Color32::from_rgb(233, 181, 125)), //Selected
+                    // Handle edge case for loop keyframes which should be transparent with white text and border
                     _ => match keyframes[i].kind == 7 {
                         true => egui::Stroke::new(1., egui::Color32::WHITE),
                         false => egui::Stroke::new(0.4, egui::Color32::from_rgb(15, 37, 42)),
                     }, //Not selected
                 };
 
+                if keyframes[i].kind == 7 {
+                    rect = rect.expand(2.);
+                }
                 let keyframe = ui
                     .allocate_rect(rect, egui::Sense::click_and_drag())
                     .on_hover_text(format!("{:?}", keyframes[i].keyframe_type));
@@ -643,6 +647,7 @@ impl Sequencer {
                         Align2::CENTER_CENTER,
                         format!("{}", label),
                         FontId::default(),
+                        // Handle edge case for loop keyframes which should be transparent with white text and border
                         match keyframes[i].kind == 7 {
                             true => egui::Color32::WHITE,
                             false => egui::Color32::BLACK,

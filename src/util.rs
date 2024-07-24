@@ -6,6 +6,9 @@ use xcap::Monitor;
 
 pub const ROW_HEIGHT: f32 = 24.0;
 
+/// Converts a given `t` in seconds to a window space rect using `d` duration to determine the width
+///
+/// `max_t` used specifically for keyframes to clip them between `0s` and the visible end of the sequencer
 pub fn time_to_rect(t: f32, d: f32, max_t: f32, spacing: Vec2, res_rect: Rect) -> Option<Rect> {
     let to_screen =
         RectTransform::from_to(Rect::from_min_size(Pos2::ZERO, res_rect.size()), res_rect);
@@ -336,12 +339,15 @@ pub fn screenshot() -> Option<Vec<u8>> {
     }
 }
 
+/// Simulate a mouse move accounting for multiple monitors with the offset
 pub fn simulate_move(pos: &Vec2, offset: &Vec2) {
     rdev::simulate(&rdev::EventType::MouseMove {
         x: (pos.x + offset.x) as f64,
         y: (pos.y + offset.y) as f64,
     })
-    .expect("Failed to simulate Mouse Movement (Probably due to an anti-cheat installed)");
+    .expect(
+        "Failed to simulate Mouse Movement (Probably due to a kernel level anti-cheat running)",
+    );
 }
 
 #[allow(unused)]
@@ -431,6 +437,7 @@ pub fn within_tolerance(value1: u8, value2: u8, tolerance: u8) -> bool {
 
 use opencv::core::{Mat, MatTraitConst, Point, VecN};
 
+/// Locates the center of a target image within a screenshot using OpenCV template matching
 pub fn template_match_opencv(target: DynamicImage) -> Option<Vec2> {
     if let Some(screenshot) = screenshot() {
         let screenshot: ImageBuffer<Rgba<u8>, Vec<u8>> =
@@ -485,6 +492,9 @@ pub fn template_match_opencv(target: DynamicImage) -> Option<Vec2> {
     None
 }
 
+/// Calculates the percentage difference between two images
+///
+/// 0% is an exact match
 pub fn image_dif_opencv(vec1: &Vec<u8>, vec2: &Vec<u8>) -> f32 {
     let src1 =
         opencv::core::Mat::new_rows_cols_with_bytes::<VecN<u8, 4>>(1920, 1080, &vec1).unwrap();
