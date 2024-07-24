@@ -918,7 +918,7 @@ impl Sequencer {
         )
         .on_hover_text("Time");
 
-        let (r,s) = (self.repeats, self.speed);
+        let (r, s) = (self.repeats, self.speed);
         ui.add(
             egui::DragValue::new(&mut self.repeats)
                 .speed(1)
@@ -929,11 +929,11 @@ impl Sequencer {
             egui::DragValue::new(&mut self.speed)
                 .speed(1)
                 .suffix("x")
-                .range(1.0..=20.0) ,
+                .range(1.0..=20.0),
         )
         .on_hover_text("Playback Speed");
         // Check if repeats or speed has changed,
-        if (r,s) != (self.repeats,self.speed){
+        if (r, s) != (self.repeats, self.speed) {
             // This is important as if a change is not detected, they cannot be saved properly leading to
             // frustrating inconsistences as both are saved per file
             self.changed.swap(true, Ordering::Relaxed);
@@ -954,12 +954,18 @@ impl Sequencer {
         }
     }
     /// Render the timeline with numbers and notches
-    fn render_timeline(&self, ui: &mut Ui, max_rect: Rect) {
+    fn render_timeline(&mut self, ui: &mut Ui, max_rect: Rect) {
         let pos = time_to_rect(4.0, 0.0, 0.0, ui.spacing().item_spacing, max_rect)
             .unwrap()
             .min;
         //offset so that the left most digit is fully visible += 4.0;
-        let (_, painter) = ui.allocate_painter(ui.available_size(), egui::Sense::click());
+        let (response, painter) = ui.allocate_painter(ui.available_size(), egui::Sense::drag());
+        if response.dragged() {
+            if let Some(pos) = response.interact_pointer_pos() {
+                // mouse position to time, 78 is the distance 0s is from the left side of the screen
+                self.time = (pos.x - 78.) * (1.0 / scale(ui, 1.0, self.scale)) + self.scroll;
+            }
+        }
         for i in self.scroll as i32
             ..(max_rect.width() * (1.0 / scale(ui, 1.0, self.scale)) + self.scroll).ceil() as i32
         {
@@ -969,8 +975,7 @@ impl Sequencer {
                 2 => (10., 2.),
                 _ => (12., 0.),
             };
-            let point =
-                pos + vec2(scale(ui, i as f32 - self.scroll, self.scale), 0.0) + vec2(0., y_offset);
+            let point = pos + vec2(scale(ui, i as f32 - self.scroll, self.scale), y_offset);
             painter.text(
                 point,
                 Align2::CENTER_TOP,
@@ -1055,14 +1060,15 @@ impl Sequencer {
         egui::TopBottomPanel::bottom("Sequencer").show(ctx, |ui| {
             use egui_extras::{Column, TableBuilder};
 
-            let mut max_rect = ui
+            let mut keyframe_clip_rect = ui
                 .max_rect()
                 .translate(vec2(6.5, 0.))
                 .translate(vec2(0., (ROW_HEIGHT + ui.spacing().item_spacing.y) * 2.));
 
-            max_rect.max.y = max_rect.min.y + (ROW_HEIGHT) * 4. + ui.spacing().item_spacing.y;
-            max_rect.min.x += 60.;
-            max_rect.max.y -= ROW_HEIGHT;
+            keyframe_clip_rect.max.y =
+                keyframe_clip_rect.min.y + (ROW_HEIGHT) * 3. + ui.spacing().item_spacing.y;
+            // Shift the clipping rect over to exclude the first column
+            keyframe_clip_rect.min.x += 60.;
 
             let mut table = TableBuilder::new(ui)
                 .striped(false)
@@ -1093,8 +1099,8 @@ impl Sequencer {
                             self.render_timeline(
                                 ui,
                                 Rect {
-                                    min: pos2(max_rect.min.x, rect.min.y),
-                                    max: pos2(max_rect.max.x, rect.max.y),
+                                    min: pos2(keyframe_clip_rect.min.x, rect.min.y),
+                                    max: pos2(keyframe_clip_rect.max.x, rect.max.y),
                                 },
                             );
                         });
@@ -1127,7 +1133,8 @@ impl Sequencer {
                     body.row(ROW_HEIGHT, |mut row| {
                         row.col(|_| {});
                         row.col(|ui| {
-                            let mut max_t = max_rect.width() * (1.0 / scale(ui, 1.0, self.scale));
+                            let mut max_t =
+                                keyframe_clip_rect.width() * (1.0 / scale(ui, 1.0, self.scale));
                             {
                                 let keyframes = self.keyframes.lock().unwrap();
                                 let last = keyframes.last();
@@ -1143,25 +1150,25 @@ impl Sequencer {
                                 ui,
                                 max_t,
                                 Rect {
-                                    min: pos2(max_rect.min.x, rect.min.y),
-                                    max: pos2(max_rect.max.x, rect.max.y),
+                                    min: pos2(keyframe_clip_rect.min.x, rect.min.y),
+                                    max: pos2(keyframe_clip_rect.max.x, rect.max.y),
                                 },
                             );
                         });
                     });
                 });
 
-            self.render_keyframes(ui, &max_rect);
+            self.render_keyframes(ui, &keyframe_clip_rect);
             if self.selecting {
                 ui.painter().rect(
-                    self.compute_selection_rect(&max_rect),
+                    self.compute_selection_rect(&keyframe_clip_rect),
                     egui::Rounding::same(2.0),
                     egui::Color32::from_rgba_unmultiplied(0xAD, 0xD8, 0xE6, 20),
                     egui::Stroke::new(0.4, egui::Color32::LIGHT_BLUE),
                 );
             }
 
-            self.render_playhead(ui, 3, max_rect);
+            self.render_playhead(ui, 3, keyframe_clip_rect);
         });
     }
     /// Render the scroll bar
