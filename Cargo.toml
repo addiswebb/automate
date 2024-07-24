@@ -39,7 +39,6 @@ xcap = "0.0.10"
 image = "0.25.2"
 # imageproc = "0.25.0"
 opencv = { version = "0.92.1", default-features = true }
-# dify = "0.6.0"           # Image comparison
 
 [profile.dev.package."*"]
 opt-level = 2

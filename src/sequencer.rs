@@ -10,6 +10,8 @@ use crate::util::*;
 use eframe::egui::{self, pos2, Ui, Vec2};
 use egui::{vec2, Align2, ColorImage, FontId, TextureHandle};
 use egui::{Pos2, Rect};
+use image::{DynamicImage, ImageBuffer, Rgba};
+use opencv::core::VecN;
 use serde::{Deserialize, Serialize};
 use uuid::{Bytes, Uuid};
 
@@ -80,6 +82,7 @@ pub struct Sequencer {
     texture_handles: Vec<TextureHandle>,
     x: (u8, f32),
     pub failsafe_edge: Arc<Mutex<MonitorEdge>>,
+    pub max_percentage_error: f32,
 }
 
 impl Sequencer {
@@ -339,6 +342,7 @@ impl Sequencer {
             texture_handles: Vec::new(),
             x: (2, 0.999),
             failsafe_edge,
+            max_percentage_error: 0.1,
         }
     }
     /// Returns the current time where the playhead is
@@ -1444,6 +1448,7 @@ impl Sequencer {
             }
         }
 
+        // Sorts keyframes in chronologicall order with an exeption for loop keyframes
         if self.should_sort {
             keyframes.sort_by(|a, b| {
                 // These checks keep loop keyframes at the start of the array so they are rendered first
@@ -1461,8 +1466,8 @@ impl Sequencer {
             self.should_sort = false;
         }
 
+        // Reset the selected keyframes to be recomputed below
         keyframe_state.iter_mut().for_each(|state| {
-            // Reset the selected keyframes to be recomputed below
             if state == &2 {
                 *state = 0;
             }
@@ -1587,6 +1592,21 @@ impl Sequencer {
                     if current_keyframe_state != keyframe_state[i] {
                         // If so and the sequencer is playing
                         if play {
+                            // Check if the keyframe has a screenshot
+                            if let Some(src1) = self.images.lock().unwrap().get(&keyframe.uid) {
+                                if let Some(src2) = screenshot() {
+                                    let percentage_err = image_dif_opencv(src1, &src2);
+                                    if percentage_err > self.max_percentage_error {
+                                        self.play.swap(false, Ordering::Relaxed);
+                                        log::warn!(
+                                            "Fail Detected: {:?}% err",
+                                            percentage_err * 100.
+                                        );
+                                        break;
+                                    }
+                                }
+                            }
+                            println!("handling");
                             self.handle_playing_keyframe(keyframe, true, offset);
                         }
                     }

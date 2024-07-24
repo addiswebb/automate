@@ -324,9 +324,7 @@ pub fn scale(ui: &Ui, i: f32, scale: f32) -> f32 {
 
 /// Takes a screenshot of the primary monitor and returns it as a `Vec<u8>` in `Rgba` format
 pub fn screenshot() -> Option<Vec<u8>> {
-    // thread::spawn(move ||{
     let monitors = Monitor::all().unwrap();
-
     let monitor = monitors.iter().find(|m| m.is_primary());
 
     if let Some(monitor) = monitor {
@@ -402,8 +400,6 @@ pub fn image_in_image_search(
                     matching_pixels as f32 / total_pixels as f32
                 };
                 if confidence >= min_confidence {
-                    println!("found at :{confidence}");
-
                     screenshot
                         .crop(x, y, target.width() + 20, target.height() + 20)
                         .save("test.png")
@@ -433,7 +429,7 @@ pub fn within_tolerance(value1: u8, value2: u8, tolerance: u8) -> bool {
     value1 >= min_value && value1 <= max_value
 }
 
-use opencv::core::{Mat, Point};
+use opencv::core::{Mat, MatTraitConst, Point, VecN};
 
 pub fn template_match_opencv(target: DynamicImage) -> Option<Vec2> {
     let now = Instant::now();
@@ -489,4 +485,24 @@ pub fn template_match_opencv(target: DynamicImage) -> Option<Vec2> {
     }
 
     None
+}
+
+pub fn image_dif_opencv(vec1: &Vec<u8>, vec2: &Vec<u8>) -> f32 {
+    let src1 =
+        opencv::core::Mat::new_rows_cols_with_bytes::<VecN<u8, 4>>(1920, 1080, &vec1).unwrap();
+    let src2 =
+        opencv::core::Mat::new_rows_cols_with_bytes::<VecN<u8, 4>>(1920, 1080, &vec2).unwrap();
+
+    let mut src1x = Mat::default();
+    let mut src2x = Mat::default();
+
+    opencv::imgproc::cvt_color(&src1, &mut src1x, opencv::imgproc::COLOR_RGBA2GRAY, 0).unwrap();
+    opencv::imgproc::cvt_color(&src2, &mut src2x, opencv::imgproc::COLOR_RGBA2GRAY, 0).unwrap();
+
+    let mut diff = Mat::default();
+    opencv::core::absdiff(&src1x, &src2x, &mut diff).unwrap();
+
+    let result = opencv::core::count_non_zero(&diff).unwrap();
+    let size = diff.size().unwrap();
+    return result as f32 / size.area() as f32;
 }

@@ -644,6 +644,17 @@ impl eframe::App for App {
                                         ui.small("Only works for main monitor");
                                     });
                                     ui.add_space(6.);
+                                    ui.separator();
+                                    ui.add_space(6.);
+                                    ui.vertical(|ui|{
+                                        ui.horizontal(|ui|{
+                                            ui.strong("Error detection");
+                                            ui.add(egui::DragValue::new(&mut self.sequencer.max_percentage_error).speed(0.01).range(0.0..=1.0));
+                                        });
+                                        ui.label("Incase of failure during playback, quickly slam the mouse into the selected edge to stop.");
+                                        ui.small("Only works for main monitor");
+                                    });
+                                    ui.add_space(6.);
                                 });
                                 // ui.spacing();
                                 // ui.separator();
