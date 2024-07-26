@@ -724,20 +724,16 @@ impl eframe::App for App {
                                     if ui.button("X").clicked() {}
                                 });
                                 ui.spacing();
-                                let mut table = TableBuilder::new(ui)
+                                TableBuilder::new(ui)
                                     .striped(false)
-                                    .resizable(false)
+                                    .resizable(true)
                                     .cell_layout(egui::Layout::left_to_right(egui::Align::Center))
                                     // Shortcut column
                                     .column(Column::auto())
                                     // Keybindings column
-                                    .column(Column::remainder())
+                                    .column(Column::auto())
                                     .drag_to_scroll(false)
-                                    .sense(egui::Sense::hover());
-                                //allow rows to be clicked
-                                table = table.sense(egui::Sense::click()).resizable(true);
-
-                                table
+                                    .sense(egui::Sense::click())
                                     .header(22., |mut header| {
                                         header.col(|ui| {
                                             ui.strong("Shortcut");
@@ -773,7 +769,7 @@ impl eframe::App for App {
             });
 
         self.sequencer
-            .update(&mut self.last_instant, ctx, &self.settings.offset, (self.settings.fail_detection,self.settings.max_fail_error));
+            .update(&mut self.last_instant, ctx, &self.settings);
         self.sequencer.show(ctx);
         self.sequencer.debug_panel(ctx);
         self.sequencer.selected_panel(ctx);

@@ -6,7 +6,7 @@ use std::time::Duration;
 use std::{thread, time::Instant};
 
 use crate::keyframe::{Keyframe, KeyframeType};
-use crate::settings::MonitorEdge;
+use crate::settings::{MonitorEdge, Settings};
 use crate::util::*;
 use eframe::egui::{self, pos2, Ui, Vec2};
 use egui::{vec2, Align2, ColorImage, FontId, TextureHandle};
@@ -1155,7 +1155,7 @@ impl Sequencer {
                 min: pos2(p1.x - padding, p1.y - padding),
                 max: pos2(p1.x + padding, p2.y + padding),
             },
-            egui::Sense::click_and_drag(),
+            egui::Sense::drag(),
         );
         if playhead.hovered() {
             ui.output_mut(|o| o.cursor_icon = egui::CursorIcon::PointingHand);
@@ -1213,18 +1213,14 @@ impl Sequencer {
             // Shift the clipping rect over to exclude the first column
             keyframe_clip_rect.min.x += 60.;
 
-            let mut table = TableBuilder::new(ui)
+            TableBuilder::new(ui)
                 .striped(false)
-                .resizable(false)
+                .resizable(true)
                 .cell_layout(egui::Layout::left_to_right(egui::Align::Center))
                 .column(Column::initial(60.0).range(60.0..=60.0))
                 .column(Column::remainder())
                 .drag_to_scroll(false)
-                .sense(egui::Sense::hover());
-            //allow rows to be clicked
-            table = table.sense(egui::Sense::click()).resizable(true);
-
-            table
+                .sense(egui::Sense::click())
                 .header(ROW_HEIGHT, |mut header| {
                     header.col(|ui| {
                         ui.strong("Inputs");
@@ -1596,13 +1592,7 @@ impl Sequencer {
         });
     }
     /// Handles keeping state, and replaying keystrokes when playing
-    pub fn update(
-        &mut self,
-        last_instant: &mut Instant,
-        ctx: &egui::Context,
-        offset: &Vec2,
-        fail_detection: (bool, f32),
-    ) {
+    pub fn update(&mut self, last_instant: &mut Instant, ctx: &egui::Context, settings: &Settings) {
         // Handle focus of the window when recording and when not
         // Since toggle_recording cant be called from the recording thread, it gets called here with "was_recording" as a safety check
         if self.was_recording != self.recording.load(Ordering::Relaxed) {
@@ -1769,11 +1759,11 @@ impl Sequencer {
                         // If so and the sequencer is playing
                         if play {
                             // When fail detection is enabled check if the keyframe has a screenshot
-                            if fail_detection.0 {
+                            if settings.fail_detection {
                                 if let Some(src1) = self.images.lock().unwrap().get(&uid) {
                                     if let Some(src2) = screenshot() {
                                         let percentage_err = image_dif_opencv(src1, &src2);
-                                        if percentage_err > fail_detection.1 {
+                                        if percentage_err > settings.max_fail_error {
                                             self.play.swap(false, Ordering::Relaxed);
                                             ctx.send_viewport_cmd(egui::ViewportCommand::Focus);
                                             log::warn!(
@@ -1785,7 +1775,11 @@ impl Sequencer {
                                     }
                                 }
                             }
-                            self.handle_playing_keyframe(&self.keyframes[i], true, offset);
+                            self.handle_playing_keyframe(
+                                &self.keyframes[i],
+                                true,
+                                &settings.offset,
+                            );
                         }
                     }
                 } else {
@@ -1797,7 +1791,7 @@ impl Sequencer {
                     if current_keyframe_state != self.keyframe_state[i] {
                         // If so and the sequencer is playing
                         if play {
-                            self.handle_playing_keyframe(&self.keyframes[i], false, offset);
+                            self.handle_playing_keyframe(&self.keyframes[i], false, &settings.offset);
                             if let KeyframeType::Loop(repeats, j) = self.keyframes[i].keyframe_type
                             {
                                 if j < repeats {
