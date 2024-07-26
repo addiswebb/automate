@@ -12,7 +12,7 @@ use zip::{write::SimpleFileOptions, ZipArchive, ZipWriter};
 
 use crate::{
     keyframe::{Keyframe, KeyframeType},
-    sequencer::{Sequencer, SequencerState},
+    sequencer::{Change, ChangeData, Sequencer, SequencerState},
     settings::{MonitorEdge, Settings, SettingsPage},
 };
 
@@ -269,12 +269,12 @@ impl eframe::App for App {
                     println!("opend, setting title");
                 }
                 // Keybind(ctrl+z): Undo last change
-                else if i.key_pressed(egui::Key::O) {
-                    println!("Undo: to be implemented");
+                else if i.key_pressed(egui::Key::Z) {
+                    self.sequencer.undo();
                 }
                 // Keybind(ctrl+y): Redo last change
-                else if i.key_pressed(egui::Key::O) {
-                    println!("Redo: to be implemented");
+                else if i.key_pressed(egui::Key::Y) {
+                    self.sequencer.redo();
                 }
                 // Keybind(ctrl+,): Toggle settings window
                 else if i.key_pressed(egui::Key::Comma) {
@@ -487,12 +487,12 @@ impl eframe::App for App {
                     }
                 });
                 ui.menu_button("Edit", |ui| {
-                    if ui.button("Undo").clicked() {
-                        println!("Undo: to be implemented");
+                    if ui.add_enabled(!self.sequencer.changes.0.is_empty(),egui::Button::new("Undo")).clicked(){
+                        self.sequencer.undo();
                         ui.close_menu();
                     }
-                    if ui.button("Redo").clicked() {
-                        println!("Redo: to be implemented");
+                    if ui.add_enabled(!self.sequencer.changes.1.is_empty(),egui::Button::new("Redo")).clicked(){
+                        self.sequencer.redo();
                         ui.close_menu();
                     }
 
@@ -531,37 +531,49 @@ impl eframe::App for App {
                     ui.menu_button("Add", |ui| {
                         if ui.button("Wait").clicked() {
                             let mut keyframes = self.sequencer.keyframes.lock().unwrap();
-                            keyframes.push(Keyframe {
+                            let keyframe = Keyframe {
                                 timestamp: self.sequencer.get_time(),
                                 duration: 1.,
                                 keyframe_type: KeyframeType::Wait(1.),
                                 kind: 4,
                                 uid: Uuid::new_v4().to_bytes_le(),
-                            });
+                            };
+                            keyframes.push(keyframe.clone());
+                            self.sequencer.changes.0.push(Change { uids: vec![], data: vec![ChangeData::AddKeyframes(vec![keyframe])]});
+                            drop(keyframes);
+                            self.sequencer.should_sort();
                             self.sequencer.keyframe_state.lock().unwrap().push(0);
                             ui.close_menu();
                         }
                         if ui.button("Magic Move").clicked() {
                             let mut keyframes = self.sequencer.keyframes.lock().unwrap();
-                            keyframes.push(Keyframe {
+                            let keyframe = Keyframe {
                                 timestamp: self.sequencer.get_time(),
                                 duration: 0.2,
                                 keyframe_type: KeyframeType::MagicMove("target.png".to_string()),
                                 kind: 6,
                                 uid: Uuid::new_v4().to_bytes_le(),
-                            });
+                            };
+                            keyframes.push(keyframe.clone());
+                            self.sequencer.changes.0.push(Change { uids: vec![], data: vec![ChangeData::AddKeyframes(vec![keyframe])]});
+                            drop(keyframes);
+                            self.sequencer.should_sort();
                             self.sequencer.keyframe_state.lock().unwrap().push(0);
                             ui.close_menu();
                         }
                         if ui.button("Loop").clicked() {
                             let mut keyframes = self.sequencer.keyframes.lock().unwrap();
-                            keyframes.push(Keyframe {
+                            let keyframe = Keyframe {
                                 timestamp: self.sequencer.get_time(),
                                 duration: 5.,
                                 keyframe_type: KeyframeType::Loop(10,1),
                                 kind: 7,
                                 uid: Uuid::new_v4().to_bytes_le(),
-                            });
+                            };
+                            keyframes.push(keyframe.clone());
+                            self.sequencer.changes.0.push(Change { uids: vec![], data: vec![ChangeData::AddKeyframes(vec![keyframe])]});
+                            drop(keyframes);
+                            self.sequencer.should_sort();
                             self.sequencer.keyframe_state.lock().unwrap().push(0);
                             ui.close_menu();
                         }
