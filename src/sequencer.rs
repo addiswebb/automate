@@ -1,5 +1,6 @@
 use core::f32;
 use std::collections::HashMap;
+use std::path::Path;
 use std::sync::atomic::{AtomicBool, AtomicI32, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
@@ -26,6 +27,8 @@ pub enum ChangeData {
     RemoveKeyframes(Vec<Keyframe>),
     EditTimestamp(f32),
     EditDuration(f32),
+    EditMagicFindPath(String, String),
+    EditMouseButton(rdev::Button, rdev::Button),
 }
 pub struct Change {
     pub uids: Vec<Bytes>,
@@ -494,10 +497,10 @@ impl Sequencer {
     }
     /// Undo's the changes in the top of the undo stack and moves it to the redo stack
     pub fn undo(&mut self) {
-        if let Some(changes_to_undo) = self.changes.0.pop() {
+        if let Some(changes) = self.changes.0.pop() {
             // If there are no uids, it means we are adding/removing keyframes only
             let now = Instant::now();
-            for change in &changes_to_undo.data {
+            for change in &changes.data {
                 match change {
                     // Perform the inverse of the operation since we are "undo"ing it
                     ChangeData::AddKeyframes(kfs) => {
@@ -518,7 +521,7 @@ impl Sequencer {
                         }
                     }
                     ChangeData::EditTimestamp(delta) => {
-                        for uid in &changes_to_undo.uids {
+                        for uid in &changes.uids {
                             for i in 0..self.keyframes.len() {
                                 if *uid == self.keyframes[i].uid {
                                     self.keyframes[i].timestamp -= *delta;
@@ -527,10 +530,36 @@ impl Sequencer {
                         }
                     }
                     ChangeData::EditDuration(delta) => {
-                        for uid in &changes_to_undo.uids {
+                        for uid in &changes.uids {
                             for i in 0..self.keyframes.len() {
                                 if *uid == self.keyframes[i].uid {
                                     self.keyframes[i].duration -= *delta;
+                                }
+                            }
+                        }
+                    }
+                    ChangeData::EditMagicFindPath(old, _new) => {
+                        if let Some(uid) = changes.uids.first() {
+                            for i in 0..self.keyframes.len() {
+                                if *uid == self.keyframes[i].uid {
+                                    if let KeyframeType::MagicMove(path) =
+                                        &mut self.keyframes[i].keyframe_type
+                                    {
+                                        *path = old.clone();
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    ChangeData::EditMouseButton(old, _new) => {
+                        if let Some(uid) = changes.uids.first() {
+                            for i in 0..self.keyframes.len() {
+                                if *uid == self.keyframes[i].uid {
+                                    if let KeyframeType::MouseBtn(btn) =
+                                        &mut self.keyframes[i].keyframe_type
+                                    {
+                                        *btn = old.clone();
+                                    }
                                 }
                             }
                         }
@@ -540,18 +569,18 @@ impl Sequencer {
 
             log::info!(
                 "Undid {:?} changes in {:?}",
-                changes_to_undo.data.len(),
+                changes.data.len(),
                 now.elapsed()
             );
-            self.changes.1.push(changes_to_undo);
+            self.changes.1.push(changes);
             self.changed();
         }
     }
     /// Redo's the changes in the top of the redo stack and moves it to the undo stack
     pub fn redo(&mut self) {
         let now = Instant::now();
-        if let Some(changes_to_redo) = self.changes.1.pop() {
-            for change in &changes_to_redo.data {
+        if let Some(changes) = self.changes.1.pop() {
+            for change in &changes.data {
                 match change {
                     // Perform the operation since we are "redo"ing it
                     ChangeData::AddKeyframes(kfs) => {
@@ -572,7 +601,7 @@ impl Sequencer {
                         }
                     }
                     ChangeData::EditTimestamp(delta) => {
-                        for uid in &changes_to_redo.uids {
+                        for uid in &changes.uids {
                             for i in 0..self.keyframes.len() {
                                 if *uid == self.keyframes[i].uid {
                                     self.keyframes[i].timestamp += *delta;
@@ -581,10 +610,36 @@ impl Sequencer {
                         }
                     }
                     ChangeData::EditDuration(delta) => {
-                        for uid in &changes_to_redo.uids {
+                        for uid in &changes.uids {
                             for i in 0..self.keyframes.len() {
                                 if *uid == self.keyframes[i].uid {
                                     self.keyframes[i].duration += *delta;
+                                }
+                            }
+                        }
+                    }
+                    ChangeData::EditMagicFindPath(_old, new) => {
+                        if let Some(uid) = changes.uids.first() {
+                            for i in 0..self.keyframes.len() {
+                                if *uid == self.keyframes[i].uid {
+                                    if let KeyframeType::MagicMove(path) =
+                                        &mut self.keyframes[i].keyframe_type
+                                    {
+                                        *path = new.clone();
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    ChangeData::EditMouseButton(_old, new) => {
+                        if let Some(uid) = changes.uids.first() {
+                            for i in 0..self.keyframes.len() {
+                                if *uid == self.keyframes[i].uid {
+                                    if let KeyframeType::MouseBtn(btn) =
+                                        &mut self.keyframes[i].keyframe_type
+                                    {
+                                        *btn = new.clone();
+                                    }
                                 }
                             }
                         }
@@ -593,10 +648,10 @@ impl Sequencer {
             }
             log::info!(
                 "Redid {:?} changes in {:?}",
-                changes_to_redo.data.len(),
+                changes.data.len(),
                 now.elapsed()
             );
-            self.changes.0.push(changes_to_redo);
+            self.changes.0.push(changes);
             self.changed();
         }
     }
@@ -1368,6 +1423,7 @@ impl Sequencer {
                         }
                     }
                     let keyframe = &mut self.keyframes[index];
+                    let mut changed = false;
 
                     match &mut keyframe.keyframe_type {
                         KeyframeType::KeyBtn(key) => {
@@ -1375,9 +1431,23 @@ impl Sequencer {
                             ui.label("key stroke");
                             ui.label(format!("{:?}", key));
                         }
-                        KeyframeType::MouseBtn(key) => {
+                        KeyframeType::MouseBtn(btn) => {
                             ui.strong("Mouse Button press");
-                            ui.label(format!("button: {:?}", key));
+                            let old_btn = *btn;
+                            egui::ComboBox::from_label("")
+                                .selected_text(format!("{:?}", btn))
+                                .show_ui(ui, |ui| {
+                                    ui.selectable_value(btn, rdev::Button::Left, "Left");
+                                    ui.selectable_value(btn, rdev::Button::Middle, "Middle");
+                                    ui.selectable_value(btn, rdev::Button::Right, "Right");
+                                });
+                            if old_btn != *btn {
+                                self.changes.0.push(Change {
+                                    uids: vec![keyframe.uid],
+                                    data: vec![ChangeData::EditMouseButton(old_btn, *btn)],
+                                });
+                                changed = true;
+                            }
                         }
                         KeyframeType::MouseMove(pos) => {
                             ui.strong("Mouse move");
@@ -1397,7 +1467,33 @@ impl Sequencer {
                         }
                         KeyframeType::MagicMove(path) => {
                             ui.strong("Magic!!");
-                            ui.text_edit_singleline(path);
+                            // ui.text_edit_singleline(path);
+                            ui.horizontal(|ui| {
+                                ui.set_max_width(100.);
+                                ui.label(format!(
+                                    "{}",
+                                    Path::new(path).file_name().unwrap().to_str().unwrap()
+                                ));
+                                if ui.button("Open").clicked() {
+                                    rfd::FileDialog::new()
+                                        .add_filter("Images", &["png"])
+                                        .set_directory("/")
+                                        .pick_file()
+                                        .and_then(|p| {
+                                            let p = p.to_str().unwrap().to_string();
+                                            self.changes.0.push(Change {
+                                                uids: vec![keyframe.uid],
+                                                data: vec![ChangeData::EditMagicFindPath(
+                                                    path.clone(),
+                                                    p.clone(),
+                                                )],
+                                            });
+                                            changed = true;
+                                            *path = p;
+                                            Some(())
+                                        });
+                                }
+                            });
                         }
                         KeyframeType::Loop(repeats, i) => {
                             ui.strong("Loop");
@@ -1409,6 +1505,7 @@ impl Sequencer {
                     // Used later to check if the keyframe was edited
                     let (tmpx, tmpy) = (keyframe.timestamp, keyframe.duration);
 
+                    // Edit keyframe.timestamp
                     ui.horizontal(|ui| {
                         ui.label("Timestamp");
                         let resp = ui.add(
@@ -1431,6 +1528,7 @@ impl Sequencer {
                         }
                     });
 
+                    // Edit keyframe.duration
                     ui.horizontal(|ui| {
                         ui.label("Duration");
                         let resp = ui.add(
@@ -1452,12 +1550,14 @@ impl Sequencer {
                             });
                         }
                     });
+                    // Keyframe.uid
                     ui.small(format!(
-                        "UUID: {}",
+                        "UID: {}",
                         Uuid::from_bytes_le(keyframe.uid).to_string()
                     ));
                     // Check if the selected keyframe was changed
-                    if (tmpx, tmpy) != (keyframe.timestamp, keyframe.duration) {
+                    if (tmpx, tmpy) != (keyframe.timestamp, keyframe.duration) || changed {
+                        println!("x");
                         self.changed();
                     }
                 } else {
@@ -1791,7 +1891,11 @@ impl Sequencer {
                     if current_keyframe_state != self.keyframe_state[i] {
                         // If so and the sequencer is playing
                         if play {
-                            self.handle_playing_keyframe(&self.keyframes[i], false, &settings.offset);
+                            self.handle_playing_keyframe(
+                                &self.keyframes[i],
+                                false,
+                                &settings.offset,
+                            );
                             if let KeyframeType::Loop(repeats, j) = self.keyframes[i].keyframe_type
                             {
                                 if j < repeats {
