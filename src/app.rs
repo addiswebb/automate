@@ -25,7 +25,7 @@ pub enum DialogPurpose{
 #[derive(serde::Deserialize, serde::Serialize)]
 #[serde(default)]
 pub struct App {
-    // #[serde(skip)] //Serializing creates two threads somehow
+    #[serde(skip)] //Serializing creates two threads somehow
     sequencer: Sequencer,
     #[serde(skip)]
     last_instant: Instant,
@@ -73,8 +73,7 @@ impl App {
     fn new_file(&mut self) {
         if self.file_uptodate {
             //reset the sequencer
-            self.sequencer.keyframes.lock().unwrap().clear();
-            self.sequencer.keyframe_state.lock().unwrap().clear();
+            
             self.sequencer.reset_time();
             self.file = "untitled.auto".to_string();
             self.sequencer.loaded_file = self.file.clone();
@@ -281,28 +280,26 @@ impl eframe::App for App {
                     self.settings.show = !self.settings.show;
                 }
 
-                let keyframes = self.sequencer.keyframes.lock().unwrap();
                 // Keybind(ctrl+right): Select the next keyframe to the right
                 if i.key_pressed(egui::Key::ArrowRight) {
-                    let keyframe_state = self.sequencer.keyframe_state.lock().unwrap();
                     let mut last_index = 0;
 
-                    if !keyframe_state.is_empty() {
+                    if !self.sequencer.keyframe_state.is_empty() {
                         if let Some(last_uuid) = self.sequencer.selected_keyframes.last() {
                             let mut next = 0;
-                            for i in 0..keyframes.len() {
-                                if keyframes[i].uid == *last_uuid {
+                            for i in 0..self.sequencer.keyframes.len() {
+                                if self.sequencer.keyframes[i].uid == *last_uuid {
                                     next = i;
                                     break;
                                 }
                             }
-                            if keyframe_state.len() > next + 1 {
+                            if self.sequencer.keyframe_state.len() > next + 1 {
                                 last_index = next + 1;
                             } else {
                                 last_index = next;
                             }
                         }
-                        let uid = keyframes[last_index].uid;
+                        let uid = self.sequencer.keyframes[last_index].uid;
                         if i.modifiers.shift {
                             match self.sequencer.selected_keyframes.binary_search(&uid) {
                                 Ok(_) => {}
@@ -315,13 +312,12 @@ impl eframe::App for App {
                 }
                 // Keybind(ctrl+left): Select the next keyframe to the left
                 if i.key_pressed(egui::Key::ArrowLeft) {
-                    let keyframe_state = self.sequencer.keyframe_state.lock().unwrap();
                     let mut last_index = 0;
-                    if !keyframe_state.is_empty() {
+                    if !self.sequencer.keyframe_state.is_empty() {
                         let last_uuid = self.sequencer.selected_keyframes.last().unwrap().clone();
                         let mut next = 0;
-                        for i in 0..keyframes.len() {
-                            if keyframes[i].uid == last_uuid {
+                        for i in 0..self.sequencer.keyframes.len() {
+                            if self.sequencer.keyframes[i].uid == last_uuid {
                                 next = i;
                                 break;
                             }
@@ -331,7 +327,7 @@ impl eframe::App for App {
                         } else {
                             last_index = 0;
                         }
-                        let uid = keyframes[last_index].uid;
+                        let uid = self.sequencer.keyframes[last_index].uid;
                         if i.modifiers.shift {
                             match self.sequencer.selected_keyframes.binary_search(&uid) {
                                 Ok(_) => {}
@@ -530,7 +526,6 @@ impl eframe::App for App {
                     ui.separator();
                     ui.menu_button("Add", |ui| {
                         if ui.button("Wait").clicked() {
-                            let mut keyframes = self.sequencer.keyframes.lock().unwrap();
                             let keyframe = Keyframe {
                                 timestamp: self.sequencer.get_time(),
                                 duration: 1.,
@@ -538,15 +533,12 @@ impl eframe::App for App {
                                 kind: 4,
                                 uid: Uuid::new_v4().to_bytes_le(),
                             };
-                            keyframes.push(keyframe.clone());
+                            self.sequencer.keyframes.push(keyframe.clone());
                             self.sequencer.changes.0.push(Change { uids: vec![], data: vec![ChangeData::AddKeyframes(vec![keyframe])]});
-                            drop(keyframes);
                             self.sequencer.should_sort();
-                            self.sequencer.keyframe_state.lock().unwrap().push(0);
                             ui.close_menu();
                         }
                         if ui.button("Magic Move").clicked() {
-                            let mut keyframes = self.sequencer.keyframes.lock().unwrap();
                             let keyframe = Keyframe {
                                 timestamp: self.sequencer.get_time(),
                                 duration: 0.2,
@@ -554,15 +546,12 @@ impl eframe::App for App {
                                 kind: 6,
                                 uid: Uuid::new_v4().to_bytes_le(),
                             };
-                            keyframes.push(keyframe.clone());
+                            self.sequencer.keyframes.push(keyframe.clone());
                             self.sequencer.changes.0.push(Change { uids: vec![], data: vec![ChangeData::AddKeyframes(vec![keyframe])]});
-                            drop(keyframes);
                             self.sequencer.should_sort();
-                            self.sequencer.keyframe_state.lock().unwrap().push(0);
                             ui.close_menu();
                         }
                         if ui.button("Loop").clicked() {
-                            let mut keyframes = self.sequencer.keyframes.lock().unwrap();
                             let keyframe = Keyframe {
                                 timestamp: self.sequencer.get_time(),
                                 duration: 5.,
@@ -570,11 +559,9 @@ impl eframe::App for App {
                                 kind: 7,
                                 uid: Uuid::new_v4().to_bytes_le(),
                             };
-                            keyframes.push(keyframe.clone());
+                            self.sequencer.keyframes.push(keyframe.clone());
                             self.sequencer.changes.0.push(Change { uids: vec![], data: vec![ChangeData::AddKeyframes(vec![keyframe])]});
-                            drop(keyframes);
                             self.sequencer.should_sort();
-                            self.sequencer.keyframe_state.lock().unwrap().push(0);
                             ui.close_menu();
                         }
                     });
@@ -652,8 +639,7 @@ impl eframe::App for App {
                                             if ui.add(egui::Button::new("Calibrate")).on_hover_text("Calibrates the offset necessary to correctly move the mouse when using multiple monitors").clicked() {
                                                 self.sequencer.calibrate.swap(true, Ordering::Relaxed);
                                                 rdev::simulate(&rdev::EventType::MouseMove { x: 0., y: 0. }).unwrap();
-                                                let mut keyframes = self.sequencer.keyframes.lock().unwrap();
-                                                let last = keyframes.last();
+                                                let last = self.sequencer.keyframes.last();
                                                 if let Some(last) = last{
                                                     // Keyframe kind of 255 is used only for calibrating monitor offset
                                                     if last.kind == u8::MAX{
@@ -663,7 +649,7 @@ impl eframe::App for App {
                                                         }
                                                     }
                                                 }
-                                                keyframes.pop();
+                                                self.sequencer.keyframes.pop();
                                                 self.sequencer.calibrate.swap(false, Ordering::Relaxed);
                                                 log::info!("Calibrated Monitor Offset: {:?}", self.settings.offset);
                                             }

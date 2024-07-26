@@ -1,3 +1,4 @@
+use core::f32;
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, AtomicI32, Ordering};
 use std::sync::{Arc, Mutex};
@@ -42,11 +43,11 @@ pub struct Sequencer {
     #[serde(skip)]
     speed: f32,
     #[serde(skip)]
-    pub keyframes: Arc<Mutex<Vec<Keyframe>>>,
+    pub keyframes: Vec<Keyframe>,
     #[serde(skip)]
     pub selected_keyframes: Vec<Bytes>,
     #[serde(skip)]
-    pub keyframe_state: Arc<Mutex<Vec<usize>>>,
+    pub keyframe_state: Vec<usize>,
     #[serde(skip)]
     pub images: Arc<Mutex<HashMap<Bytes, Vec<u8>>>>,
     #[serde(skip)]
@@ -107,9 +108,7 @@ impl Sequencer {
     ///
     /// Also manages creating the keystrokes recording thread
     pub fn new() -> Self {
-        let keyframes: Arc<Mutex<Vec<Keyframe>>> = Arc::new(Mutex::new(vec![]));
         let recording_keyframes: Arc<Mutex<Vec<Keyframe>>> = Arc::new(Mutex::new(vec![]));
-        let keyframe_state = Arc::new(Mutex::new(vec![]));
         let recording = Arc::new(AtomicBool::new(false));
         let play = Arc::new(AtomicBool::new(false));
         let mouse_movement_record_resolution = Arc::new(AtomicI32::new(20));
@@ -119,8 +118,7 @@ impl Sequencer {
         let images = Arc::new(Mutex::new(HashMap::new()));
         let failsafe_edge = Arc::new(Mutex::new(MonitorEdge::Right));
 
-        let shared_kfs = Arc::clone(&keyframes);
-        let shared_pkfs = Arc::clone(&keyframe_state);
+        let shared_kfs = Arc::clone(&recording_keyframes);
         let shared_rec = Arc::clone(&recording);
         let shared_play = Arc::clone(&play);
         let shared_count = Arc::clone(&mouse_movement_record_resolution);
@@ -129,8 +127,6 @@ impl Sequencer {
         let shared_calibrate = Arc::clone(&calibrate);
         let shared_images = Arc::clone(&images);
         let shared_edge = Arc::clone(&failsafe_edge);
-
-        let mut tmp_keyframes = vec![];
 
         let mut previous_mouse_position = Vec2::ZERO;
         // this needs to get reset every time recording starts
@@ -142,11 +138,12 @@ impl Sequencer {
             .spawn(move || {
                 log::info!("Created Recording Thread");
                 if let Err(error) = rdev::listen(move |event: rdev::Event| {
+                    let mut keyframes = shared_kfs.lock().unwrap();
                     // Offset Calibration
                     if shared_calibrate.load(Ordering::Relaxed) {
                         match &event.event_type {
                             rdev::EventType::MouseMove { x, y } => {
-                                shared_kfs.lock().unwrap().push(Keyframe {
+                                keyframes.push(Keyframe {
                                     timestamp: f32::NAN,
                                     duration: f32::NAN,
                                     keyframe_type: KeyframeType::MouseMove(Vec2::new(
@@ -172,7 +169,6 @@ impl Sequencer {
                                             shared_rec.swap(false, Ordering::Relaxed);
                                         } else {
                                             shared_rec.swap(true, Ordering::Relaxed);
-                                            tmp_keyframes = vec![];
                                             mouse_move_count = 20;
                                             previous_mouse_position = Vec2::ZERO;
                                         }
@@ -223,69 +219,56 @@ impl Sequencer {
                             tmp_keyframe = match &event.event_type {
                                 // Button & Key Press events just push info
                                 rdev::EventType::ButtonPress(btn) => {
-                                    let keyframe =
-                                        Keyframe::mouse_button(dt.as_secs_f32(), 0., btn.clone());
+                                    let keyframe = Keyframe::mouse_button(
+                                        dt.as_secs_f32(),
+                                        f32::NAN,
+                                        btn.clone(),
+                                    );
                                     if let Some(screenshot) = screenshot() {
                                         shared_images
                                             .lock()
                                             .unwrap()
                                             .insert(keyframe.uid, screenshot);
                                     }
-                                    tmp_keyframes.push(keyframe);
+                                    keyframes.push(keyframe);
                                     None
                                 }
                                 rdev::EventType::KeyPress(key) => {
                                     let keyframe =
-                                        Keyframe::key_btn(dt.as_secs_f32(), 0., key.clone());
+                                        Keyframe::key_btn(dt.as_secs_f32(), f32::NAN, key.clone());
                                     if let Some(screenshot) = screenshot() {
                                         shared_images
                                             .lock()
                                             .unwrap()
                                             .insert(keyframe.uid, screenshot);
                                     }
-                                    tmp_keyframes.push(keyframe);
+                                    keyframes.push(keyframe);
                                     None
                                 }
                                 // Button & Key Release events search for the matching keypress event to create a full keyframe
                                 rdev::EventType::ButtonRelease(btn) => {
-                                    let index = tmp_keyframes.iter().position(|kf| {
+                                    if let Some(keyframe) = keyframes.iter_mut().rev().find(|kf| {
                                         if let KeyframeType::MouseBtn(b) = kf.keyframe_type {
                                             b == *btn
                                         } else {
                                             false
                                         }
-                                    });
-                                    match index {
-                                        Some(index) => {
-                                            let mut keyframe = tmp_keyframes.remove(index);
-                                            keyframe.calculate_duration(dt.as_secs_f32());
-                                            Some(keyframe)
-                                        }
-                                        None => {
-                                            println!("Failed to find button release");
-                                            None
-                                        }
+                                    }) {
+                                        keyframe.calculate_duration(dt.as_secs_f32());
                                     }
+                                    None
                                 }
                                 rdev::EventType::KeyRelease(key) => {
-                                    let index = tmp_keyframes.iter().position(|kf| {
+                                    if let Some(keyframe) = keyframes.iter_mut().rev().find(|kf| {
                                         if let KeyframeType::KeyBtn(k) = kf.keyframe_type {
                                             k == *key
                                         } else {
                                             false
                                         }
-                                    });
-                                    match index {
-                                        Some(index) => {
-                                            let mut keyframe = tmp_keyframes.remove(index);
-                                            keyframe.calculate_duration(dt.as_secs_f32());
-                                            Some(keyframe)
-                                        }
-                                        None => {
-                                            println!("Failed to find key release");
-                                            None
-                                        }
+                                    }) {
+                                        keyframe.calculate_duration(dt.as_secs_f32());
                                     }
+                                    None
                                 }
                                 rdev::EventType::MouseMove { x, y } => {
                                     let pos = Vec2::new(*x as f32, *y as f32);
@@ -317,8 +300,7 @@ impl Sequencer {
                             };
                             // If a keyframe was created push the necessary data to sequencer
                             if let Some(keyframe) = tmp_keyframe {
-                                shared_kfs.lock().unwrap().push(keyframe);
-                                shared_pkfs.lock().unwrap().push(0);
+                                keyframes.push(keyframe);
                                 shared_changed.swap(true, Ordering::Relaxed);
                             }
                         }
@@ -328,7 +310,7 @@ impl Sequencer {
                 }
             });
         Self {
-            keyframes,
+            keyframes: Vec::new(),
             recording_keyframes,
             changed,
             should_sort: false,
@@ -347,7 +329,7 @@ impl Sequencer {
             play,
             mouse_movement_record_resolution,
             selected_keyframes: vec![],
-            keyframe_state,
+            keyframe_state: Vec::new(),
             recording,
             clear_before_recording: true,
             was_recording: false,
@@ -377,17 +359,16 @@ impl Sequencer {
         SequencerState {
             repeats: self.repeats,
             speed: self.speed,
-            keyframes: self.keyframes.lock().unwrap().clone(),
+            keyframes: self.keyframes.clone(),
         }
     }
     /// Loads the sequencer with the `SequencerState`
     pub fn load_from_state(&mut self, state: SequencerState) {
-        let mut shared_kfs = self.keyframes.lock().unwrap();
-        let mut shared_pkfs = self.keyframe_state.lock().unwrap();
-        shared_kfs.clear();
-        shared_kfs.extend(state.keyframes.into_iter());
-        shared_pkfs.clear();
-        shared_pkfs.extend(vec![0; shared_kfs.len()].into_iter());
+        self.keyframes.clear();
+        self.keyframes.extend(state.keyframes.into_iter());
+        self.keyframe_state.clear();
+        self.keyframe_state
+            .extend(vec![0; self.keyframes.len()].into_iter());
         self.speed = state.speed;
         self.repeats = state.repeats;
     }
@@ -421,15 +402,13 @@ impl Sequencer {
     }
     /// Copy the selected keyframes to clipboard
     pub fn copy(&mut self) {
-        let keyframes = self.keyframes.lock().unwrap();
-        let keyframe_state = self.keyframe_state.lock().unwrap();
         if !self.selected_keyframes.is_empty() {
             self.clip_board.clear();
             let now = Instant::now();
             // Find all selected keyframes (state of 2 == selected)
-            for i in 0..keyframe_state.len() {
-                if keyframe_state[i] == 2 {
-                    self.clip_board.push(keyframes[i].clone());
+            for i in 0..self.keyframe_state.len() {
+                if self.keyframe_state[i] == 2 {
+                    self.clip_board.push(self.keyframes[i].clone());
                 }
             }
             log::info!(
@@ -447,7 +426,6 @@ impl Sequencer {
             // Selected keyframes will be reset and then filled with the new keyframes
             self.selected_keyframes.clear();
             // Used to update the state for new keyframes
-            let mut keyframe_state = self.keyframe_state.lock().unwrap();
 
             let mut clip_board: Vec<Keyframe> = self
                 .clip_board
@@ -467,7 +445,7 @@ impl Sequencer {
 
                     // Use the new UUIDs as the currently selected keyframes
                     self.selected_keyframes.push(new_uid);
-                    keyframe_state.push(0);
+                    self.keyframe_state.push(0);
                     kf
                 })
                 .collect();
@@ -476,24 +454,22 @@ impl Sequencer {
                 uids: vec![],
                 data: vec![ChangeData::AddKeyframes(clip_board.clone())],
             });
-            self.keyframes.lock().unwrap().append(&mut clip_board);
+            self.keyframes.append(&mut clip_board);
             // since the keyframes array has changed, it should be resorted
             self.should_sort = true;
         }
     }
     /// Copy the selected keyframes to clipboard and delete them from the keyframes vec
     pub fn cut(&mut self) {
-        let mut keyframes = self.keyframes.lock().unwrap();
-        let mut keyframe_state = self.keyframe_state.lock().unwrap();
         self.clip_board.clear();
         let now = Instant::now();
         let mut undo_vec = Vec::new();
         // Find all selected keyframes (state of 2 == selected)
-        for i in (0..keyframe_state.len()).rev() {
-            if keyframe_state[i] == 2 {
-                self.clip_board.push(keyframes[i].clone());
-                undo_vec.push(keyframes.remove(i));
-                keyframe_state.remove(i);
+        for i in (0..self.keyframe_state.len()).rev() {
+            if self.keyframe_state[i] == 2 {
+                self.clip_board.push(self.keyframes[i].clone());
+                undo_vec.push(self.keyframes.remove(i));
+                self.keyframe_state.remove(i);
             }
         }
         log::info!(
@@ -511,22 +487,19 @@ impl Sequencer {
         }
         self.selected_keyframes.clear();
     }
-
+    /// Undo's the changes in the top of the undo stack and moves it to the redo stack
     pub fn undo(&mut self) {
         if let Some(changes_to_undo) = self.changes.0.pop() {
-            let mut keyframes = self.keyframes.lock().unwrap();
-            let mut keyframe_state = self.keyframe_state.lock().unwrap();
-
             // If there are no uids, it means we are adding/removing keyframes only
             for change in &changes_to_undo.data {
                 match change {
                     // Perform the inverse of the operation since we are "undo"ing it
                     ChangeData::AddKeyframes(kfs) => {
                         for kf in kfs {
-                            'outer: for i in (0..keyframes.len()).rev() {
-                                if kf.uid == keyframes[i].uid {
-                                    keyframes.remove(i);
-                                    keyframe_state.remove(i);
+                            'outer: for i in (0..self.keyframes.len()).rev() {
+                                if kf.uid == self.keyframes[i].uid {
+                                    self.keyframes.remove(i);
+                                    self.keyframe_state.remove(i);
                                     break 'outer;
                                 }
                             }
@@ -534,24 +507,24 @@ impl Sequencer {
                     }
                     ChangeData::RemoveKeyframes(kfs) => {
                         for kf in kfs {
-                            keyframes.push(kf.clone());
-                            keyframe_state.push(0);
+                            self.keyframes.push(kf.clone());
+                            self.keyframe_state.push(0);
                         }
                     }
                     ChangeData::EditTimestamp(delta) => {
                         for uid in &changes_to_undo.uids {
-                            for i in 0..keyframes.len() {
-                                if *uid == keyframes[i].uid {
-                                    keyframes[i].timestamp -= *delta;
+                            for i in 0..self.keyframes.len() {
+                                if *uid == self.keyframes[i].uid {
+                                    self.keyframes[i].timestamp -= *delta;
                                 }
                             }
                         }
                     }
                     ChangeData::EditDuration(delta) => {
                         for uid in &changes_to_undo.uids {
-                            for i in 0..keyframes.len() {
-                                if *uid == keyframes[i].uid {
-                                    keyframes[i].duration -= *delta;
+                            for i in 0..self.keyframes.len() {
+                                if *uid == self.keyframes[i].uid {
+                                    self.keyframes[i].duration -= *delta;
                                 }
                             }
                         }
@@ -563,27 +536,24 @@ impl Sequencer {
             self.changes.1.push(changes_to_undo);
         }
     }
-
+    /// Redo's the changes in the top of the redo stack and moves it to the undo stack
     pub fn redo(&mut self) {
         if let Some(changes_to_redo) = self.changes.1.pop() {
-            let mut keyframes = self.keyframes.lock().unwrap();
-            let mut keyframe_state = self.keyframe_state.lock().unwrap();
-
             for change in &changes_to_redo.data {
                 match change {
                     // Perform the operation since we are "redo"ing it
                     ChangeData::AddKeyframes(kfs) => {
                         for kf in kfs {
-                            keyframes.push(kf.clone());
-                            keyframe_state.push(0);
+                            self.keyframes.push(kf.clone());
+                            self.keyframe_state.push(0);
                         }
                     }
                     ChangeData::RemoveKeyframes(kfs) => {
                         for kf in kfs {
-                            'outer: for i in (0..keyframes.len()).rev() {
-                                if kf.uid == keyframes[i].uid {
-                                    keyframes.remove(i);
-                                    keyframe_state.remove(i);
+                            'outer: for i in (0..self.keyframes.len()).rev() {
+                                if kf.uid == self.keyframes[i].uid {
+                                    self.keyframes.remove(i);
+                                    self.keyframe_state.remove(i);
                                     break 'outer;
                                 }
                             }
@@ -591,18 +561,18 @@ impl Sequencer {
                     }
                     ChangeData::EditTimestamp(delta) => {
                         for uid in &changes_to_redo.uids {
-                            for i in 0..keyframes.len() {
-                                if *uid == keyframes[i].uid {
-                                    keyframes[i].timestamp += *delta;
+                            for i in 0..self.keyframes.len() {
+                                if *uid == self.keyframes[i].uid {
+                                    self.keyframes[i].timestamp += *delta;
                                 }
                             }
                         }
                     }
                     ChangeData::EditDuration(delta) => {
                         for uid in &changes_to_redo.uids {
-                            for i in 0..keyframes.len() {
-                                if *uid == keyframes[i].uid {
-                                    keyframes[i].duration += *delta;
+                            for i in 0..self.keyframes.len() {
+                                if *uid == self.keyframes[i].uid {
+                                    self.keyframes[i].duration += *delta;
                                 }
                             }
                         }
@@ -616,7 +586,7 @@ impl Sequencer {
     /// Select all keyframes
     pub fn select_all(&mut self) {
         self.selected_keyframes.clear();
-        self.keyframes.lock().unwrap().iter().for_each(|kf| {
+        self.keyframes.iter().for_each(|kf| {
             self.selected_keyframes.push(kf.uid);
         });
         self.selected_keyframes.sort();
@@ -634,8 +604,8 @@ impl Sequencer {
             self.recording_keyframes.lock().unwrap().clear();
             if self.clear_before_recording {
                 self.time = 0.;
-                self.keyframes.lock().unwrap().clear();
-                self.keyframe_state.lock().unwrap().clear();
+                self.keyframes.clear();
+                self.keyframe_state.clear();
                 let _ = std::mem::replace(&mut *rec_instant, Instant::now());
             } else {
                 // Save the keframes before recording so we can revert to this later with undo
@@ -647,10 +617,8 @@ impl Sequencer {
             log::info!("Start Recording");
         // Stop Recording
         } else {
-            let mut keyframes = self.keyframes.lock().unwrap();
-            let mut keyframe_state = self.keyframe_state.lock().unwrap();
             let mut recording_keyframes = self.recording_keyframes.lock().unwrap();
-            let last = keyframes.last();
+            let last = recording_keyframes.last();
             if let Some(last) = last {
                 if (last.timestamp + last.duration - self.time).abs() <= 0.04 {
                     let is_record_stop_keyframe = match last.keyframe_type {
@@ -659,34 +627,53 @@ impl Sequencer {
                         _ => false,
                     };
                     if is_record_stop_keyframe {
-                        keyframes.pop();
-                        keyframe_state.pop();
+                        recording_keyframes.pop();
+                        self.keyframe_state.pop();
                         // END
                         screenshot();
                     }
                 }
-                drop(keyframes);
-                drop(keyframe_state);
+                // Move the recorded keyframes to the main vec
+                self.changes.0.push(Change {
+                    uids: vec![],
+                    data: vec![ChangeData::AddKeyframes(recording_keyframes.clone())],
+                });
+                self.keyframe_state
+                    .append(&mut vec![0; recording_keyframes.len()]);
+                self.keyframes.append(&mut recording_keyframes);
+                drop(recording_keyframes);
                 if self.clear_before_recording {
                     self.time = 0.;
                 }
-                log::info!("Stop Recording");
             }
+            log::info!("Stop Recording");
         }
     }
     /// Loops through all the sequencer's keyframes and renders them accordingly
     ///
     /// Also handles deleting keyframes due to convenience
     fn render_keyframes(&mut self, ui: &mut Ui, max_rect: &Rect) {
-        let mut keyframes = self.keyframes.lock().unwrap();
-        let mut keyframe_state = self.keyframe_state.lock().unwrap();
         let mut delete = false;
         let mut cut = false;
         let mut copy = false;
         let mut paste = false;
         let mut combine = false;
-
+        let mut keyframes = [
+            self.keyframes.as_mut_slice(),
+            self.recording_keyframes
+                .lock()
+                .unwrap()
+                .to_vec()
+                .as_mut_slice(),
+        ]
+        .concat();
         for i in 0..keyframes.len() {
+            let mut state = -1;
+            if let Some(s) = self.keyframe_state.get(i) {
+                state = *s as i32;
+            } else {
+                // println!("rec: {i}");
+            }
             let offset_y = ui.spacing().item_spacing.y;
             // Determine which row to draw the keyframe on depending on its type
             let y = match keyframes[i].kind {
@@ -704,10 +691,17 @@ impl Sequencer {
             };
 
             // Calculate the rect for the keyframe
+            // A keyframe's duration is only f32::NAN if it is still being recorded, so duration is undetermined
+            let duration = if keyframes[i].duration.is_nan() {
+                // println!("time");
+                self.time - keyframes[i].timestamp
+            } else {
+                keyframes[i].duration
+            };
             let rect = time_to_rect(
                 scale(ui, keyframes[i].timestamp, self.scale) - scale(ui, self.scroll, self.scale)
                     + 4.0,
-                scale(ui, keyframes[i].duration, self.scale),
+                scale(ui, duration, self.scale),
                 scale(
                     ui,
                     max_rect.width() * (1.0 / scale(ui, 1.0, self.scale)),
@@ -752,7 +746,7 @@ impl Sequencer {
                     7 => egui::Color32::TRANSPARENT,             //Loop
                     _ => egui::Color32::LIGHT_GRAY,
                 };
-                let stroke = match keyframe_state[i] {
+                let stroke = match state {
                     1 => egui::Stroke::new(1.5, egui::Color32::LIGHT_RED), //Playing
                     2 => egui::Stroke::new(1.5, egui::Color32::from_rgb(233, 181, 125)), //Selected
                     // Handle edge case for loop keyframes which should be transparent with white text and border
@@ -873,9 +867,9 @@ impl Sequencer {
                         let t = keyframes[i].timestamp + drag_delta;
                         if t > 0.0 {
                             // Find all selected keyframes (state of 2 == selected)
-                            for j in 0..keyframe_state.len() {
-                                if keyframe_state[j] == 2 {
-                                    keyframes[j].timestamp += drag_delta;
+                            for j in 0..self.keyframe_state.len() {
+                                if self.keyframe_state[j] == 2 {
+                                    self.keyframes[j].timestamp += drag_delta;
                                 }
                             }
                             self.drag_start.x = end.x;
@@ -959,40 +953,40 @@ impl Sequencer {
         if delete && !self.selected_keyframes.is_empty() {
             let now = Instant::now();
             let number_of_selected_keyframes = self.selected_keyframes.len();
-            let number_of_keyframes = keyframe_state.len();
+            let number_of_keyframes = self.keyframe_state.len();
             // Sort the selected list from least the greatest index
             self.selected_keyframes.sort();
             // self.selected_keyframes.reverse();
             // Check if we can do a quick delete if every keyframe is selected
             let mut undo_vec = Vec::new();
             if number_of_keyframes == number_of_selected_keyframes {
-                undo_vec = keyframes.to_vec();
-                keyframes.clear();
-                keyframe_state.clear();
+                undo_vec = self.keyframes.to_vec();
+                self.keyframes.clear();
+                self.keyframe_state.clear();
                 self.selected_keyframes.clear();
             } else {
                 // Otherwise loop through keyframes and remove from last to first (avoids index out of bounds)
                 let mut last_index = 0;
                 for uid in &self.selected_keyframes {
                     let mut index = 0;
-                    for i in 0..keyframes.len() {
-                        if keyframes[i].uid == *uid {
+                    for i in 0..self.keyframes.len() {
+                        if self.keyframes[i].uid == *uid {
                             index = i;
                             break;
                         }
                     }
-                    undo_vec.push(keyframes.remove(index));
-                    keyframe_state.remove(index);
+                    undo_vec.push(self.keyframes.remove(index));
+                    self.keyframe_state.remove(index);
                     self.images.lock().unwrap().remove(uid);
                     last_index = index;
                 }
                 // If there are still keyframes left, we want to select the last one before the selection
-                if !keyframes.is_empty() {
+                if !self.keyframes.is_empty() {
                     // If the last keyframe before selection was the very last keyframe then we get the second last
-                    if last_index == keyframes.len() {
+                    if last_index == self.keyframes.len() {
                         last_index -= 1;
                     }
-                    self.selected_keyframes = vec![keyframes[last_index].uid];
+                    self.selected_keyframes = vec![self.keyframes[last_index].uid];
                 }
             }
 
@@ -1007,10 +1001,6 @@ impl Sequencer {
             });
             self.changed.swap(true, Ordering::Relaxed);
         }
-
-        // Free `&mut self` to be used below
-        drop(keyframes);
-        drop(keyframe_state);
 
         if cut {
             self.cut();
@@ -1291,8 +1281,7 @@ impl Sequencer {
                             let mut max_t =
                                 keyframe_clip_rect.width() * (1.0 / scale(ui, 1.0, self.scale));
                             {
-                                let keyframes = self.keyframes.lock().unwrap();
-                                let last = keyframes.last();
+                                let last = self.keyframes.last();
                                 if let Some(last) = last {
                                     let t = last.timestamp + last.duration;
                                     if t >= max_t {
@@ -1377,15 +1366,14 @@ impl Sequencer {
             .resizable(false)
             .show(ctx, |ui| {
                 if let Some(uid) = self.selected_keyframes.last() {
-                    let mut keyframes = self.keyframes.lock().unwrap();
                     let mut index = 0;
-                    for i in 0..keyframes.len() {
-                        if keyframes[i].uid == *uid {
+                    for i in 0..self.keyframes.len() {
+                        if self.keyframes[i].uid == *uid {
                             index = i;
                             break;
                         }
                     }
-                    let keyframe = &mut keyframes[index];
+                    let keyframe = &mut self.keyframes[index];
 
                     match &mut keyframe.keyframe_type {
                         KeyframeType::KeyBtn(key) => {
@@ -1608,19 +1596,16 @@ impl Sequencer {
             }
         }
 
-        let mut keyframes = self.keyframes.lock().unwrap();
-        let mut keyframe_state = self.keyframe_state.lock().unwrap();
-
         // make sure that the keyframes and their respective state are synced correctly (probably are)
         if self.recording.load(Ordering::Relaxed) {
-            if keyframes.len() != keyframe_state.len() {
+            if self.keyframes.len() != self.keyframe_state.len() {
                 panic!("playing vec is out of sync")
             }
         }
 
         // Sorts keyframes in chronologicall order with an exeption for loop keyframes
         if self.should_sort {
-            keyframes.sort_by(|a, b| {
+            self.keyframes.sort_by(|a, b| {
                 // These checks keep loop keyframes at the start of the array so they are rendered first
                 if a.kind == 7 && b.kind == 7 {
                     return std::cmp::Ordering::Equal;
@@ -1637,7 +1622,7 @@ impl Sequencer {
         }
 
         // Reset the selected keyframes to be recomputed below
-        keyframe_state.iter_mut().for_each(|state| {
+        self.keyframe_state.iter_mut().for_each(|state| {
             if state == &2 {
                 *state = 0;
             }
@@ -1645,27 +1630,27 @@ impl Sequencer {
         // Compute keyframe state from the selected keyframes
         for uid in &self.selected_keyframes {
             let mut index = 0;
-            for i in 0..keyframes.len() {
-                if keyframes[i].uid == *uid {
+            for i in 0..self.keyframes.len() {
+                if self.keyframes[i].uid == *uid {
                     index = i;
                     break;
                 }
             }
 
-            keyframe_state[index] = 2; // 2 == selected/highlighted (orange)
+            self.keyframe_state[index] = 2; // 2 == selected/highlighted (orange)
         }
         // Handle selecting the correct keyframe screenshot
         if self.selected_keyframes.is_empty() {
             // Get the first keyframe with an image and show that
         } else {
             // Code to get the mose recently selected keyframe and display its image if possible, otherwise show start/end image
-            let mut tmp = keyframe_state.clone();
+            let mut tmp = self.keyframe_state.clone();
             tmp.reverse();
             // Finds the first selected keyframe state in the list (effectively the last keyframe)
             let x = tmp.iter().position(|&state| state == 2);
             if let Some(index) = x {
                 // Since the tmp vec is reversed we need to invert it below
-                let uid = keyframes[keyframes.len() - index - 1].uid;
+                let uid = self.keyframes[self.keyframes.len() - index - 1].uid;
                 if self.current_image_uid != uid {
                     if let Some(screenshot) = &self.images.lock().unwrap().get(&uid) {
                         // Check if the texture already exists
@@ -1701,7 +1686,7 @@ impl Sequencer {
         if play || self.recording.load(Ordering::Relaxed) {
             self.time += dt.as_secs_f32() * self.speed;
         }
-        let last = keyframes.last();
+        let last = self.keyframes.last();
         if play {
             if let Some(last) = last {
                 if self.time >= last.timestamp + last.duration {
@@ -1723,22 +1708,23 @@ impl Sequencer {
             // Todo(addis): create a slice of keyframes to come (without already played keyframes), to skip checking needlessly when playing
             // Todo(addis): or create a current and next keyframe tuple and only check those, then update it if one is handled
             // Idea: v <-- change the 0 to a most recently finished keyframe index variable
-            for i in 0..keyframes.len() {
-                let keyframe = &mut keyframes[i];
-                let current_keyframe_state = keyframe_state[i]; //1 if playing, 0 if not
-                                                                // checks if the playhead is entering or exiting the current keyframe, (far left or far right of keyframe in terms of time)
-                if self.time >= keyframe.timestamp
-                    && self.time <= keyframe.timestamp + keyframe.duration
-                {
-                    keyframe_state[i] = 1; //change keyframe state to playing, highlight
+            for i in 0..self.keyframes.len() {
+                let current_keyframe_state = self.keyframe_state[i]; //1 if playing, 0 if not
+                                                                     // checks if the playhead is entering or exiting the current keyframe, (far left or far right of keyframe in terms of time)
+                let timestamp = self.keyframes[i].timestamp;
+                let duration = self.keyframes[i].duration;
+
+                if self.time >= timestamp && self.time <= timestamp + duration {
+                    self.keyframe_state[i] = 1; //change keyframe state to playing, highlight
 
                     // Set the current image when playing if it's not already set to the current image
-                    if self.current_image_uid != keyframe.uid {
-                        if let Some(screenshot) = &self.images.lock().unwrap().get(&keyframe.uid) {
+                    let uid = self.keyframes[i].uid;
+                    if self.current_image_uid != uid {
+                        if let Some(screenshot) = &self.images.lock().unwrap().get(&uid) {
                             if let Some(texture_handle) = self
                                 .texture_handles
                                 .iter()
-                                .find(|h| h.name() == Uuid::from_bytes_le(keyframe.uid).to_string())
+                                .find(|h| h.name() == Uuid::from_bytes_le(uid).to_string())
                             {
                                 self.current_image = Some(texture_handle.clone());
                             } else {
@@ -1748,23 +1734,23 @@ impl Sequencer {
                                     &screenshot.as_slice(),
                                 );
                                 let texture_handle = ctx.load_texture(
-                                    Uuid::from_bytes_le(keyframe.uid).to_string(),
+                                    Uuid::from_bytes_le(uid).to_string(),
                                     image,
                                     Default::default(),
                                 );
                                 self.texture_handles.push(texture_handle.clone());
                                 self.current_image = Some(texture_handle);
                             }
-                            self.current_image_uid = keyframe.uid;
+                            self.current_image_uid = uid;
                         }
                     }
                     // Checks if the keyframe has changed since the playhead moved
-                    if current_keyframe_state != keyframe_state[i] {
+                    if current_keyframe_state != self.keyframe_state[i] {
                         // If so and the sequencer is playing
                         if play {
                             // When fail detection is enabled check if the keyframe has a screenshot
                             if fail_detection.0 {
-                                if let Some(src1) = self.images.lock().unwrap().get(&keyframe.uid) {
+                                if let Some(src1) = self.images.lock().unwrap().get(&uid) {
                                     if let Some(src2) = screenshot() {
                                         let percentage_err = image_dif_opencv(src1, &src2);
                                         if percentage_err > fail_detection.1 {
@@ -1778,25 +1764,28 @@ impl Sequencer {
                                     }
                                 }
                             }
-                            self.handle_playing_keyframe(keyframe, true, offset);
+                            self.handle_playing_keyframe(&self.keyframes[i], true, offset);
                         }
                     }
                 } else {
                     // Unhighlight an already highlighted keyframe making sure to avoid selected keyframes
-                    if keyframe_state[i] == 1 {
-                        keyframe_state[i] = 0; //change keyframe state to not playing, no highlight
+                    if self.keyframe_state[i] == 1 {
+                        self.keyframe_state[i] = 0; //change keyframe state to not playing, no highlight
                     }
                     // Checks if the keyframe has changed since the playhead moved
-                    if current_keyframe_state != keyframe_state[i] {
+                    if current_keyframe_state != self.keyframe_state[i] {
                         // If so and the sequencer is playing
                         if play {
-                            self.handle_playing_keyframe(keyframe, false, offset);
-                            if let KeyframeType::Loop(repeats, i) = keyframe.keyframe_type {
-                                if i < repeats {
-                                    keyframe.keyframe_type = KeyframeType::Loop(repeats, i + 1);
-                                    self.time = keyframe.timestamp;
+                            self.handle_playing_keyframe(&self.keyframes[i], false, offset);
+                            if let KeyframeType::Loop(repeats, j) = self.keyframes[i].keyframe_type
+                            {
+                                if j < repeats {
+                                    self.keyframes[i].keyframe_type =
+                                        KeyframeType::Loop(repeats, j + 1);
+                                    self.time = self.keyframes[i].timestamp;
                                 } else {
-                                    keyframe.keyframe_type = KeyframeType::Loop(repeats, 1);
+                                    self.keyframes[i].keyframe_type =
+                                        KeyframeType::Loop(repeats, 1);
                                 }
                             }
                         }
@@ -1811,13 +1800,11 @@ impl Sequencer {
     }
     /// Deletes all movement keyframes determined to be redundant.
     fn cull_minor_movement_keyframes(&mut self) {
-        let mut keyframes = self.keyframes.lock().unwrap();
-        let mut keyframe_state = self.keyframe_state.lock().unwrap();
         let mut previous_move_keyframe: Option<usize> = None;
         let mut keyframes_to_remove: Vec<usize> = Vec::new();
-        for i in 0..keyframes.len() {
+        for i in 0..self.keyframes.len() {
             // If the current keyframe is a movement
-            if keyframes[i].kind == 1 {
+            if self.keyframes[i].kind == 1 {
                 // And the previous was a movement, remove the previous
                 if let Some(index) = previous_move_keyframe {
                     // Remove the previous as it essentially does nothing (its minor)
@@ -1833,8 +1820,8 @@ impl Sequencer {
 
         let mut undo_vec = Vec::new();
         for i in keyframes_to_remove.iter().rev() {
-            undo_vec.push(keyframes.remove(*i));
-            keyframe_state.remove(*i);
+            undo_vec.push(self.keyframes.remove(*i));
+            self.keyframe_state.remove(*i);
         }
         if !undo_vec.is_empty() {
             self.changes.0.push(Change {
@@ -1847,12 +1834,10 @@ impl Sequencer {
     /// Combine keybtn keyframes into a single keystroke
     fn combine_into_keystrokes(&mut self) {
         let mut selected_keyframes: Vec<usize> = Vec::new();
-        let mut keyframes = self.keyframes.lock().unwrap();
-        let mut keyframe_state = self.keyframe_state.lock().unwrap();
-        for i in (0..keyframe_state.len()).rev() {
+        for i in (0..self.keyframe_state.len()).rev() {
             // Add it to selected keyframes if it is selected and is a key press
-            if keyframe_state[i] == 2 {
-                if keyframes[i].kind == 0 {
+            if self.keyframe_state[i] == 2 {
+                if self.keyframes[i].kind == 0 {
                     selected_keyframes.push(i);
                 } else {
                     log::warn!("Tried to combine non key button keyframes into a keystroke");
@@ -1865,11 +1850,11 @@ impl Sequencer {
         let mut last_timestamp = 0.;
         let mut undo_vec = Vec::new();
         for index in selected_keyframes {
-            last_timestamp = keyframes[index].timestamp;
-            if let KeyframeType::KeyBtn(key) = keyframes[index].keyframe_type {
+            last_timestamp = self.keyframes[index].timestamp;
+            if let KeyframeType::KeyBtn(key) = self.keyframes[index].keyframe_type {
                 keys.push(key);
-                undo_vec.push(keyframes.remove(index));
-                keyframe_state.remove(index);
+                undo_vec.push(self.keyframes.remove(index));
+                self.keyframe_state.remove(index);
                 last_index = index;
             }
         }
@@ -1883,11 +1868,11 @@ impl Sequencer {
                 kind: 5,
                 uid,
             };
-            keyframes.insert(last_index, combined_keyframe.clone());
+            self.keyframes.insert(last_index, combined_keyframe.clone());
             // Clear and select only the new keyframe
             self.selected_keyframes = vec![uid];
 
-            keyframe_state.insert(last_index, 0);
+            self.keyframe_state.insert(last_index, 0);
             self.changes.0.push(Change {
                 uids: vec![],
                 data: vec![
@@ -1902,7 +1887,7 @@ impl Sequencer {
     /// Simulates the given keyframe
     ///
     /// `start` decides whether to treat this as the start or end of a keyframe
-    fn handle_playing_keyframe(&self, keyframe: &mut Keyframe, start: bool, offset: &Vec2) {
+    fn handle_playing_keyframe(&self, keyframe: &Keyframe, start: bool, offset: &Vec2) {
         match &keyframe.keyframe_type {
             KeyframeType::KeyBtn(key) => {
                 if start {
