@@ -215,7 +215,7 @@ impl App {
     /// Set the title of the window dependant on the current file status
     ///
     /// e.g "file.auto" if saved and "file.auto*" if there are changes to be saved.
-    fn set_title(&self, ctx: &egui::Context) {
+    fn update_title(&self, ctx: &egui::Context) {
         let saved = match self.file_uptodate {
             true => "",
             false => "*",
@@ -238,10 +238,7 @@ impl eframe::App for App {
         if self.file != self.sequencer.loaded_file && self.file != "untitled.auto" {
             let file = self.file.clone();
             self.load_file(&PathBuf::from(file));
-            self.set_title(ctx);
-        }
-        if self.sequencer.changed.load(Ordering::Relaxed) || !self.file_uptodate {
-            self.file_uptodate = false;
+            self.update_title(ctx);
         }
         let mut cancel_close = false;
         ctx.input(|i| {
@@ -370,8 +367,6 @@ impl eframe::App for App {
             }
         });
 
-        // Should be called after saving and opening, but cannot be called within ctx.input so we call here
-        self.set_title(ctx);
 
         if self.show_save_dialog {
             egui::Window::new("Automate")
@@ -401,7 +396,7 @@ impl eframe::App for App {
                                     self.open_file();
                                 }
                             } 
-                            self.set_title(ctx);
+                            self.update_title(ctx);
                         }
                         if ui.button("Don't Save").clicked() {
                             self.show_save_dialog = false;
@@ -418,7 +413,7 @@ impl eframe::App for App {
                                 DialogPurpose::Open => {
                                     self.file_uptodate = true;
                                     self.open_file();
-                                    self.set_title(ctx);
+                                    self.update_title(ctx);
                                 }
                             }
                         }
@@ -439,7 +434,7 @@ impl eframe::App for App {
                         .clicked()
                     {
                         self.new_file();
-                        self.set_title(ctx);
+                        self.update_title(ctx);
                         ui.close_menu();
                     }
                     if ui
@@ -447,7 +442,7 @@ impl eframe::App for App {
                         .clicked()
                     {
                         self.open_file();
-                        self.set_title(ctx);
+                        self.update_title(ctx);
                         ui.close_menu();
                     }
                     if ui
@@ -455,7 +450,7 @@ impl eframe::App for App {
                         .clicked()
                     {
                         self.save_file();
-                        self.set_title(ctx);
+                        self.update_title(ctx);
                         ui.close_menu();
                     }
                     if ui
@@ -463,7 +458,7 @@ impl eframe::App for App {
                         .clicked()
                     {
                         self.save_as();
-                        self.set_title(ctx);
+                        self.update_title(ctx);
                         ui.close_menu();
                     }
                     ui.separator(); 
@@ -535,7 +530,7 @@ impl eframe::App for App {
                             };
                             self.sequencer.keyframes.push(keyframe.clone());
                             self.sequencer.changes.0.push(Change { uids: vec![], data: vec![ChangeData::AddKeyframes(vec![keyframe])]});
-                            self.sequencer.should_sort();
+                            self.sequencer.changed();
                             ui.close_menu();
                         }
                         if ui.button("Magic Move").clicked() {
@@ -548,7 +543,7 @@ impl eframe::App for App {
                             };
                             self.sequencer.keyframes.push(keyframe.clone());
                             self.sequencer.changes.0.push(Change { uids: vec![], data: vec![ChangeData::AddKeyframes(vec![keyframe])]});
-                            self.sequencer.should_sort();
+                            self.sequencer.changed();
                             ui.close_menu();
                         }
                         if ui.button("Loop").clicked() {
@@ -561,7 +556,7 @@ impl eframe::App for App {
                             };
                             self.sequencer.keyframes.push(keyframe.clone());
                             self.sequencer.changes.0.push(Change { uids: vec![], data: vec![ChangeData::AddKeyframes(vec![keyframe])]});
-                            self.sequencer.should_sort();
+                            self.sequencer.changed();
                             ui.close_menu();
                         }
                     });
@@ -786,6 +781,11 @@ impl eframe::App for App {
         self.sequencer.debug_panel(ctx);
         self.sequencer.selected_panel(ctx);
         self.sequencer.central_panel(ctx);
+
+        // If sequencer has changed or the file is not uptodate
+        self.file_uptodate = !self.sequencer.changed.load(Ordering::Relaxed);
+        // Should be called after saving and opening, but cannot be called within ctx.input so we call here
+        self.update_title(ctx);
 
         if cancel_close {
             ctx.send_viewport_cmd(egui::ViewportCommand::CancelClose);

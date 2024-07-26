@@ -294,8 +294,6 @@ impl Sequencer {
                                             Vec2::new(*delta_x as f32, *delta_y as f32),
                                         )),
                                     }
-
-                                    // Todo(addis): create and save a screenshot here
                                 }
                             };
                             // If a keyframe was created push the necessary data to sequencer
@@ -346,9 +344,15 @@ impl Sequencer {
             changes: (Vec::new(), Vec::new()),
         }
     }
-    pub fn should_sort(&mut self) {
+    // Handles cleanup after changes were made
+    pub fn changed(&mut self) {
         self.should_sort = true;
         self.changed.swap(true, Ordering::Relaxed);
+
+        // File can be considered up to date if there are no more availible changes to undo
+        if self.changes.0.is_empty() {
+            self.changed.swap(false, Ordering::Relaxed);
+        }
     }
     /// Returns the current time where the playhead is
     pub fn get_time(&self) -> f32 {
@@ -483,7 +487,7 @@ impl Sequencer {
                 uids: vec![],
                 data: vec![ChangeData::RemoveKeyframes(undo_vec)],
             });
-            self.changed.swap(true, Ordering::Relaxed);
+            self.changed();
         }
         self.selected_keyframes.clear();
     }
@@ -539,8 +543,8 @@ impl Sequencer {
                 now.elapsed()
             );
             self.changes.1.push(changes_to_undo);
+            self.changed();
         }
-        // Todo(addis): when undo/redo covers every possible change, set self.changed to false when undo.len() is 0
     }
     /// Redo's the changes in the top of the redo stack and moves it to the undo stack
     pub fn redo(&mut self) {
@@ -592,6 +596,7 @@ impl Sequencer {
                 now.elapsed()
             );
             self.changes.0.push(changes_to_redo);
+            self.changed();
         }
     }
     /// Select all keyframes
@@ -665,25 +670,15 @@ impl Sequencer {
     /// Also handles deleting keyframes due to convenience
     fn render_keyframes(&mut self, ui: &mut Ui, max_rect: &Rect) {
         let mut delete = false;
-        let mut cut = false;
-        let mut copy = false;
-        let mut paste = false;
-        let mut combine = false;
         let mut keyframes = [
-            self.keyframes.as_mut_slice(),
-            self.recording_keyframes
-                .lock()
-                .unwrap()
-                .to_vec()
-                .as_mut_slice(),
+            self.keyframes.as_slice(),
+            self.recording_keyframes.lock().unwrap().to_vec().as_slice(),
         ]
         .concat();
         for i in 0..keyframes.len() {
             let mut state = -1;
             if let Some(s) = self.keyframe_state.get(i) {
                 state = *s as i32;
-            } else {
-                // println!("rec: {i}");
             }
             let offset_y = ui.spacing().item_spacing.y;
             // Determine which row to draw the keyframe on depending on its type
@@ -704,7 +699,6 @@ impl Sequencer {
             // Calculate the rect for the keyframe
             // A keyframe's duration is only f32::NAN if it is still being recorded, so duration is undetermined
             let duration = if keyframes[i].duration.is_nan() {
-                // println!("time");
                 self.time - keyframes[i].timestamp
             } else {
                 keyframes[i].duration
@@ -901,7 +895,7 @@ impl Sequencer {
                     self.resizing = false;
                     // Since there is a chance that the chronological order of the keyframes has changed,
                     // we need to update the keyframes vec to match the new order
-                    self.should_sort = true;
+                    self.changed();
                 }
 
                 ui.input_mut(|input| {
@@ -923,7 +917,7 @@ impl Sequencer {
                         }
                     }
                     if ui.add(egui::Button::new("Combine")).clicked() {
-                        combine = true;
+                        self.combine_into_keystrokes();
                         ui.close_menu();
                     }
                     ui.separator();
@@ -931,21 +925,21 @@ impl Sequencer {
                         .add(egui::Button::new("Cut").shortcut_text("Ctrl+X"))
                         .clicked()
                     {
-                        cut = true;
+                        self.cut();
                         ui.close_menu();
                     }
                     if ui
                         .add(egui::Button::new("Copy").shortcut_text("Ctrl+C"))
                         .clicked()
                     {
-                        copy = true;
+                        self.copy();
                         ui.close_menu();
                     }
                     if ui
                         .add(egui::Button::new("Paste").shortcut_text("Ctrl+V"))
                         .clicked()
                     {
-                        paste = true;
+                        self.paste();
                         ui.close_menu();
                     }
                     ui.separator();
@@ -1010,20 +1004,7 @@ impl Sequencer {
                 uids: vec![],
                 data: vec![ChangeData::RemoveKeyframes(undo_vec)],
             });
-            self.changed.swap(true, Ordering::Relaxed);
-        }
-
-        if cut {
-            self.cut();
-        }
-        if copy {
-            self.copy();
-        }
-        if paste {
-            self.paste();
-        }
-        if combine {
-            self.combine_into_keystrokes();
+            self.changed();
         }
     }
     /// Handles rendering the control bar
@@ -1428,20 +1409,46 @@ impl Sequencer {
 
                     ui.horizontal(|ui| {
                         ui.label("Timestamp");
-                        ui.add(
+                        let resp = ui.add(
                             egui::DragValue::new(&mut keyframe.timestamp)
                                 .speed(0.2)
                                 .range(0.0..=3600.0),
                         );
+                        if resp.drag_started() {
+                            // Using total_drag_start since the y is never needed anywhere else, and since
+                            // there is only one mouse to drag things, it is only in use for one thing at a time.
+                            self.total_drag_start.y = keyframe.timestamp;
+                        }
+                        if resp.drag_stopped() {
+                            self.changes.0.push(Change {
+                                uids: vec![keyframe.uid],
+                                data: vec![ChangeData::EditTimestamp(
+                                    keyframe.timestamp - self.total_drag_start.y,
+                                )],
+                            });
+                        }
                     });
 
                     ui.horizontal(|ui| {
                         ui.label("Duration");
-                        ui.add(
+                        let resp = ui.add(
                             egui::DragValue::new(&mut keyframe.duration)
                                 .speed(0.1)
                                 .range(0.00001..=100.0),
                         );
+                        if resp.drag_started() {
+                            // Using total_drag_start since the y is never needed anywhere else, and since
+                            // there is only one mouse to drag things, it is only in use for one thing at a time.
+                            self.total_drag_start.y = keyframe.duration;
+                        }
+                        if resp.drag_stopped() {
+                            self.changes.0.push(Change {
+                                uids: vec![keyframe.uid],
+                                data: vec![ChangeData::EditDuration(
+                                    keyframe.duration - self.total_drag_start.y,
+                                )],
+                            });
+                        }
                     });
                     ui.small(format!(
                         "UUID: {}",
@@ -1449,15 +1456,7 @@ impl Sequencer {
                     ));
                     // Check if the selected keyframe was changed
                     if (tmpx, tmpy) != (keyframe.timestamp, keyframe.duration) {
-                        self.changes.0.push(Change {
-                            uids: vec![keyframe.uid],
-                            data: vec![
-                                ChangeData::EditTimestamp(keyframe.timestamp - tmpx),
-                                ChangeData::EditDuration(keyframe.duration - tmpy),
-                            ],
-                        });
-                        self.changed.swap(true, Ordering::Relaxed);
-                        self.should_sort = true;
+                        self.changed();
                     }
                 } else {
                     ui.centered_and_justified(|ui| {
@@ -1839,7 +1838,7 @@ impl Sequencer {
                 uids: vec![],
                 data: vec![ChangeData::RemoveKeyframes(undo_vec)],
             });
-            self.changed.swap(true, Ordering::Relaxed);
+            self.changed();
         }
     }
     /// Combine keybtn keyframes into a single keystroke
@@ -1891,7 +1890,7 @@ impl Sequencer {
                     ChangeData::AddKeyframes(vec![combined_keyframe]),
                 ],
             });
-            self.changed.swap(true, Ordering::Relaxed);
+            self.changed();
         }
     }
 
