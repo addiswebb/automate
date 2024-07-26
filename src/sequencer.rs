@@ -165,6 +165,7 @@ impl Sequencer {
                                 match key {
                                     // Keybind(F8): Toggle recording
                                     rdev::Key::F8 => {
+                                        println!("{:?}", !is_recording);
                                         if is_recording {
                                             shared_rec.swap(false, Ordering::Relaxed);
                                         } else {
@@ -614,6 +615,9 @@ impl Sequencer {
     ///
     /// * When stopping recording: Remove the last input if it was used to stop the recording (mouse pressing the stop button)
     pub fn toggle_recording(&mut self) {
+        self.recording
+            .swap(!self.recording.load(Ordering::Relaxed), Ordering::Relaxed);
+
         // Start recording
         if self.recording.load(Ordering::Relaxed) {
             let mut rec_instant = self.recording_instant.lock().unwrap();
@@ -630,6 +634,7 @@ impl Sequencer {
                     Instant::now() - Duration::from_secs_f32(self.time),
                 );
             }
+            self.was_recording = true;
             log::info!("Start Recording");
         // Stop Recording
         } else {
@@ -658,10 +663,11 @@ impl Sequencer {
                     .append(&mut vec![0; recording_keyframes.len()]);
                 self.keyframes.append(&mut recording_keyframes);
                 drop(recording_keyframes);
-                if self.clear_before_recording {
-                    self.time = 0.;
-                }
             }
+            if self.clear_before_recording {
+                self.time = 0.;
+            }
+            self.was_recording = false;
             log::info!("Stop Recording");
         }
     }
@@ -1078,7 +1084,7 @@ impl Sequencer {
 
         if self.recording.load(Ordering::Relaxed) {
             if ui.button("⏹").on_hover_text("Stop Recording: F8").clicked() {
-                self.recording.swap(false, Ordering::Relaxed);
+                self.toggle_recording();
             }
         } else {
             if ui
@@ -1086,7 +1092,7 @@ impl Sequencer {
                 .on_hover_text("Start Recording: F8")
                 .clicked()
             {
-                self.recording.swap(true, Ordering::Relaxed);
+                self.toggle_recording();
             }
         }
     }
@@ -1598,8 +1604,9 @@ impl Sequencer {
         fail_detection: (bool, f32),
     ) {
         // Handle focus of the window when recording and when not
+        // Since toggle_recording cant be called from the recording thread, it gets called here with "was_recording" as a safety check
         if self.was_recording != self.recording.load(Ordering::Relaxed) {
-            self.was_recording = self.recording.load(Ordering::Relaxed);
+            self.recording.swap(self.was_recording, Ordering::Relaxed);
             self.toggle_recording();
             if !self.was_recording {
                 ctx.send_viewport_cmd(egui::ViewportCommand::Focus);

@@ -350,10 +350,7 @@ impl eframe::App for App {
                 }
                 // Keybind(F8): Toggle recording
                 else if i.key_released(egui::Key::F8) {
-                    self.sequencer.recording.swap(
-                        !self.sequencer.recording.load(Ordering::Relaxed),
-                        Ordering::Relaxed,
-                    );
+                    self.sequencer.toggle_recording();
                 }
             }
 
