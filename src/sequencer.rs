@@ -1654,7 +1654,10 @@ impl Sequencer {
                 }
             }
 
-            self.keyframe_state[index] = 2; // 2 == selected/highlighted (orange)
+            // Prevent "z-fighting" where it wants to be highlighted and playing at the same time
+            if self.keyframe_state[index] != 1 {
+                self.keyframe_state[index] = 2; // 2 == selected/highlighted (orange)
+            }
         }
         // Handle selecting the correct keyframe screenshot
         if self.selected_keyframes.is_empty() {
@@ -1772,6 +1775,7 @@ impl Sequencer {
                                         let percentage_err = image_dif_opencv(src1, &src2);
                                         if percentage_err > fail_detection.1 {
                                             self.play.swap(false, Ordering::Relaxed);
+                                            ctx.send_viewport_cmd(egui::ViewportCommand::Focus);
                                             log::warn!(
                                                 "Fail Detected: {:?}% err",
                                                 percentage_err * 100.
