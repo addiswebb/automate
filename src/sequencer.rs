@@ -491,6 +491,7 @@ impl Sequencer {
     pub fn undo(&mut self) {
         if let Some(changes_to_undo) = self.changes.0.pop() {
             // If there are no uids, it means we are adding/removing keyframes only
+            let now = Instant::now();
             for change in &changes_to_undo.data {
                 match change {
                     // Perform the inverse of the operation since we are "undo"ing it
@@ -532,12 +533,18 @@ impl Sequencer {
                 }
             }
 
-            log::info!("Undo");
+            log::info!(
+                "Undid {:?} changes in {:?}",
+                changes_to_undo.data.len(),
+                now.elapsed()
+            );
             self.changes.1.push(changes_to_undo);
         }
+        // Todo(addis): when undo/redo covers every possible change, set self.changed to false when undo.len() is 0
     }
     /// Redo's the changes in the top of the redo stack and moves it to the undo stack
     pub fn redo(&mut self) {
+        let now = Instant::now();
         if let Some(changes_to_redo) = self.changes.1.pop() {
             for change in &changes_to_redo.data {
                 match change {
@@ -579,7 +586,11 @@ impl Sequencer {
                     }
                 }
             }
-            log::info!("Redo");
+            log::info!(
+                "Redid {:?} changes in {:?}",
+                changes_to_redo.data.len(),
+                now.elapsed()
+            );
             self.changes.0.push(changes_to_redo);
         }
     }
