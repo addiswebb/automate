@@ -29,6 +29,7 @@ pub enum ChangeData {
     EditDuration(f32),
     EditMagicFindPath(String, String),
     EditMouseButton(rdev::Button, rdev::Button),
+    EnableKeyframes(bool),
 }
 pub struct Change {
     pub uids: Vec<Bytes>,
@@ -100,7 +101,7 @@ pub struct Sequencer {
     texture_handles: Vec<TextureHandle>,
     pub failsafe_edge: Arc<Mutex<MonitorEdge>>,
     #[serde(skip)]
-    //        Undo       , Redo
+    //            Undo       , Redo
     pub changes: (Vec<Change>, Vec<Change>),
     #[serde(skip)]
     pub recording_keyframes: Arc<Mutex<Vec<Keyframe>>>,
@@ -153,6 +154,7 @@ impl Sequencer {
                                         *x as f32, *y as f32,
                                     )),
                                     kind: u8::MAX, // This is code to say the keyframe is for calibration only and must be deleted after use
+                                    enabled: false,
                                     uid: Uuid::nil().to_bytes_le(),
                                 });
                             }
@@ -408,6 +410,22 @@ impl Sequencer {
         self.scroll = (self.scroll + (delta * multiplier) / self.scale.clamp(0.5, f32::INFINITY))
             .clamp(0., f32::INFINITY);
     }
+    /// Enable all the selected keyframes
+    pub fn enable_keyframes(&mut self, enabled: bool) {
+        if !self.selected_keyframes.is_empty() {
+            // Find all selected keyframes (state of 2 == selected)
+            for i in 0..self.keyframe_state.len() {
+                if self.keyframe_state[i] == 2 {
+                    self.keyframes[i].enabled = enabled;
+                }
+            }
+            self.changes.0.push(Change {
+                uids: self.selected_keyframes.clone(),
+                data: vec![ChangeData::EnableKeyframes(enabled)],
+            });
+            self.changed();
+        }
+    }
     /// Copy the selected keyframes to clipboard
     pub fn copy(&mut self) {
         if !self.selected_keyframes.is_empty() {
@@ -564,6 +582,15 @@ impl Sequencer {
                             }
                         }
                     }
+                    ChangeData::EnableKeyframes(enabled) => {
+                        for uid in &changes.uids {
+                            for i in 0..self.keyframes.len() {
+                                if *uid == self.keyframes[i].uid {
+                                    self.keyframes[i].enabled = !*enabled;
+                                }
+                            }
+                        }
+                    }
                 }
             }
 
@@ -640,6 +667,15 @@ impl Sequencer {
                                     {
                                         *btn = new.clone();
                                     }
+                                }
+                            }
+                        }
+                    }
+                    ChangeData::EnableKeyframes(enabled) => {
+                        for uid in &changes.uids {
+                            for i in 0..self.keyframes.len() {
+                                if *uid == self.keyframes[i].uid {
+                                    self.keyframes[i].enabled = *enabled;
                                 }
                             }
                         }
@@ -801,19 +837,30 @@ impl Sequencer {
                     }
                 }
 
-                let color = match keyframes[i].kind {
-                    0 => egui::Color32::LIGHT_RED,               //Keyboard
-                    1 => egui::Color32::from_rgb(95, 186, 213),  //Mouse move
-                    2 => egui::Color32::LIGHT_GREEN,             //Button Click
-                    3 => egui::Color32::LIGHT_YELLOW,            //Scroll
-                    4 => egui::Color32::BLACK,                   //Wait
-                    5 => egui::Color32::LIGHT_RED,               //Keyboard
-                    6 => egui::Color32::from_rgb(214, 180, 252), //Mouse move
-                    7 => egui::Color32::TRANSPARENT,             //Loop
-                    _ => egui::Color32::LIGHT_GRAY,
+                let color = if keyframes[i].enabled {
+                    match keyframes[i].kind {
+                        0 => egui::Color32::LIGHT_RED,               //Keyboard
+                        1 => egui::Color32::from_rgb(95, 186, 213),  //Mouse move
+                        2 => egui::Color32::LIGHT_GREEN,             //Button Click
+                        3 => egui::Color32::LIGHT_YELLOW,            //Scroll
+                        4 => egui::Color32::BLACK,                   //Wait
+                        5 => egui::Color32::LIGHT_RED,               //Keyboard
+                        6 => egui::Color32::from_rgb(214, 180, 252), //Mouse move
+                        7 => egui::Color32::TRANSPARENT,             //Loop
+                        _ => egui::Color32::LIGHT_GRAY,
+                    }
+                } else {
+                    egui::Color32::GRAY
                 };
+
                 let stroke = match state {
-                    1 => egui::Stroke::new(1.5, egui::Color32::LIGHT_RED), //Playing
+                    1 => {
+                        if keyframes[i].enabled {
+                            egui::Stroke::new(1.5, egui::Color32::LIGHT_RED)
+                        } else {
+                            egui::Stroke::NONE
+                        }
+                    } //Playing
                     2 => egui::Stroke::new(1.5, egui::Color32::from_rgb(233, 181, 125)), //Selected
                     // Handle edge case for loop keyframes which should be transparent with white text and border
                     _ => match keyframes[i].kind == 7 {
@@ -971,12 +1018,26 @@ impl Sequencer {
                     if let Err(index) = index {
                         self.selected_keyframes.insert(index, keyframes[i].uid);
                     }
+                    // If loop keyframe, reset the counter
                     if let KeyframeType::Loop(r, _) = keyframes[i].keyframe_type {
                         if ui.add(egui::Button::new("Reset")).clicked() {
                             keyframes[i].keyframe_type = KeyframeType::Loop(r, 1);
                             ui.close_menu();
                         }
                     }
+                    // Enable/Disable keyframe
+                    if keyframes[i].enabled {
+                        if ui.add(egui::Button::new("Disable")).clicked() {
+                            self.enable_keyframes(false);
+                            ui.close_menu();
+                        }
+                    } else {
+                        if ui.add(egui::Button::new("Enable")).clicked() {
+                            self.enable_keyframes(true);
+                            ui.close_menu();
+                        }
+                    }
+                    // Combines selected keyframes into a single keyframe if possible
                     if ui.add(egui::Button::new("Combine")).clicked() {
                         self.combine_into_keystrokes();
                         ui.close_menu();
@@ -1430,6 +1491,8 @@ impl Sequencer {
                             ui.strong("Keyboard Button press");
                             ui.label("key stroke");
                             ui.label(format!("{:?}", key));
+                            // Allow for the key to be editable
+                            // probably using the Recording thread
                         }
                         KeyframeType::MouseBtn(btn) => {
                             ui.strong("Mouse Button press");
@@ -1557,7 +1620,6 @@ impl Sequencer {
                     ));
                     // Check if the selected keyframe was changed
                     if (tmpx, tmpy) != (keyframe.timestamp, keyframe.duration) || changed {
-                        println!("x");
                         self.changed();
                     }
                 } else {
@@ -1819,6 +1881,10 @@ impl Sequencer {
             // Todo(addis): or create a current and next keyframe tuple and only check those, then update it if one is handled
             // Idea: v <-- change the 0 to a most recently finished keyframe index variable
             for i in 0..self.keyframes.len() {
+                // Skip this keyframe if it is disabled
+                if !self.keyframes[i].enabled {
+                    continue;
+                }
                 let current_keyframe_state = self.keyframe_state[i]; //1 if playing, 0 if not
                                                                      // checks if the playhead is entering or exiting the current keyframe, (far left or far right of keyframe in terms of time)
                 let timestamp = self.keyframes[i].timestamp;
@@ -1985,6 +2051,7 @@ impl Sequencer {
                 duration: 0.2,
                 keyframe_type: KeyframeType::KeyStrokes(keys),
                 kind: 5,
+                enabled: true,
                 uid,
             };
             self.keyframes.insert(last_index, combined_keyframe.clone());
@@ -2002,7 +2069,6 @@ impl Sequencer {
             self.changed();
         }
     }
-
     /// Simulates the given keyframe
     ///
     /// `start` decides whether to treat this as the start or end of a keyframe

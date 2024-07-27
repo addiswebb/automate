@@ -28,6 +28,7 @@ pub struct Keyframe {
     pub duration: f32,
     pub keyframe_type: KeyframeType,
     pub kind: u8,
+    pub enabled: bool,
     pub uid: Bytes,
 }
 impl Keyframe {
@@ -37,6 +38,7 @@ impl Keyframe {
             duration: 0.1,
             keyframe_type: KeyframeType::MouseMove(pos),
             kind: 1,
+            enabled: true,
             uid: Uuid::new_v4().to_bytes_le(),
         }
     }
@@ -46,6 +48,7 @@ impl Keyframe {
             duration,
             keyframe_type: KeyframeType::MouseBtn(btn),
             kind: 2,
+            enabled: true,
             uid: Uuid::new_v4().to_bytes_le(),
         }
     }
@@ -55,6 +58,7 @@ impl Keyframe {
             duration,
             keyframe_type: KeyframeType::KeyBtn(key),
             kind: 0,
+            enabled: true,
             uid: Uuid::new_v4().to_bytes_le(),
         }
     }
@@ -64,6 +68,7 @@ impl Keyframe {
             duration: 0.1,
             keyframe_type: KeyframeType::Scroll(delta),
             kind: 3,
+            enabled: true,
             uid: Uuid::new_v4().to_bytes_le(),
         }
     }
@@ -80,6 +85,7 @@ impl Default for Keyframe {
             duration: 0.0,
             keyframe_type: KeyframeType::KeyBtn(rdev::Key::Space),
             kind: 0,
+            enabled: true,
             uid: Uuid::new_v4().to_bytes_le(),
         }
     }

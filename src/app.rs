@@ -523,6 +523,7 @@ impl eframe::App for App {
                                 duration: 1.,
                                 keyframe_type: KeyframeType::Wait(1.),
                                 kind: 4,
+                                enabled: true,
                                 uid: Uuid::new_v4().to_bytes_le(),
                             };
                             self.sequencer.keyframes.push(keyframe.clone());
@@ -536,6 +537,7 @@ impl eframe::App for App {
                                 duration: 0.2,
                                 keyframe_type: KeyframeType::MagicMove("target.png".to_string()),
                                 kind: 6,
+                                enabled: true,
                                 uid: Uuid::new_v4().to_bytes_le(),
                             };
                             self.sequencer.keyframes.push(keyframe.clone());
@@ -549,6 +551,7 @@ impl eframe::App for App {
                                 duration: 5.,
                                 keyframe_type: KeyframeType::Loop(10,1),
                                 kind: 7,
+                                enabled: true,
                                 uid: Uuid::new_v4().to_bytes_le(),
                             };
                             self.sequencer.keyframes.push(keyframe.clone());
