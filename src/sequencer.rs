@@ -842,7 +842,7 @@ impl Sequencer {
                         0 => egui::Color32::LIGHT_RED,               //Keyboard
                         1 => egui::Color32::from_rgb(95, 186, 213),  //Mouse move
                         2 => egui::Color32::LIGHT_GREEN,             //Button Click
-                        3 => egui::Color32::LIGHT_YELLOW,            //Scroll
+                        3 => egui::Color32::from_rgb(255, 234, 127), //Scroll
                         4 => egui::Color32::BLACK,                   //Wait
                         5 => egui::Color32::LIGHT_RED,               //Keyboard
                         6 => egui::Color32::from_rgb(214, 180, 252), //Mouse move
@@ -850,13 +850,14 @@ impl Sequencer {
                         _ => egui::Color32::LIGHT_GRAY,
                     }
                 } else {
-                    egui::Color32::GRAY
+                    egui::Color32::from_rgba_premultiplied(60, 60, 60, 80)
                 };
 
                 let stroke = match state {
                     1 => {
                         if keyframes[i].enabled {
-                            egui::Stroke::new(1.5, egui::Color32::LIGHT_RED)
+                            egui::Stroke::new(1.5, egui::Color32::from_rgb(255, 128, 128))
+                        // Red
                         } else {
                             egui::Stroke::NONE
                         }
@@ -865,7 +866,10 @@ impl Sequencer {
                     // Handle edge case for loop keyframes which should be transparent with white text and border
                     _ => match keyframes[i].kind == 7 {
                         true => egui::Stroke::new(1., egui::Color32::WHITE),
-                        false => egui::Stroke::new(0.4, egui::Color32::from_rgb(15, 37, 42)),
+                        false => egui::Stroke::new(
+                            0.4,
+                            egui::Color32::from_rgba_premultiplied(15, 37, 42, 180),
+                        ),
                     }, //Not selected
                 };
 
