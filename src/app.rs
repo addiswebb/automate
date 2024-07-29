@@ -486,6 +486,9 @@ impl eframe::App for App {
                     }
 
                     ui.separator();
+                    if ui.add_enabled(!self.sequencer.keyframes.is_empty(),egui::Button::new("Cull Minor Moves")).on_hover_text("Remove all unnecessary mouse move keyframes").clicked(){
+                        self.sequencer.cull_minor_movement_keyframes(); 
+                    }
                     self.sequencer.context_menu(ui, None);
                     ui.separator();
                     ui.menu_button("Add", |ui| {

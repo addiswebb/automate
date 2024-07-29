@@ -1415,6 +1415,7 @@ impl Sequencer {
                     self.mouse_pos.lock().unwrap()
                 ));
                 ui.checkbox(&mut self.clear_before_recording, "Overwrite Recording");
+                if ui.button("debug").clicked() {}
             });
     }
     /// Renders the editable data of the selected keyframe
@@ -1908,7 +1909,7 @@ impl Sequencer {
         *last_instant = now;
     }
     /// Deletes all movement keyframes determined to be redundant.
-    fn cull_minor_movement_keyframes(&mut self) {
+    pub fn cull_minor_movement_keyframes(&mut self) {
         let mut previous_move_keyframe: Option<usize> = None;
         let mut keyframes_to_remove: Vec<usize> = Vec::new();
         for i in 0..self.keyframes.len() {
