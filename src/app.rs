@@ -73,12 +73,13 @@ impl App {
     fn new_file(&mut self) {
         if self.file_uptodate {
             //reset the sequencer
-            
             self.sequencer.reset_time();
             self.file = "untitled.auto".to_string();
             self.sequencer.loaded_file = self.file.clone();
             self.file_uptodate = true;
             self.sequencer.changed.swap(false, Ordering::Relaxed);
+            self.sequencer.keyframes.clear();
+            self.sequencer.keyframe_state.clear();
             log::info!("New file: {:?}", "untitled.auto");
         } else {
             // offer to save the current file before making a new one

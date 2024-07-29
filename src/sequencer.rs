@@ -134,7 +134,7 @@ impl Sequencer {
 
         let mut previous_mouse_position = Vec2::ZERO;
         // this needs to get reset every time recording starts
-        let mut mouse_move_count = 20;
+        let mut mouse_move_count = 100;
 
         // Spawn the recording thread
         let _ = thread::Builder::new()
@@ -236,8 +236,7 @@ impl Sequencer {
                                             .unwrap()
                                             .insert(keyframe.uid, screenshot);
                                     }
-                                    keyframes.push(keyframe);
-                                    None
+                                    Some(keyframe)
                                 }
                                 rdev::EventType::KeyPress(key) => {
                                     let keyframe =
@@ -248,8 +247,7 @@ impl Sequencer {
                                             .unwrap()
                                             .insert(keyframe.uid, screenshot);
                                     }
-                                    keyframes.push(keyframe);
-                                    None
+                                    Some(keyframe)
                                 }
                                 // Button & Key Release events search for the matching keypress event to create a full keyframe
                                 rdev::EventType::ButtonRelease(btn) => {
@@ -284,7 +282,7 @@ impl Sequencer {
                                             true => {
                                                 previous_mouse_position = pos;
                                                 mouse_move_count =
-                                                    shared_count.load(Ordering::Relaxed);
+                                                    100 - shared_count.load(Ordering::Relaxed);
                                                 Some(Keyframe::mouse_move(dt.as_secs_f32(), pos))
                                             }
                                             false => None,
@@ -795,21 +793,19 @@ impl Sequencer {
                     };
                     if is_record_stop_keyframe {
                         recording_keyframes.pop();
-                        self.keyframe_state.pop();
-                        // END
-                        screenshot();
                     }
                 }
-                // Move the recorded keyframes to the main vec
+                // Record for undo/redo recording
                 self.changes.0.push(Change {
                     uids: vec![],
                     data: vec![ChangeData::AddKeyframes(recording_keyframes.clone())],
                 });
+                // Move the recorded keyframes to the main vec
                 self.keyframe_state
                     .append(&mut vec![0; recording_keyframes.len()]);
                 self.keyframes.append(&mut recording_keyframes);
                 drop(recording_keyframes);
-            }
+            } 
             if self.clear_before_recording {
                 self.time = 0.;
             }
@@ -1685,6 +1681,12 @@ impl Sequencer {
     }
     /// Handles keeping state, and replaying keystrokes when playing
     pub fn update(&mut self, last_instant: &mut Instant, ctx: &egui::Context, settings: &Settings) {
+        println!(
+            "{:?} : {:?} {:?}",
+            self.keyframes.len(),
+            self.keyframe_state.len(),
+            self.recording_keyframes.lock().unwrap().len()
+        );
         // Handle focus of the window when recording and when not
         // Since toggle_recording cant be called from the recording thread, it gets called here with "was_recording" as a safety check
         if self.was_recording != self.recording.load(Ordering::Relaxed) {
