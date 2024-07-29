@@ -513,6 +513,61 @@ impl Sequencer {
         }
         self.selected_keyframes.clear();
     }
+    /// Delete the selected keyframes
+    pub fn delete(&mut self) {
+        // If there are keyframes selected to delete
+        if !self.selected_keyframes.is_empty() {
+            let now = Instant::now();
+            let number_of_selected_keyframes = self.selected_keyframes.len();
+            let number_of_keyframes = self.keyframe_state.len();
+            // Sort the selected list from least the greatest index
+            self.selected_keyframes.sort();
+            // self.selected_keyframes.reverse();
+            // Check if we can do a quick delete if every keyframe is selected
+            let mut undo_vec = Vec::new();
+            if number_of_keyframes == number_of_selected_keyframes {
+                undo_vec = self.keyframes.to_vec();
+                self.keyframes.clear();
+                self.keyframe_state.clear();
+                self.selected_keyframes.clear();
+            } else {
+                // Otherwise loop through keyframes and remove from last to first (avoids index out of bounds)
+                let mut last_index = 0;
+                for uid in &self.selected_keyframes {
+                    let mut index = 0;
+                    for i in 0..self.keyframes.len() {
+                        if self.keyframes[i].uid == *uid {
+                            index = i;
+                            break;
+                        }
+                    }
+                    undo_vec.push(self.keyframes.remove(index));
+                    self.keyframe_state.remove(index);
+                    self.images.lock().unwrap().remove(uid);
+                    last_index = index;
+                }
+                // If there are still keyframes left, we want to select the last one before the selection
+                if !self.keyframes.is_empty() {
+                    // If the last keyframe before selection was the very last keyframe then we get the second last
+                    if last_index == self.keyframes.len() {
+                        last_index -= 1;
+                    }
+                    self.selected_keyframes = vec![self.keyframes[last_index].uid];
+                }
+            }
+
+            log::info!(
+                "Deleted {} keyframes in {:?}",
+                number_of_selected_keyframes,
+                now.elapsed()
+            );
+            self.changes.0.push(Change {
+                uids: vec![],
+                data: vec![ChangeData::RemoveKeyframes(undo_vec)],
+            });
+            self.changed();
+        }
+    }
     /// Undo's the changes in the top of the undo stack and moves it to the redo stack
     pub fn undo(&mut self) {
         if let Some(changes) = self.changes.0.pop() {
@@ -766,7 +821,6 @@ impl Sequencer {
     ///
     /// Also handles deleting keyframes due to convenience
     fn render_keyframes(&mut self, ui: &mut Ui, max_rect: &Rect) {
-        let mut delete = false;
         let mut keyframes = [
             self.keyframes.as_slice(),
             self.recording_keyframes.lock().unwrap().to_vec().as_slice(),
@@ -1012,7 +1066,7 @@ impl Sequencer {
 
                 ui.input_mut(|input| {
                     if input.consume_key(egui::Modifiers::NONE, egui::Key::Delete) {
-                        delete = true;
+                        self.delete();
                     }
                 });
 
@@ -1029,108 +1083,9 @@ impl Sequencer {
                             ui.close_menu();
                         }
                     }
-                    // Enable/Disable keyframe
-                    if keyframes[i].enabled {
-                        if ui.add(egui::Button::new("Disable")).clicked() {
-                            self.enable_keyframes(false);
-                            ui.close_menu();
-                        }
-                    } else {
-                        if ui.add(egui::Button::new("Enable")).clicked() {
-                            self.enable_keyframes(true);
-                            ui.close_menu();
-                        }
-                    }
-                    // Combines selected keyframes into a single keyframe if possible
-                    if ui.add(egui::Button::new("Combine")).clicked() {
-                        self.combine_into_keystrokes();
-                        ui.close_menu();
-                    }
-                    ui.separator();
-                    if ui
-                        .add(egui::Button::new("Cut").shortcut_text("Ctrl+X"))
-                        .clicked()
-                    {
-                        self.cut();
-                        ui.close_menu();
-                    }
-                    if ui
-                        .add(egui::Button::new("Copy").shortcut_text("Ctrl+C"))
-                        .clicked()
-                    {
-                        self.copy();
-                        ui.close_menu();
-                    }
-                    if ui
-                        .add(egui::Button::new("Paste").shortcut_text("Ctrl+V"))
-                        .clicked()
-                    {
-                        self.paste();
-                        ui.close_menu();
-                    }
-                    ui.separator();
-                    if ui
-                        .add(egui::Button::new("Delete").shortcut_text("Delete"))
-                        .clicked()
-                    {
-                        delete = true;
-                        ui.close_menu();
-                    }
+                    self.context_menu(ui, Some(&keyframes[i]));
                 });
             }
-        }
-
-        // If there are keyframes selected to delete
-        if delete && !self.selected_keyframes.is_empty() {
-            let now = Instant::now();
-            let number_of_selected_keyframes = self.selected_keyframes.len();
-            let number_of_keyframes = self.keyframe_state.len();
-            // Sort the selected list from least the greatest index
-            self.selected_keyframes.sort();
-            // self.selected_keyframes.reverse();
-            // Check if we can do a quick delete if every keyframe is selected
-            let mut undo_vec = Vec::new();
-            if number_of_keyframes == number_of_selected_keyframes {
-                undo_vec = self.keyframes.to_vec();
-                self.keyframes.clear();
-                self.keyframe_state.clear();
-                self.selected_keyframes.clear();
-            } else {
-                // Otherwise loop through keyframes and remove from last to first (avoids index out of bounds)
-                let mut last_index = 0;
-                for uid in &self.selected_keyframes {
-                    let mut index = 0;
-                    for i in 0..self.keyframes.len() {
-                        if self.keyframes[i].uid == *uid {
-                            index = i;
-                            break;
-                        }
-                    }
-                    undo_vec.push(self.keyframes.remove(index));
-                    self.keyframe_state.remove(index);
-                    self.images.lock().unwrap().remove(uid);
-                    last_index = index;
-                }
-                // If there are still keyframes left, we want to select the last one before the selection
-                if !self.keyframes.is_empty() {
-                    // If the last keyframe before selection was the very last keyframe then we get the second last
-                    if last_index == self.keyframes.len() {
-                        last_index -= 1;
-                    }
-                    self.selected_keyframes = vec![self.keyframes[last_index].uid];
-                }
-            }
-
-            log::info!(
-                "Deleted {} keyframes in {:?}",
-                number_of_selected_keyframes,
-                now.elapsed()
-            );
-            self.changes.0.push(Change {
-                uids: vec![],
-                data: vec![ChangeData::RemoveKeyframes(undo_vec)],
-            });
-            self.changed();
         }
     }
     /// Handles rendering the control bar
@@ -1372,7 +1327,6 @@ impl Sequencer {
                             self.sense(ui);
                         });
                     });
-
                     body.row(ROW_HEIGHT, |mut row| {
                         row.col(|ui| {
                             ui.label("Mouse").on_hover_text("id: 2,3");
@@ -1673,6 +1627,7 @@ impl Sequencer {
             ui.available_size_before_wrap(),
             egui::Sense::click_and_drag(),
         );
+
         ui.input_mut(|i| {
             // Keybind(ctrl+a): Select all keyframes when focused in the sequencer timeline
             if i.consume_key(egui::Modifiers::CTRL, egui::Key::A) {
@@ -1696,6 +1651,7 @@ impl Sequencer {
                     _ => false,
                 });
             }
+
             if sequencer.hovered() {
                 if i.pointer.any_pressed() {
                     self.selection.min = sequencer.interact_pointer_pos().unwrap();
@@ -1709,7 +1665,6 @@ impl Sequencer {
                 self.selecting = true;
             }
         });
-
         if sequencer.clicked() {
             ui.input(|i| {
                 if !i.modifiers.ctrl {
@@ -1725,36 +1680,7 @@ impl Sequencer {
             self.selection = Rect::ZERO;
         }
         sequencer.context_menu(|ui| {
-            if ui
-                .add_enabled(
-                    !self.selected_keyframes.is_empty(),
-                    egui::Button::new("Cut").shortcut_text("Ctrl+X"),
-                )
-                .clicked()
-            {
-                self.cut();
-                ui.close_menu();
-            }
-            if ui
-                .add_enabled(
-                    !self.selected_keyframes.is_empty(),
-                    egui::Button::new("Copy").shortcut_text("Ctrl+C"),
-                )
-                .clicked()
-            {
-                self.copy();
-                ui.close_menu();
-            }
-            if ui
-                .add_enabled(
-                    !self.clip_board.is_empty(),
-                    egui::Button::new("Paste").shortcut_text("Ctrl+V"),
-                )
-                .clicked()
-            {
-                self.paste();
-                ui.close_menu();
-            }
+            self.context_menu(ui, None);
         });
     }
     /// Handles keeping state, and replaying keystrokes when playing
@@ -2140,6 +2066,70 @@ impl Sequencer {
             }
             // Loop is handled outside of this function
             KeyframeType::Loop(_, _) => {}
+        }
+    }
+    pub fn context_menu(&mut self, ui: &mut Ui, keyframe: Option<&Keyframe>) {
+        // Enable/Disable keyframe
+        if let Some(keyframe) = keyframe {
+            if keyframe.enabled {
+                if ui.add(egui::Button::new("Disable")).clicked() {
+                    self.enable_keyframes(false);
+                    ui.close_menu();
+                }
+            } else {
+                if ui.add(egui::Button::new("Enable")).clicked() {
+                    self.enable_keyframes(true);
+                    ui.close_menu();
+                }
+            }
+        }
+
+        // Combines selected keyframes into a single keyframe if possible
+        if ui.add(egui::Button::new("Combine")).clicked() {
+            self.combine_into_keystrokes();
+            ui.close_menu();
+        }
+        ui.separator();
+        if ui
+            .add_enabled(
+                !self.selected_keyframes.is_empty(),
+                egui::Button::new("Cut").shortcut_text("Ctrl+X"),
+            )
+            .clicked()
+        {
+            self.cut();
+            ui.close_menu();
+        }
+        if ui
+            .add_enabled(
+                !self.selected_keyframes.is_empty(),
+                egui::Button::new("Copy").shortcut_text("Ctrl+C"),
+            )
+            .clicked()
+        {
+            self.copy();
+            ui.close_menu();
+        }
+        if ui
+            .add_enabled(
+                !self.clip_board.is_empty(),
+                egui::Button::new("Paste").shortcut_text("Ctrl+V"),
+            )
+            .clicked()
+        {
+            self.paste();
+            ui.close_menu();
+        }
+        ui.separator();
+        if ui
+            .add_enabled(
+                !self.selected_keyframes.is_empty(),
+                egui::Button::new("Delete").shortcut_text("Delete"),
+            )
+            .clicked()
+        {
+            self.delete();
+            ui.close_menu();
         }
     }
 }

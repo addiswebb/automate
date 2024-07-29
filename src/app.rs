@@ -485,36 +485,7 @@ impl eframe::App for App {
                     }
 
                     ui.separator();
-                    if ui
-                        .add_enabled(
-                            !self.sequencer.selected_keyframes.is_empty(),
-                            egui::Button::new("Cut").shortcut_text("Ctrl+X"),
-                        )
-                        .clicked()
-                    {
-                        self.sequencer.cut();
-                        ui.close_menu();
-                    }
-                    if ui
-                        .add_enabled(
-                            !self.sequencer.selected_keyframes.is_empty(),
-                            egui::Button::new("Copy").shortcut_text("Ctrl+C"),
-                        )
-                        .clicked()
-                    {
-                        self.sequencer.copy();
-                        ui.close_menu();
-                    }
-                    if ui
-                        .add_enabled(
-                            !self.sequencer.clip_board.is_empty(),
-                            egui::Button::new("Paste").shortcut_text("Ctrl+V"),
-                        )
-                        .clicked()
-                    {
-                        self.sequencer.paste();
-                        ui.close_menu();
-                    }
+                    self.sequencer.context_menu(ui, None);
                     ui.separator();
                     ui.menu_button("Add", |ui| {
                         if ui.button("Wait").clicked() {
