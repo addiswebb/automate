@@ -748,7 +748,7 @@ impl eframe::App for App {
         
         self.sequencer.show(ctx);
         self.sequencer.debug_panel(ctx);
-        self.sequencer.selected_panel(ctx);
+        self.sequencer.selected_panel(ctx, &self.settings);
         self.sequencer.central_panel(ctx);
 
         // If sequencer has changed or the file is not uptodate
