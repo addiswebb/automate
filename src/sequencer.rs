@@ -826,6 +826,7 @@ impl Sequencer {
             self.recording_keyframes.lock().unwrap().to_vec().as_slice(),
         ]
         .concat();
+
         for i in 0..keyframes.len() {
             let mut state = -1;
             if let Some(s) = self.keyframe_state.get(i) {
@@ -1369,7 +1370,6 @@ impl Sequencer {
                         });
                     });
                 });
-
             self.render_keyframes(ui, &keyframe_clip_rect);
             if self.selecting {
                 ui.painter().rect(

@@ -604,8 +604,9 @@ impl eframe::App for App {
                                         ui.horizontal(|ui|{
                                             if ui.add(egui::Button::new("Calibrate")).on_hover_text("Calibrates the offset necessary to correctly move the mouse when using multiple monitors").clicked() {
                                                 self.sequencer.calibrate.swap(true, Ordering::Relaxed);
+                                                let mut recording_keyframes =self.sequencer.recording_keyframes.lock().unwrap();
                                                 rdev::simulate(&rdev::EventType::MouseMove { x: 0., y: 0. }).unwrap();
-                                                let last = self.sequencer.keyframes.last();
+                                                let last = recording_keyframes.last();
                                                 if let Some(last) = last{
                                                     // Keyframe kind of 255 is used only for calibrating monitor offset
                                                     if last.kind == u8::MAX{
@@ -615,7 +616,7 @@ impl eframe::App for App {
                                                         }
                                                     }
                                                 }
-                                                self.sequencer.keyframes.pop();
+                                                recording_keyframes.pop();
                                                 self.sequencer.calibrate.swap(false, Ordering::Relaxed);
                                                 log::info!("Calibrated Monitor Offset: {:?}", self.settings.offset);
                                             }
@@ -741,9 +742,9 @@ impl eframe::App for App {
                     });
                 });
             });
-
         self.sequencer
             .update(&mut self.last_instant, ctx, &self.settings);
+        
         self.sequencer.show(ctx);
         self.sequencer.debug_panel(ctx);
         self.sequencer.selected_panel(ctx);
