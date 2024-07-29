@@ -107,6 +107,7 @@ pub struct Sequencer {
     pub recording_keyframes: Arc<Mutex<Vec<Keyframe>>>,
     #[serde(skip)]
     mouse_pos: Arc<Mutex<Vec2>>,
+    modal: (bool, String, String),
 }
 
 impl Sequencer {
@@ -345,6 +346,7 @@ impl Sequencer {
             failsafe_edge,
             changes: (Vec::new(), Vec::new()),
             mouse_pos,
+            modal: (false, "".to_string(), "".to_string()),
         }
     }
     // Handles cleanup after changes were made
@@ -1402,7 +1404,7 @@ impl Sequencer {
         );
     }
     /// Renders a debug panel with relevant information
-    pub fn debug_panel(&mut self, ctx: &egui::Context) {
+    pub fn debug_panel(&mut self, ctx: &egui::Context, settings: &mut Settings) {
         egui::SidePanel::right("Debug")
             .max_width(200.0)
             .resizable(false)
@@ -1415,7 +1417,7 @@ impl Sequencer {
                     self.mouse_pos.lock().unwrap()
                 ));
                 ui.checkbox(&mut self.clear_before_recording, "Overwrite Recording");
-                if ui.button("debug").clicked() {}
+                ui.checkbox(&mut settings.retake_screenshots, "Retake screenshots");
             });
     }
     /// Renders the editable data of the selected keyframe
@@ -1850,18 +1852,34 @@ impl Sequencer {
                         // If so and the sequencer is playing
                         if play {
                             // When fail detection is enabled check if the keyframe has a screenshot
-                            if settings.fail_detection {
-                                if let Some(src1) = self.images.lock().unwrap().get(&uid) {
-                                    if let Some(src2) = screenshot() {
-                                        let percentage_err = image_dif_opencv(src1, &src2);
-                                        if percentage_err > settings.max_fail_error {
-                                            self.play.swap(false, Ordering::Relaxed);
-                                            ctx.send_viewport_cmd(egui::ViewportCommand::Focus);
-                                            log::warn!(
-                                                "Fail Detected: {:?}% err",
-                                                percentage_err * 100.
-                                            );
-                                            break;
+                            if settings.fail_detection || settings.retake_screenshots {
+                                if let Some(src1) = screenshot() {
+                                    let mut images = self.images.lock().unwrap();
+                                    if settings.retake_screenshots {
+                                        // Replace the current screenshot with a new one
+                                        images.remove(&uid);
+                                        images.insert(uid, src1);
+                                    } else {
+                                        if let Some(src2) = images.get(&uid) {
+                                            let percentage_err = image_dif_opencv(&src1, src2);
+                                            if percentage_err > settings.max_fail_error {
+                                                self.play.swap(false, Ordering::Relaxed);
+                                                ctx.send_viewport_cmd(egui::ViewportCommand::Focus);
+                                                self.modal = (
+                                                    true,
+                                                    format!(
+                                                        "Fail Detected: {:?}%",
+                                                        percentage_err * 100.
+                                                    )
+                                                    .to_string(),
+                                                    "Paused playback as a result.".to_string(),
+                                                );
+                                                log::warn!(
+                                                    "Fail Detected: {:?}% err",
+                                                    percentage_err * 100.
+                                                );
+                                                break;
+                                            }
                                         }
                                     }
                                 }
@@ -2126,6 +2144,16 @@ impl Sequencer {
             self.delete();
             ui.close_menu();
         }
+    }
+    pub fn modal(&mut self, ctx: &egui::Context) {
+        egui::Window::new(self.modal.1.clone())
+            .movable(true)
+            .collapsible(false)
+            .resizable(false)
+            .open(&mut self.modal.0)
+            .show(ctx, |ui| {
+                ui.label(self.modal.2.clone());
+            });
     }
 }
 

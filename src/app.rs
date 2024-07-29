@@ -39,6 +39,7 @@ pub struct App {
     #[serde(skip)]
     // weird name, basically determines whether the save before exiting dialog closes the window or creates a new file
     dialog_purpose: DialogPurpose,
+    #[serde(skip)]
     settings: Settings,
 }
 
@@ -364,7 +365,6 @@ impl eframe::App for App {
                 }
             }
         });
-
 
         if self.show_save_dialog {
             egui::Window::new("Automate")
@@ -750,9 +750,10 @@ impl eframe::App for App {
             .update(&mut self.last_instant, ctx, &self.settings);
         
         self.sequencer.show(ctx);
-        self.sequencer.debug_panel(ctx);
+        self.sequencer.debug_panel(ctx, &mut self.settings);
         self.sequencer.selected_panel(ctx, &self.settings);
         self.sequencer.central_panel(ctx);
+        self.sequencer.modal(ctx);
 
         // If sequencer has changed or the file is not uptodate
         self.file_uptodate = !self.sequencer.changed.load(Ordering::Relaxed);

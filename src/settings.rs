@@ -60,6 +60,7 @@ pub struct Settings {
     pub fail_detection: bool,
     pub max_fail_error: f32,
     pub offset: Vec2,
+    pub retake_screenshots: bool,
     #[serde(skip)]
     pub page: SettingsPage,
     #[serde(skip)]
@@ -145,6 +146,7 @@ impl Default for Settings {
             fail_detection: true,
             max_fail_error: 0.2,
             offset: Vec2::NAN,
+            retake_screenshots: false,
             page: SettingsPage::Preferences,
             show: false,
         }
