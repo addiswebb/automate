@@ -1,7 +1,5 @@
-use std::time::Instant;
-
 use egui::{emath::RectTransform, vec2, Pos2, Rect, Ui, Vec2};
-use image::{DynamicImage, GenericImageView, ImageBuffer, Rgba};
+use image::{DynamicImage, ImageBuffer, Rgba};
 use xcap::Monitor;
 
 pub const ROW_HEIGHT: f32 = 24.0;
@@ -216,7 +214,7 @@ pub fn key_to_char(k: &rdev::Key) -> String {
         rdev::Key::KeyX => "x",
         rdev::Key::KeyY => "y",
         rdev::Key::KeyZ => "z",
-        rdev::Key::Space => "＿",
+        rdev::Key::Space => "_",
         rdev::Key::Tab => egui_phosphor::regular::ARROW_LINE_RIGHT,
         rdev::Key::UpArrow => egui_phosphor::regular::ARROW_UP,
         rdev::Key::PrintScreen => egui_phosphor::regular::PRINTER,
@@ -310,8 +308,6 @@ pub fn button_to_char(b: &rdev::Button) -> String {
 pub fn scroll_to_char(delta: &Vec2) -> String {
     return if delta.x != 0. {
         egui_phosphor::regular::ARROWS_HORIZONTAL
-    } else if delta.y != 0. {
-        egui_phosphor::regular::MOUSE_SCROLL
     } else {
         ""
     }
@@ -429,5 +425,5 @@ pub fn image_dif_opencv(vec1: &Vec<u8>, vec2: &Vec<u8>) -> f32 {
 
     let result = opencv::core::count_non_zero(&diff).unwrap();
     let size = diff.size().unwrap();
-    return result as f32 / size.area() as f32;
+    return (result as f32 / size.area() as f32) * 100.;
 }

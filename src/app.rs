@@ -5,7 +5,7 @@ use std::{
     io::{BufReader, Read, Write},
     path::{Path, PathBuf},
     sync::atomic::Ordering,
-    time::Instant,
+    time::{Duration, Instant},
 };
 use uuid::Uuid;
 use zip::{write::SimpleFileOptions, ZipArchive, ZipWriter};
@@ -40,7 +40,6 @@ pub struct App {
     #[serde(skip)]
     // weird name, basically determines whether the save before exiting dialog closes the window or creates a new file
     dialog_purpose: DialogPurpose,
-    #[serde(skip)]
     settings: Settings,
 }
 
@@ -62,16 +61,16 @@ impl Default for App {
 impl App {
     /// Called once before the first frame.
     pub fn new(cc: &eframe::CreationContext<'_>) -> Self {
-        // Load previous app state if any
-        if let Some(storage) = cc.storage {
-            return eframe::get_value(storage, eframe::APP_KEY).unwrap_or_default();
-        }
 
         // Add Phosphor icons to fonts
         let mut fonts = egui::FontDefinitions::default();
         egui_phosphor::add_to_fonts(&mut fonts, egui_phosphor::Variant::Regular);
         cc.egui_ctx.set_fonts(fonts);
 
+        // Load previous app state if any
+        if let Some(storage) = cc.storage {
+            return eframe::get_value(storage, eframe::APP_KEY).unwrap_or_default();
+        }
         Default::default()
     }
     /// Safely creates a new file
@@ -614,10 +613,9 @@ impl eframe::App for App {
                                         ui.horizontal(|ui|{
                                             if ui.add(egui::Button::new("Calibrate")).on_hover_text("Calibrates the offset necessary to correctly move the mouse when using multiple monitors").clicked() {
                                                 self.sequencer.calibrate.swap(true, Ordering::Relaxed);
-                                                let mut recording_keyframes =self.sequencer.recording_keyframes.lock().unwrap();
                                                 rdev::simulate(&rdev::EventType::MouseMove { x: 0., y: 0. }).unwrap();
-                                                let last = recording_keyframes.last();
-                                                if let Some(last) = last{
+                                                let mut recording_keyframes = self.sequencer.recording_keyframes.lock().unwrap();
+                                                if let Some(last) = recording_keyframes.last(){
                                                     // Keyframe kind of 255 is used only for calibrating monitor offset
                                                     if last.kind == u8::MAX{
                                                         if let KeyframeType::MouseMove(pos) = last.keyframe_type{
@@ -647,6 +645,9 @@ impl eframe::App for App {
                                                 .load(Ordering::Relaxed);
                                             ui.add(
                                                 egui::DragValue::new(&mut resolution)
+                                                    .custom_formatter(|n, _| {
+                                                        format!("{}%",n as u32)
+                                                    })
                                                     .speed(1)
                                                     .range(0..=100),
                                             )
@@ -687,7 +688,12 @@ impl eframe::App for App {
                                         ui.horizontal(|ui|{
                                             ui.strong("Fail detection");
                                             ui.checkbox(&mut self.settings.fail_detection, "");
-                                            ui.add(egui::DragValue::new(&mut self.settings.max_fail_error).speed(0.01).range(0.0..=1.0));
+                                            ui.add(egui::DragValue::new(&mut self.settings.max_fail_error)
+                                            .custom_formatter(|n, _| {
+                                                format!("{}%",n)
+                                            })
+                                            .speed(1)
+                                            .range(0..=100));
                                         });
                                         ui.label("Computes the percentage different between the keyframe's expect screenshot vs what is on the screen and stops execution if it is beyond the threshold above, using computer vision.");
                                         ui.small("Only works for main monitor");

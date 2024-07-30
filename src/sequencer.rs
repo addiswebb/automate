@@ -189,6 +189,7 @@ impl Sequencer {
                             *shared_mouse_pos.lock().unwrap() = Vec2::new(*x as f32, *y as f32);
                             // Offset Calibration
                             if shared_calibrate.load(Ordering::Relaxed) {
+                                println!("a");
                                 keyframes.push(Keyframe {
                                     timestamp: f32::NAN,
                                     duration: f32::NAN,
@@ -1865,21 +1866,18 @@ impl Sequencer {
                                     } else {
                                         if let Some(src2) = images.get(&uid) {
                                             let percentage_err = image_dif_opencv(&src1, src2);
-                                            if percentage_err > settings.max_fail_error {
+                                            if percentage_err > settings.max_fail_error as f32 {
                                                 self.play.swap(false, Ordering::Relaxed);
                                                 ctx.send_viewport_cmd(egui::ViewportCommand::Focus);
                                                 self.modal = (
                                                     true,
-                                                    format!(
-                                                        "Fail Detected: {:?}%",
-                                                        percentage_err * 100.
-                                                    )
-                                                    .to_string(),
+                                                    format!("Fail Detected: {:?}%", percentage_err)
+                                                        .to_string(),
                                                     "Paused playback as a result.".to_string(),
                                                 );
                                                 log::warn!(
                                                     "Fail Detected: {:?}% err",
-                                                    percentage_err * 100.
+                                                    percentage_err
                                                 );
                                                 break;
                                             }
@@ -2148,6 +2146,7 @@ impl Sequencer {
             ui.close_menu();
         }
     }
+    /// Renders a modal that can be used for displaying errors or other
     pub fn modal(&mut self, ctx: &egui::Context) {
         egui::Window::new(self.modal.1.clone())
             .movable(true)
