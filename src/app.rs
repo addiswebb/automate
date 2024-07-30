@@ -16,6 +16,7 @@ use crate::{
     settings::{MonitorEdge, Settings, SettingsPage},
 };
 
+/// Determines the outcome of closing the "Save" dialog
 pub enum DialogPurpose{
     Close,
     Open,
@@ -65,6 +66,11 @@ impl App {
         if let Some(storage) = cc.storage {
             return eframe::get_value(storage, eframe::APP_KEY).unwrap_or_default();
         }
+
+        // Add Phosphor icons to fonts
+        let mut fonts = egui::FontDefinitions::default();
+        egui_phosphor::add_to_fonts(&mut fonts, egui_phosphor::Variant::Regular);
+        cc.egui_ctx.set_fonts(fonts);
 
         Default::default()
     }

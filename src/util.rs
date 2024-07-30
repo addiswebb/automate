@@ -190,130 +190,132 @@ pub fn string_to_keys(c: &str) -> Option<rdev::Key> {
 }
 pub fn key_to_char(k: &rdev::Key) -> String {
     match k {
-        rdev::Key::KeyA => "a".to_string(),
-        rdev::Key::KeyB => "b".to_string(),
-        rdev::Key::KeyC => "c".to_string(),
-        rdev::Key::KeyD => "d".to_string(),
-        rdev::Key::KeyE => "e".to_string(),
-        rdev::Key::KeyF => "f".to_string(),
-        rdev::Key::KeyG => "g".to_string(),
-        rdev::Key::KeyH => "h".to_string(),
-        rdev::Key::KeyI => "i".to_string(),
-        rdev::Key::KeyJ => "j".to_string(),
-        rdev::Key::KeyK => "k".to_string(),
-        rdev::Key::KeyL => "l".to_string(),
-        rdev::Key::KeyM => "m".to_string(),
-        rdev::Key::KeyN => "n".to_string(),
-        rdev::Key::KeyO => "o".to_string(),
-        rdev::Key::KeyP => "p".to_string(),
-        rdev::Key::KeyQ => "q".to_string(),
-        rdev::Key::KeyR => "r".to_string(),
-        rdev::Key::KeyS => "s".to_string(),
-        rdev::Key::KeyT => "t".to_string(),
-        rdev::Key::KeyU => "u".to_string(),
-        rdev::Key::KeyV => "v".to_string(),
-        rdev::Key::KeyW => "w".to_string(),
-        rdev::Key::KeyX => "x".to_string(),
-        rdev::Key::KeyY => "y".to_string(),
-        rdev::Key::KeyZ => "z".to_string(),
-        rdev::Key::Space => "space".to_string(),
-        rdev::Key::Tab => "tab".to_string(),
-        rdev::Key::UpArrow => "uparrow".to_string(),
-        rdev::Key::PrintScreen => "printscreen".to_string(),
-        rdev::Key::ScrollLock => "scrolllock".to_string(),
-        rdev::Key::Pause => "pause".to_string(),
-        rdev::Key::NumLock => "numlock".to_string(),
-        rdev::Key::BackQuote => "`".to_string(),
-        rdev::Key::Num1 => "1".to_string(),
-        rdev::Key::Num2 => "2".to_string(),
-        rdev::Key::Num3 => "3".to_string(),
-        rdev::Key::Num4 => "4".to_string(),
-        rdev::Key::Num5 => "5".to_string(),
-        rdev::Key::Num6 => "6".to_string(),
-        rdev::Key::Num7 => "7".to_string(),
-        rdev::Key::Num8 => "8".to_string(),
-        rdev::Key::Num9 => "9".to_string(),
-        rdev::Key::Num0 => "0".to_string(),
-        rdev::Key::Minus => "-".to_string(),
-        rdev::Key::Equal => "=".to_string(),
-        rdev::Key::LeftBracket => "(".to_string(),
-        rdev::Key::RightBracket => ")".to_string(),
-        rdev::Key::SemiColon => ";".to_string(),
-        rdev::Key::Quote => '"'.to_string(),
-        rdev::Key::BackSlash => "\"".to_string(),
-        rdev::Key::IntlBackslash => "\"".to_string(),
-        rdev::Key::Comma => ",".to_string(),
-        rdev::Key::Dot => ".".to_string(),
-        rdev::Key::Slash => "/".to_string(),
-        rdev::Key::Insert => "insert".to_string(),
-        rdev::Key::KpReturn => "kpreturn".to_string(),
-        rdev::Key::KpMinus => "kpminus".to_string(),
-        rdev::Key::KpPlus => "kpplus".to_string(),
-        rdev::Key::KpMultiply => "kpmultiply".to_string(),
-        rdev::Key::KpDivide => "kpdivide".to_string(),
-        rdev::Key::Kp0 => "kp0".to_string(),
-        rdev::Key::Kp1 => "kp1".to_string(),
-        rdev::Key::Kp2 => "kp2".to_string(),
-        rdev::Key::Kp3 => "kp3".to_string(),
-        rdev::Key::Kp4 => "kp4".to_string(),
-        rdev::Key::Kp5 => "kp5".to_string(),
-        rdev::Key::Kp6 => "kp6".to_string(),
-        rdev::Key::Kp7 => "kp7".to_string(),
-        rdev::Key::Kp8 => "kp8".to_string(),
-        rdev::Key::Kp9 => "kp9".to_string(),
-        rdev::Key::KpDelete => "kpdelete".to_string(),
-        rdev::Key::Function => "function".to_string(),
-        rdev::Key::Unknown(_) => "".to_string(),
-        rdev::Key::Alt => "alt".to_string(),
-        rdev::Key::AltGr => "altgr".to_string(),
-        rdev::Key::Backspace => "backspace".to_string(),
-        rdev::Key::CapsLock => "capslock".to_string(),
-        rdev::Key::ControlLeft => "ctrlleft".to_string(),
-        rdev::Key::ControlRight => "ctrlright".to_string(),
-        rdev::Key::Delete => "delete".to_string(),
-        rdev::Key::DownArrow => "downarrow".to_string(),
-        rdev::Key::End => "end".to_string(),
-        rdev::Key::Escape => "esc".to_string(),
-        rdev::Key::F1 => "f1".to_string(),
-        rdev::Key::F10 => "f10".to_string(),
-        rdev::Key::F11 => "f11".to_string(),
-        rdev::Key::F12 => "f12".to_string(),
-        rdev::Key::F2 => "f2".to_string(),
-        rdev::Key::F3 => "f3".to_string(),
-        rdev::Key::F4 => "f4".to_string(),
-        rdev::Key::F5 => "f5".to_string(),
-        rdev::Key::F6 => "f6".to_string(),
-        rdev::Key::F7 => "f7".to_string(),
-        rdev::Key::F8 => "f8".to_string(),
-        rdev::Key::F9 => "f9".to_string(),
-        rdev::Key::Home => "home".to_string(),
-        rdev::Key::LeftArrow => "leftarrow".to_string(),
-        rdev::Key::MetaLeft => "metaleft".to_string(),
-        rdev::Key::MetaRight => "metaright".to_string(),
-        rdev::Key::PageDown => "pagedown".to_string(),
-        rdev::Key::PageUp => "pageup".to_string(),
-        rdev::Key::Return => "return".to_string(),
-        rdev::Key::RightArrow => "rightarrow".to_string(),
-        rdev::Key::ShiftLeft => "shiftleft".to_string(),
-        rdev::Key::ShiftRight => "shiftright".to_string(),
+        rdev::Key::KeyA => "a",
+        rdev::Key::KeyB => "b",
+        rdev::Key::KeyC => "c",
+        rdev::Key::KeyD => "d",
+        rdev::Key::KeyE => "e",
+        rdev::Key::KeyF => "f",
+        rdev::Key::KeyG => "g",
+        rdev::Key::KeyH => "h",
+        rdev::Key::KeyI => "i",
+        rdev::Key::KeyJ => "j",
+        rdev::Key::KeyK => "k",
+        rdev::Key::KeyL => "l",
+        rdev::Key::KeyM => "m",
+        rdev::Key::KeyN => "n",
+        rdev::Key::KeyO => "o",
+        rdev::Key::KeyP => "p",
+        rdev::Key::KeyQ => "q",
+        rdev::Key::KeyR => "r",
+        rdev::Key::KeyS => "s",
+        rdev::Key::KeyT => "t",
+        rdev::Key::KeyU => "u",
+        rdev::Key::KeyV => "v",
+        rdev::Key::KeyW => "w",
+        rdev::Key::KeyX => "x",
+        rdev::Key::KeyY => "y",
+        rdev::Key::KeyZ => "z",
+        rdev::Key::Space => "＿",
+        rdev::Key::Tab => egui_phosphor::regular::ARROW_LINE_RIGHT,
+        rdev::Key::UpArrow => egui_phosphor::regular::ARROW_UP,
+        rdev::Key::PrintScreen => egui_phosphor::regular::PRINTER,
+        rdev::Key::ScrollLock => egui_phosphor::regular::LOCK_SIMPLE,
+        rdev::Key::Pause => egui_phosphor::regular::PAUSE,
+        rdev::Key::NumLock => egui_phosphor::regular::LOCK,
+        rdev::Key::BackQuote => "`",
+        rdev::Key::Num1 => "1",
+        rdev::Key::Num2 => "2",
+        rdev::Key::Num3 => "3",
+        rdev::Key::Num4 => "4",
+        rdev::Key::Num5 => "5",
+        rdev::Key::Num6 => "6",
+        rdev::Key::Num7 => "7",
+        rdev::Key::Num8 => "8",
+        rdev::Key::Num9 => "9",
+        rdev::Key::Num0 => "0",
+        rdev::Key::Minus => egui_phosphor::regular::MINUS,
+        rdev::Key::Equal => egui_phosphor::regular::EQUALS,
+        rdev::Key::LeftBracket => "(",
+        rdev::Key::RightBracket => ")",
+        rdev::Key::SemiColon => ";",
+        rdev::Key::Quote => "\"",
+        rdev::Key::BackSlash => "\"",
+        rdev::Key::IntlBackslash => "\"",
+        rdev::Key::Comma => ",",
+        rdev::Key::Dot => ".",
+        rdev::Key::Slash => "/",
+        rdev::Key::Insert => "insert",
+        rdev::Key::KpReturn => egui_phosphor::regular::ARROW_U_DOWN_LEFT,
+        rdev::Key::KpMinus => egui_phosphor::regular::MINUS,
+        rdev::Key::KpPlus => egui_phosphor::regular::PLUS,
+        rdev::Key::KpMultiply => "*",
+        rdev::Key::KpDivide => "\\",
+        rdev::Key::Kp0 => "0",
+        rdev::Key::Kp1 => "1",
+        rdev::Key::Kp2 => "2",
+        rdev::Key::Kp3 => "3",
+        rdev::Key::Kp4 => "4",
+        rdev::Key::Kp5 => "5",
+        rdev::Key::Kp6 => "6",
+        rdev::Key::Kp7 => "7",
+        rdev::Key::Kp8 => "8",
+        rdev::Key::Kp9 => "9",
+        rdev::Key::KpDelete => "del",
+        rdev::Key::Function => "fn",
+        rdev::Key::Unknown(_) => egui_phosphor::regular::WARNING,
+        rdev::Key::Alt => egui_phosphor::regular::OPTION,
+        rdev::Key::AltGr => "altgr",
+        rdev::Key::Backspace => egui_phosphor::regular::BACKSPACE,
+        rdev::Key::CapsLock => egui_phosphor::regular::ARROW_FAT_LINE_UP,
+        rdev::Key::ControlLeft => "ctrlleft",
+        rdev::Key::ControlRight => "ctrlright",
+        rdev::Key::Delete => "del",
+        rdev::Key::DownArrow => egui_phosphor::regular::ARROW_DOWN,
+        rdev::Key::End => "end",
+        rdev::Key::Escape => "esc",
+        rdev::Key::F1 => "Ff1",
+        rdev::Key::F10 => "Ff10",
+        rdev::Key::F11 => "Ff11",
+        rdev::Key::F12 => "Ff12",
+        rdev::Key::F2 => "Ff2",
+        rdev::Key::F3 => "Ff3",
+        rdev::Key::F4 => "Ff4",
+        rdev::Key::F5 => "Ff5",
+        rdev::Key::F6 => "Ff6",
+        rdev::Key::F7 => "F7",
+        rdev::Key::F8 => "F8",
+        rdev::Key::F9 => "F9",
+        rdev::Key::Home => egui_phosphor::regular::HOUSE,
+        rdev::Key::LeftArrow => egui_phosphor::regular::ARROW_LEFT,
+        rdev::Key::MetaLeft => "metaleft",
+        rdev::Key::MetaRight => "metaright",
+        rdev::Key::PageDown => "pagedown",
+        rdev::Key::PageUp => "pageup",
+        rdev::Key::Return => egui_phosphor::regular::ARROW_U_DOWN_LEFT,
+        rdev::Key::RightArrow => egui_phosphor::regular::ARROW_RIGHT,
+        rdev::Key::ShiftLeft => egui_phosphor::regular::ARROW_FAT_UP,
+        rdev::Key::ShiftRight => egui_phosphor::regular::ARROW_FAT_UP,
     }
+    .to_string()
 }
 pub fn button_to_char(b: &rdev::Button) -> String {
     match b {
-        rdev::Button::Left => "⏴".to_string(),
-        rdev::Button::Right => "⏵".to_string(),
-        rdev::Button::Middle => "◼".to_string(),
+        rdev::Button::Left => egui_phosphor::regular::MOUSE_LEFT_CLICK.to_string(),
+        rdev::Button::Right => egui_phosphor::regular::MOUSE_RIGHT_CLICK.to_string(),
+        rdev::Button::Middle => egui_phosphor::regular::MOUSE_MIDDLE_CLICK.to_string(),
         _ => "".to_string(),
     }
 }
 pub fn scroll_to_char(delta: &Vec2) -> String {
     return if delta.x != 0. {
-        "⬌".to_string()
+        egui_phosphor::regular::ARROWS_HORIZONTAL
     } else if delta.y != 0. {
-        "⬍".to_string()
+        egui_phosphor::regular::MOUSE_SCROLL
     } else {
-        "".to_string()
-    };
+        ""
+    }
+    .to_string();
 }
 
 /// Correctly scales a given time `i` to screen position
@@ -348,91 +350,6 @@ pub fn simulate_move(pos: &Vec2, offset: &Vec2) {
     .expect(
         "Failed to simulate Mouse Movement (Probably due to a kernel level anti-cheat running)",
     );
-}
-
-#[allow(unused)]
-pub fn image_in_image_search(
-    target: DynamicImage,
-    tolerance: u8,
-    min_confidence: f32,
-) -> Option<Vec2> {
-    let now = Instant::now();
-    let step_size = 1;
-    // let tolerance = 0;
-    // let min_confidence = 0.9;
-    let (w, h) = (1920, 1080);
-    if let Some(screenshot) = screenshot() {
-        let screenshot: ImageBuffer<Rgba<u8>, Vec<u8>> =
-            ImageBuffer::from_vec(w, h, screenshot).unwrap();
-        let mut screenshot = DynamicImage::ImageRgba8(screenshot);
-
-        let screen_pixels: Vec<_> = screenshot.pixels().map(|p| p.2 .0).collect();
-        let target_pixels: Vec<_> = target.pixels().map(|p| p.2 .0).collect();
-
-        for y in (0..h - target.height()).step_by(step_size) {
-            for x in (0..w - target.width()).step_by(step_size) {
-                let mut matching_pixels = 0;
-                let mut total_pixels = 0;
-                'outer: for dy in 0..target.height() {
-                    for dx in 0..target.width() {
-                        let screenshot_index: usize =
-                            ((y + dy) * screenshot.width() + (x + dx)) as usize;
-                        let target_index: usize = (dy * target.width() + dx) as usize;
-
-                        let screenshot_pixel = screen_pixels[screenshot_index];
-                        let target_pixel = target_pixels[target_index];
-
-                        if target_pixel[3] < 128 {
-                            continue;
-                        }
-
-                        total_pixels += 1;
-
-                        // if screenshot_pixel == target_pixel {
-                        if within_tolerance(screenshot_pixel[0], target_pixel[0], tolerance)
-                            && within_tolerance(screenshot_pixel[1], target_pixel[1], tolerance)
-                            && within_tolerance(screenshot_pixel[2], target_pixel[2], tolerance)
-                        {
-                            matching_pixels += 1;
-                        } else {
-                            break 'outer;
-                        }
-                    }
-                }
-
-                let confidence = if total_pixels == 0 {
-                    0.0
-                } else {
-                    matching_pixels as f32 / total_pixels as f32
-                };
-                if confidence >= min_confidence {
-                    screenshot
-                        .crop(x, y, target.width() + 20, target.height() + 20)
-                        .save("test.png")
-                        .unwrap();
-                    log::info!(
-                        "Magic found {}% move in {:?}",
-                        confidence * 100.,
-                        now.elapsed()
-                    );
-                    return Some(vec2(
-                        (x + target.width() / 2) as f32,
-                        (y + target.height() / 2) as f32,
-                    ));
-                }
-            }
-        }
-    }
-
-    None
-}
-
-// Helper function to check if a color value is within a tolerance range
-pub fn within_tolerance(value1: u8, value2: u8, tolerance: u8) -> bool {
-    let min_value = value2.saturating_sub(tolerance);
-    let max_value = value2.saturating_add(tolerance);
-    // Check if the color value is within tolerance range
-    value1 >= min_value && value1 <= max_value
 }
 
 use opencv::core::{Mat, MatTraitConst, Point, VecN};

@@ -408,6 +408,7 @@ dependencies = [
  "bincode",
  "eframe",
  "egui",
+ "egui-phosphor",
  "egui_extras",
  "env_logger",
  "image",
@@ -1128,6 +1129,14 @@ dependencies = [
  "nohash-hasher",
  "ron",
  "serde",
+]
+
+[[package]]
+name = "egui-phosphor"
+version = "0.6.0"
+source = "git+https://github.com/addiswebb/egui-phosphor#2c32bd380839b04c0a434ce75d9f3cec5cb7afe6"
+dependencies = [
+ "egui",
 ]
 
 [[package]]

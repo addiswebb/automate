@@ -22,6 +22,7 @@ pub struct SequencerState {
     pub keyframes: Vec<Keyframe>,
 }
 
+/// Represents any possible change made to the sequencer, used for undo/redo
 pub enum ChangeData {
     AddKeyframes(Vec<Keyframe>),
     RemoveKeyframes(Vec<Keyframe>),
@@ -31,6 +32,8 @@ pub enum ChangeData {
     EditMouseButton(rdev::Button, rdev::Button),
     EnableKeyframes(bool),
 }
+
+/// Represents any possible change made to the sequencer, used for undo/redo
 pub struct Change {
     pub uids: Vec<Bytes>,
     pub data: Vec<ChangeData>,
