@@ -1786,20 +1786,24 @@ impl Sequencer {
         let now = Instant::now();
         let dt = now - *last_instant;
         let play = self.play.load(Ordering::Relaxed);
+        // Step in time
         if play || self.recording.load(Ordering::Relaxed) {
             self.time += dt.as_secs_f32() * self.speed;
         }
-        let last = self.keyframes.last();
+
+        // Stop playing when it reaches the end of the keyframes
+        // there is a loop keyframe at the end
+        // or the second last keyframe ends after the last keyframe,
+        // Todo(addis): solve this issue, its very annoying
         if play {
-            if let Some(last) = last {
+            if let Some(last) = self.keyframes.last() {
                 if self.time >= last.timestamp + last.duration {
                     if self.repeats > 1 {
                         // Repeat the automation
                         self.time = 0.0;
                         self.repeats -= 1;
                     } else {
-                        // self.current_image = "end".to_string();
-                        self.play.swap(false, Ordering::Relaxed);
+                        self.toggle_play();
                         ctx.send_viewport_cmd(egui::ViewportCommand::Focus);
                     }
                 }

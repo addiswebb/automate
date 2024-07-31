@@ -5,7 +5,7 @@ use std::{
     io::{BufReader, Read, Write},
     path::{Path, PathBuf},
     sync::atomic::Ordering,
-    time::{Duration, Instant},
+    time::Instant,
 };
 use uuid::Uuid;
 use zip::{write::SimpleFileOptions, ZipArchive, ZipWriter};
