@@ -150,7 +150,7 @@ impl Sequencer {
             .spawn(move || {
                 log::info!("Created Recording Thread");
                 if let Err(error) = rdev::listen(move |event: rdev::Event| {
-                    let mut keyframes = shared_kfs.lock().unwrap();
+                    let mut rec_keyframes = shared_kfs.lock().unwrap();
 
                     let is_recording = shared_rec.load(Ordering::Relaxed);
                     let mut tmp_keyframe = None;
@@ -189,8 +189,7 @@ impl Sequencer {
                             *shared_mouse_pos.lock().unwrap() = Vec2::new(*x as f32, *y as f32);
                             // Offset Calibration
                             if shared_calibrate.load(Ordering::Relaxed) {
-                                println!("a");
-                                keyframes.push(Keyframe {
+                                rec_keyframes.push(Keyframe {
                                     timestamp: f32::NAN,
                                     duration: f32::NAN,
                                     keyframe_type: KeyframeType::MouseMove(Vec2::new(
@@ -255,7 +254,7 @@ impl Sequencer {
                             }
                             // Button & Key Release events search for the matching keypress event to create a full keyframe
                             rdev::EventType::ButtonRelease(btn) => {
-                                if let Some(keyframe) = keyframes.iter_mut().rev().find(|kf| {
+                                if let Some(keyframe) = rec_keyframes.iter_mut().rev().find(|kf| {
                                     if let KeyframeType::MouseBtn(b) = kf.keyframe_type {
                                         b == *btn
                                     } else {
@@ -267,7 +266,7 @@ impl Sequencer {
                                 None
                             }
                             rdev::EventType::KeyRelease(key) => {
-                                if let Some(keyframe) = keyframes.iter_mut().rev().find(|kf| {
+                                if let Some(keyframe) = rec_keyframes.iter_mut().rev().find(|kf| {
                                     if let KeyframeType::KeyBtn(k) = kf.keyframe_type {
                                         k == *key
                                     } else {
@@ -281,6 +280,7 @@ impl Sequencer {
                             rdev::EventType::MouseMove { x, y } => {
                                 let pos = Vec2::new(*x as f32, *y as f32);
                                 mouse_move_count -= 1;
+
                                 match previous_mouse_position == pos {
                                     false => match mouse_move_count <= 0 {
                                         true => {
@@ -306,7 +306,7 @@ impl Sequencer {
                         };
                         // If a keyframe was created push the necessary data to sequencer
                         if let Some(keyframe) = tmp_keyframe {
-                            keyframes.push(keyframe);
+                            rec_keyframes.push(keyframe);
                             shared_changed.swap(true, Ordering::Relaxed);
                         }
                     }
@@ -1415,7 +1415,6 @@ impl Sequencer {
             .show(ctx, |ui| {
                 ui.heading("Debug");
                 ui.separator();
-                //todo: add mouse position
                 ui.label(format!(
                     "Mouse Position: {:?}",
                     self.mouse_pos.lock().unwrap()
@@ -1727,6 +1726,7 @@ impl Sequencer {
                 *state = 0;
             }
         });
+
         // Compute keyframe state from the selected keyframes
         for uid in &self.selected_keyframes {
             let mut index = 0;
@@ -2160,6 +2160,17 @@ impl Sequencer {
             .show(ctx, |ui| {
                 ui.label(self.modal.2.clone());
             });
+    }
+    /// Adds a keyframe to the stack list and handles other necessary operations
+    pub fn add_keyframe(&mut self, keyframe: &Keyframe) {
+        let kf = keyframe.clone();
+        self.keyframes.push(keyframe.clone());
+        self.keyframe_state.push(0);
+        self.changes.0.push(Change {
+            uids: vec![],
+            data: vec![ChangeData::AddKeyframes(vec![kf])],
+        });
+        self.changed();
     }
 }
 

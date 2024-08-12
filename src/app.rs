@@ -506,9 +506,7 @@ impl eframe::App for App {
                                 enabled: true,
                                 uid: Uuid::new_v4().to_bytes_le(),
                             };
-                            self.sequencer.keyframes.push(keyframe.clone());
-                            self.sequencer.changes.0.push(Change { uids: vec![], data: vec![ChangeData::AddKeyframes(vec![keyframe])]});
-                            self.sequencer.changed();
+                            self.sequencer.add_keyframe(&keyframe);
                             ui.close_menu();
                         }
                         if ui.button("Magic Move").clicked() {
@@ -520,9 +518,7 @@ impl eframe::App for App {
                                 enabled: true,
                                 uid: Uuid::new_v4().to_bytes_le(),
                             };
-                            self.sequencer.keyframes.push(keyframe.clone());
-                            self.sequencer.changes.0.push(Change { uids: vec![], data: vec![ChangeData::AddKeyframes(vec![keyframe])]});
-                            self.sequencer.changed();
+                            self.sequencer.add_keyframe(&keyframe);
                             ui.close_menu();
                         }
                         if ui.button("Loop").clicked() {
@@ -534,9 +530,7 @@ impl eframe::App for App {
                                 enabled: true,
                                 uid: Uuid::new_v4().to_bytes_le(),
                             };
-                            self.sequencer.keyframes.push(keyframe.clone());
-                            self.sequencer.changes.0.push(Change { uids: vec![], data: vec![ChangeData::AddKeyframes(vec![keyframe])]});
-                            self.sequencer.changed();
+                            self.sequencer.add_keyframe(&keyframe);
                             ui.close_menu();
                         }
                     });
