@@ -10,6 +10,17 @@ Automate is a tool designed to record and play back user actions intended to aut
 
 ## Quick start
 Go to the latest [release](https://github.com/addiswebb/automate/releases) and follow the **Install** instructions
+### Install
+
+1. Download **automate-win64.zip**
+2. Extract the zip
+3. Run **automate.exe**
+
+## Usage
+1. Start recording an automation by pressing the **record button** or `F8`
+2. Perform your action to be automated
+3. Stop the recording and replay it using the **play button** or `space bar`
+* Click [here]() for more info on features
 
 ## Goals
 - [x] Quick and easy to record an automation
