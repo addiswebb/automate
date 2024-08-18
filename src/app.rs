@@ -12,7 +12,7 @@ use zip::{write::SimpleFileOptions, ZipArchive, ZipWriter};
 
 use crate::{
     keyframe::{Keyframe, KeyframeType},
-    sequencer::{Change, ChangeData, Sequencer, SequencerState},
+    sequencer::{Sequencer, SequencerState},
     settings::{MonitorEdge, Settings, SettingsPage},
 };
 
@@ -534,6 +534,17 @@ impl eframe::App for App {
                             ui.close_menu();
                         }
                     });
+                });
+                ui.menu_button("Record", |ui| {
+                    if ui
+                        .add(egui::Button::new(if self.sequencer.recording.load(Ordering::Relaxed) {"Stop Recording"} else { "Start Recording"}).shortcut_text("F8"))
+                        .clicked()
+                    {
+                        self.sequencer.toggle_recording();
+                        ui.close_menu();
+                    }
+                    ui.add(egui::Checkbox::new(&mut self.sequencer.clear_before_recording, "Overwrite Recording"));
+                    ui.add(egui::Checkbox::new(&mut self.settings.retake_screenshots, "Retake Screenshots"));
                 });
             });
         });

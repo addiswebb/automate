@@ -91,7 +91,7 @@ pub struct Sequencer {
     play: Arc<AtomicBool>,
     #[serde(skip)]
     was_recording: bool,
-    clear_before_recording: bool,
+    pub clear_before_recording: bool,
     #[serde(skip)]
     recording_instant: Arc<Mutex<Instant>>,
     #[serde(skip)]
