@@ -1,4 +1,7 @@
+use std::ops::Add;
+
 use egui::{KeyboardShortcut, Vec2};
+use rdev::Button;
 use serde::{Deserialize, Serialize};
 
 #[derive(Deserialize, Serialize)]
@@ -65,6 +68,7 @@ pub struct Settings {
     pub page: SettingsPage,
     #[serde(skip)]
     pub show: bool,
+    pub add_keyframe_data: AddKeyframeData,
 }
 
 impl Default for Settings {
@@ -149,6 +153,27 @@ impl Default for Settings {
             retake_screenshots: false,
             page: SettingsPage::Preferences,
             show: false,
+            add_keyframe_data: AddKeyframeData {
+                show: false,
+                key_str: String::new(),
+                move_pos: Vec2::ZERO,
+                mouse_btn: Button::Left,
+                wait: 0.0,
+                magic_move_path: String::new(),
+                loop_iterations: 1,
+            },
         }
     }
+}
+
+#[derive(Deserialize, Serialize)]
+pub struct AddKeyframeData {
+    #[serde(skip)]
+    pub show: bool,
+    pub key_str: String,
+    pub move_pos: Vec2,
+    pub mouse_btn: Button,
+    pub wait: f32,
+    pub magic_move_path: String,
+    pub loop_iterations: u32,
 }

@@ -1,4 +1,6 @@
+use egui::Vec2;
 use egui_extras::{Column, TableBuilder};
+use egui_phosphor::regular::MOUSE_LEFT_CLICK;
 use rfd::FileDialog;
 use std::{
     fs::File,
@@ -13,7 +15,7 @@ use zip::{write::SimpleFileOptions, ZipArchive, ZipWriter};
 use crate::{
     keyframe::{Keyframe, KeyframeType},
     sequencer::{Sequencer, SequencerState},
-    settings::{MonitorEdge, Settings, SettingsPage},
+    settings::{MonitorEdge, Settings, SettingsPage}, util::string_to_keys,
 };
 
 /// Determines the outcome of closing the "Save" dialog
@@ -250,7 +252,7 @@ impl eframe::App for App {
         let mut cancel_close = false;
         ctx.input(|i| {
             // Make sure that mouse scrolling only zooms/scrolls when sequencer is in focus
-            if !self.show_save_dialog && !self.settings.show {
+            if !self.show_save_dialog && !self.settings.show && !self.settings.add_keyframe_data.show {
                 self.sequencer.zoom(i.smooth_scroll_delta.x);
                 self.sequencer.scroll(i.smooth_scroll_delta.y);
             }
@@ -489,51 +491,18 @@ impl eframe::App for App {
                         self.sequencer.redo();
                         ui.close_menu();
                     }
+                    ui.separator();
+                    if ui.add(egui::Button::new("Add Keyframe")).clicked(){
+                        self.settings.add_keyframe_data.show = true;
+                        ui.close_menu();
+                    }
 
                     ui.separator();
                     if ui.add_enabled(!self.sequencer.keyframes.is_empty(),egui::Button::new("Cull Minor Moves")).on_hover_text("Remove all unnecessary mouse move keyframes").clicked(){
                         self.sequencer.cull_minor_movement_keyframes(); 
                     }
                     self.sequencer.context_menu(ui, None);
-                    ui.separator();
-                    ui.menu_button("Add", |ui| {
-                        if ui.button("Wait").clicked() {
-                            let keyframe = Keyframe {
-                                timestamp: self.sequencer.get_time(),
-                                duration: 1.,
-                                keyframe_type: KeyframeType::Wait(1.),
-                                kind: 4,
-                                enabled: true,
-                                uid: Uuid::new_v4().to_bytes_le(),
-                            };
-                            self.sequencer.add_keyframe(&keyframe);
-                            ui.close_menu();
-                        }
-                        if ui.button("Magic Move").clicked() {
-                            let keyframe = Keyframe {
-                                timestamp: self.sequencer.get_time(),
-                                duration: 0.2,
-                                keyframe_type: KeyframeType::MagicMove("target.png".to_string()),
-                                kind: 6,
-                                enabled: true,
-                                uid: Uuid::new_v4().to_bytes_le(),
-                            };
-                            self.sequencer.add_keyframe(&keyframe);
-                            ui.close_menu();
-                        }
-                        if ui.button("Loop").clicked() {
-                            let keyframe = Keyframe {
-                                timestamp: self.sequencer.get_time(),
-                                duration: 5.,
-                                keyframe_type: KeyframeType::Loop(10,1),
-                                kind: 7,
-                                enabled: true,
-                                uid: Uuid::new_v4().to_bytes_le(),
-                            };
-                            self.sequencer.add_keyframe(&keyframe);
-                            ui.close_menu();
-                        }
-                    });
+
                 });
                 ui.menu_button("Record", |ui| {
                     if ui
@@ -549,7 +518,198 @@ impl eframe::App for App {
             });
         });
 
-        // if self.show_settings{
+        let mut should_close = false;
+        egui::Window::new("Add Keyframe")
+            .resizable(false)
+            .movable(true)
+            .collapsible(false)
+            .open(&mut self.settings.add_keyframe_data.show)
+            .show(ctx, |ui| {
+                ui.set_max_height(250.);
+                egui::ScrollArea::vertical().show(ui, |ui| {
+                    ui.add_space(6.);
+                    // Add Wait
+                    ui.vertical(|ui| {
+                        ui.horizontal(|ui|{
+                            // Title
+                            ui.strong("Wait 🕑");
+                            ui.add(
+                                egui::DragValue::new(&mut self.settings.add_keyframe_data.wait).speed(0.1),
+                            )
+                            .on_hover_text("Wait time");
+                        });
+                        // Description
+                        ui.label("This keyframe pauses execution for a set time and waits.");
+                        ui.add_space(4.);
+                        ui.horizontal(|ui|{
+                            if ui.add(egui::Button::new("Add")).clicked(){
+                                self.sequencer.add_keyframe(&Keyframe {
+                                    timestamp: self.sequencer.get_time(),
+                                    duration: 1.,
+                                    keyframe_type: KeyframeType::Wait(self.settings.add_keyframe_data.wait),
+                                    kind: 4,
+                                    enabled: true,
+                                    uid: Uuid::new_v4().to_bytes_le(),
+                                });
+                            }
+                        });
+                    });
+                    ui.add_space(6.);
+                    ui.separator();
+                    ui.add_space(6.);
+                    // Add Magic Move 
+                    ui.vertical(|ui| {
+                        ui.horizontal(|ui|{
+                            // Title
+                            ui.strong("Magic Move 🔮");
+                            ui.label(format!("{:?}",self.settings.add_keyframe_data.magic_move_path));
+                            if ui.button("Find").clicked() {
+                                    rfd::FileDialog::new()
+                                        .add_filter("Images", &["png"])
+                                        .set_directory("/")
+                                        .pick_file()
+                                        .and_then(|p| {
+                                            self.settings.add_keyframe_data.magic_move_path = p.to_str().unwrap().to_string();
+                                            Some(())
+                                        });
+                                }
+                        });
+                        // Description
+                        ui.label("This keyframe uses a target image to accurately locate it on your screen during execution.");
+                        ui.add_space(4.);
+                        ui.horizontal(|ui|{
+                            if ui.add(egui::Button::new("Add")).clicked(){
+                                self.sequencer.add_keyframe(&Keyframe {
+                                    timestamp: self.sequencer.get_time(),
+                                    duration: 0.2,
+                                    keyframe_type: KeyframeType::MagicMove(self.settings.add_keyframe_data.magic_move_path.clone()),
+                                    kind: 6,
+                                    enabled: true,
+                                    uid: Uuid::new_v4().to_bytes_le(),
+                                });
+                            }
+                        });
+                    });
+                    ui.add_space(6.);
+                    ui.separator();
+                    ui.add_space(6.);
+                    // Add Magic Move 
+                    ui.vertical(|ui| {
+                        ui.horizontal(|ui|{
+                            // Title
+                            ui.strong("Loop ⟳");
+                            ui.add(
+                                egui::DragValue::new(&mut self.settings.add_keyframe_data.loop_iterations).speed(1),
+                            )
+                            .on_hover_text("Iterations");
+                        });
+                        // Description
+                        ui.label("This keyframe loops over keyframes within it for number of iterations.");
+                        ui.add_space(4.);
+                        ui.horizontal(|ui|{
+                            if ui.add(egui::Button::new("Add")).clicked(){
+                                self.sequencer.add_keyframe(&Keyframe {
+                                    timestamp: self.sequencer.get_time(),
+                                    duration: 5.,
+                                    keyframe_type: KeyframeType::Loop(self.settings.add_keyframe_data.loop_iterations,1),
+                                    kind: 7,
+                                    enabled: true,
+                                    uid: Uuid::new_v4().to_bytes_le(),
+                                });
+                            }
+                        });
+                    });
+                    ui.add_space(6.);
+                    ui.separator();
+                    ui.add_space(6.);
+                    // Add Key
+                    ui.vertical(|ui| {
+                        ui.horizontal(|ui|{
+                            // Title
+                            ui.strong("Key 🖮");
+                            ui.horizontal(|ui|{
+                                ui.set_max_width(40.);
+                                ui.text_edit_singleline(&mut self.settings.add_keyframe_data.key_str);
+                            });
+                        });
+                        // Description
+                        ui.label("This keyframe simulates a single key press from your keyboard.");
+                        ui.add_space(4.);
+                        ui.horizontal(|ui|{
+                            if ui.add(egui::Button::new("Add")).clicked(){
+                                let key = string_to_keys(&self.settings.add_keyframe_data.key_str);
+                                if let Some(key) = key{
+                                    self.sequencer.add_keyframe(&Keyframe::key_btn(self.sequencer.get_time(), 0.1, key));
+                                    self.settings.add_keyframe_data.key_str = "".to_string();
+                                    should_close = true;
+                                }else{
+                                    self.sequencer.modal = (true,"Failed to add keyframe".to_string(),"The input given was invalid".to_string());
+                                }
+                            }
+                        });
+                    });
+                    ui.add_space(6.);
+                    ui.separator();
+                    ui.add_space(6.);
+                    // Add Move
+                    ui.vertical(|ui| {
+                        ui.horizontal(|ui|{
+                            // Title
+                            ui.strong("Move 🖱");
+                            ui.add(
+                                egui::DragValue::new(&mut self.settings.add_keyframe_data.move_pos.x).speed(1),
+                            )
+                            .on_hover_text("X position");
+                            ui.add(
+                                egui::DragValue::new(&mut self.settings.add_keyframe_data.move_pos.y).speed(1),
+                            )
+                            .on_hover_text("Y position");
+                        });
+                        // Description
+                        ui.label("This keyframe simulates the movement of your mouse or trackpad.");
+                        ui.add_space(4.);
+                        ui.horizontal(|ui|{
+                            if ui.add(egui::Button::new("Add")).clicked(){
+                                self.sequencer.add_keyframe(&Keyframe::mouse_move(self.sequencer.get_time(), self.settings.add_keyframe_data.move_pos));
+                                self.settings.add_keyframe_data.move_pos = Vec2::ZERO;
+                                should_close = true;
+                            }
+                        });
+                    });
+                    ui.add_space(6.);
+                    ui.separator();
+                    ui.add_space(6.);
+                    // Add Mouse Button 
+                    ui.vertical(|ui| {
+                        ui.horizontal(|ui|{
+                            // Title
+                            ui.strong("Mouse Button 🖱");
+                            egui::ComboBox::from_label("")
+                                .selected_text(format!("{:?}", self.settings.add_keyframe_data.mouse_btn))
+                                .show_ui(ui, |ui| {
+                                    ui.selectable_value(&mut self.settings.add_keyframe_data.mouse_btn, rdev::Button::Left, "Left");
+                                    ui.selectable_value(&mut self.settings.add_keyframe_data.mouse_btn, rdev::Button::Middle, "Middle");
+                                    ui.selectable_value(&mut self.settings.add_keyframe_data.mouse_btn, rdev::Button::Right, "Right");
+                                });
+                        });
+                        // Description
+                        ui.label("This keyframe simulates a button press from your mouse or trackpad.");
+                        ui.add_space(4.);
+                        ui.horizontal(|ui|{
+                            if ui.add(egui::Button::new("Add")).clicked(){
+                                self.sequencer.add_keyframe(&Keyframe::mouse_button(self.sequencer.get_time(),0.1, self.settings.add_keyframe_data.mouse_btn));
+                                self.settings.add_keyframe_data.mouse_btn = rdev::Button::Left;
+                                should_close = true;
+                            }
+                        });
+                    });
+                    ui.add_space(6.);
+                });
+            });
+
+        if should_close {
+            self.settings.add_keyframe_data.show = false;
+        }
         egui::Window::new("Settings")
             .resizable(false)
             .movable(true)

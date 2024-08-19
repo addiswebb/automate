@@ -110,7 +110,7 @@ pub struct Sequencer {
     pub recording_keyframes: Arc<Mutex<Vec<Keyframe>>>,
     #[serde(skip)]
     mouse_pos: Arc<Mutex<Vec2>>,
-    modal: (bool, String, String),
+    pub modal: (bool, String, String),
 }
 
 impl Sequencer {
