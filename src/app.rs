@@ -1,6 +1,5 @@
 use egui::Vec2;
 use egui_extras::{Column, TableBuilder};
-use egui_phosphor::regular::MOUSE_LEFT_CLICK;
 use rfd::FileDialog;
 use std::{
     fs::File,

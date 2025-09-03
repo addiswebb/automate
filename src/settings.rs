@@ -1,5 +1,3 @@
-use std::ops::Add;
-
 use egui::{KeyboardShortcut, Vec2};
 use rdev::Button;
 use serde::{Deserialize, Serialize};

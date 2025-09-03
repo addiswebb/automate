@@ -404,7 +404,7 @@ pub fn template_match_opencv(target: DynamicImage) -> Option<Vec2> {
 
     None
 }
-use opencv::{core::AlgorithmHint, imgproc};
+use opencv::{imgproc};
 
 /// Calculates the percentage difference between two images
 ///
@@ -418,8 +418,8 @@ pub fn image_dif_opencv(vec1: &Vec<u8>, vec2: &Vec<u8>) -> f32 {
     let mut src1x = Mat::default();
     let mut src2x = Mat::default();
     
-    imgproc::cvt_color(&src1, &mut src1x, imgproc::COLOR_RGBA2GRAY, 0,AlgorithmHint::ALGO_HINT_DEFAULT ).unwrap();
-    imgproc::cvt_color(&src2, &mut src2x, imgproc::COLOR_RGBA2GRAY, 0, AlgorithmHint::ALGO_HINT_DEFAULT).unwrap();
+    imgproc::cvt_color(&src1, &mut src1x, imgproc::COLOR_RGBA2GRAY, 0 ).unwrap();
+    imgproc::cvt_color(&src2, &mut src2x, imgproc::COLOR_RGBA2GRAY, 0 ).unwrap();
 
     let mut diff = Mat::default();
     opencv::core::absdiff(&src1x, &src2x, &mut diff).unwrap();
