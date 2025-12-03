@@ -1,7 +1,5 @@
 # automate
 
-# ![Build Status](https://github.com/addiswebb/automate/actions/workflows/rust.yml/badge.svg)
-
 ---
 Automate is a tool designed to record and play back user actions intended to automate repetitive and tedious tasks otherwise done slowly and more error prone by a human.
 <div align="center">
